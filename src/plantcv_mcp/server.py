@@ -24,6 +24,15 @@ from .suggest import colorspace_sheet, threshold_sheet
 _store = SessionStore()
 
 
+class ImageChangedSinceSegmentationError(Exception):
+    """Raised when the image on disk no longer matches the shape it had when
+    segment() ran. Session.shape is recorded for exactly this check -- without
+    it, measure() would silently apply a stale mask to a file whose current
+    content was never segmented, or PlantCV would raise an opaque IndexError
+    from a shape mismatch it cannot explain.
+    """
+
+
 def list_methods_impl() -> dict:
     return {
         "plantcv_version": plantcv_version(),
@@ -63,6 +72,15 @@ def _segment_impl(image_path: str, channel: str, method: str) -> dict:
 def _measure_impl(session_id: str) -> dict:
     session = _store.get(session_id)
     img = load_image(session.image_path)  # re-read; sessions do not hold RGB
+    current_shape = (int(img.shape[0]), int(img.shape[1]))
+    if current_shape != session.shape:
+        raise ImageChangedSinceSegmentationError(
+            f"Image at {session.image_path!r} is now {current_shape} but was "
+            f"{session.shape} when segment() produced this session's mask. "
+            "The file changed on disk since segmentation, so the mask no "
+            "longer corresponds to its current content. Re-run segment() on "
+            "the current file before measuring it."
+        )
     return {"session_id": session_id, "traits": measure_traits(img, session.mask)}
 
 

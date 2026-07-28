@@ -135,6 +135,44 @@ def test_segment_reports_real_overlay_scale(tmp_path):
     assert seg_large["overlay_scale"] == pytest.approx(1024 / 2000)
 
 
+def test_measure_raises_when_the_image_changed_shape_since_segmentation(tmp_path):
+    """Session.shape is stored but, before this fix, nothing read it. The final
+    review proved the gap: replace the file at the segmented path with a
+    differently-sized image between segment() and measure(), and measure()
+    silently succeeded -- traits computed from a stale mask, attributed to a
+    file whose current content was never segmented and whose overlay nobody
+    saw. This is the project's own thesis failure class at the one seam the
+    design left open."""
+    import cv2
+
+    from plantcv_mcp.server import ImageChangedSinceSegmentationError
+
+    path = _write_green_png(tmp_path)  # 200x200
+    seg = _segment_impl(path, channel="a", method="otsu")
+
+    # Replace the file, same path, with a differently-sized image.
+    bigger = np.full((400, 400, 3), 128, dtype=np.uint8)
+    bigger[100:300, 100:300] = (60, 180, 60)
+    cv2.imwrite(path, bigger)
+
+    with pytest.raises(ImageChangedSinceSegmentationError) as exc:
+        _measure_impl(seg["session_id"])
+    msg = str(exc.value)
+    assert "(200, 200)" in msg  # shape at segment() time
+    assert "(400, 400)" in msg  # shape now
+
+    # POSITIVE CONTROL, same test: a session whose file was never touched
+    # after segment() must still measure fine -- otherwise an always-raises
+    # bug would masquerade as a working guard.
+    control_img = np.full((200, 200, 3), 128, dtype=np.uint8)
+    control_img[50:150, 50:150] = (60, 180, 60)
+    control_path = str(tmp_path / "unchanged.png")
+    cv2.imwrite(control_path, control_img)
+    seg_control = _segment_impl(control_path, channel="a", method="otsu")
+    traits = _measure_impl(seg_control["session_id"])
+    assert traits["traits"]["area"]["value"] > 0
+
+
 @pytest.mark.anyio
 async def test_suggest_segmentation_reports_downscale_factors(tmp_path):
     """Design spec S5: any downsampling must be reported, never silent.
