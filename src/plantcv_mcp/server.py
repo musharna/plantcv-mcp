@@ -3,33 +3,45 @@
 segment() mints a session and returns the overlay but NO traits; measure()
 requires that session. The split is deliberate: it forces the visual evidence
 into the model's context before a number can be obtained.
+
+Tool functions are deliberately SYNCHRONOUS. mcp 1.28.1 invokes sync tools inline
+on the event loop (fastmcp/utilities/func_metadata.py: `return fn(...)`, with no
+anyio.to_thread), which serialises them. That costs latency — a slow segmentation
+blocks the whole server — but it is what makes PlantCV's process-global
+`pcv.outputs` safe to use here. Making any tool `async`, or offloading to a
+thread, would allow two analyses to interleave on that global and must not be
+done without a lock around the measurement section.
 """
 
 import json
 
 from mcp.server.fastmcp import FastMCP, Image
+from plantcv import plantcv as pcv
 
 from . import plantcv_version
 from .diagnostics import (
+    Advisory,
     analyze_mask,
+    empty_mask_warning,
     frame_clipping_warning,
+    implausible_coverage_warning,
     multi_specimen_warning,
 )
-from .imaging import downscale, encode_png, load_image, render_overlay
+from .imaging import downscale, encode_png, file_digest, load_image, render_overlay
 from .measurement import measure_traits
-from .segmentation import CHANNELS, METHODS, segment_mask
+from .segmentation import CHANNELS, METHODS, OBJECT_TYPES, threshold_mask
 from .session import SessionStore
-from .suggest import colorspace_sheet, threshold_sheet
+from .suggest import colorspace_sheet, polarity_report, threshold_sheet
 
 _store = SessionStore()
 
 
 class ImageChangedSinceSegmentationError(Exception):
-    """Raised when the image on disk no longer matches the shape it had when
-    segment() ran. Session.shape is recorded for exactly this check -- without
-    it, measure() would silently apply a stale mask to a file whose current
-    content was never segmented, or PlantCV would raise an opaque IndexError
-    from a shape mismatch it cannot explain.
+    """Raised when the file on disk is no longer the image that was segmented.
+
+    Checked two ways: the frame shape, and a SHA-256 of the file's bytes. Shape
+    alone let a same-dimension content swap through, silently measuring a stale
+    mask against new pixels.
     """
 
 
@@ -38,26 +50,92 @@ def list_methods_impl() -> dict:
         "plantcv_version": plantcv_version(),
         "channels": sorted(CHANNELS),
         "methods": list(METHODS),
+        "object_types": list(OBJECT_TYPES),
         "guidance": (
-            "The 'a' channel of LAB separates green tissue from most backgrounds; "
-            "'s' of HSV can work on non-green tissue. Call suggest_segmentation() "
-            "to compare on your actual image rather than guessing."
+            "Pick a channel AND the object_type that goes with it. object_type "
+            "says which side of the threshold is the plant: 'dark' selects "
+            "pixels below it, 'light' above it. Choosing the wrong one returns "
+            "the BACKGROUND as the plant, with traits that still look "
+            "plausible. Measured on a green-plant render: 'a' of LAB needs "
+            "object_type='dark' (the usual starting point for green tissue on a "
+            "light background), while 's' and 'b' need object_type='light' — "
+            "with 'dark' they select 96% of the frame. 'l' and 'v' were "
+            "ambiguous on that image. These are starting points, not rules: "
+            "call suggest_segmentation(), which reports what BOTH polarities "
+            "actually yield on your image."
         ),
     }
 
 
-def _segment_impl(image_path: str, channel: str, method: str) -> dict:
+def _segment_impl(
+    image_path: str,
+    channel: str,
+    method: str,
+    object_type: str = "dark",
+    fill_size: int = 200,
+    ksize: int = 11,
+    offset: int = 2,
+) -> dict:
     img = load_image(image_path)
-    mask = segment_mask(img, channel=channel, method=method)
+
+    # Threshold and fill run separately so a mask erased by fill_size can be
+    # named as such instead of looking like a bad channel/method choice.
+    pre_fill = threshold_mask(
+        img, channel, method, object_type=object_type, ksize=ksize, offset=offset
+    )
+    mask = pcv.fill(bin_img=pre_fill, size=fill_size)
+
     diag = analyze_mask(mask)
-    warnings = [
-        w for w in (multi_specimen_warning(diag), frame_clipping_warning(mask)) if w
-    ]
-    session = _store.create(image_path, mask, channel, method)
+    pre_diag = analyze_mask(pre_fill)
+
+    warnings: list[Advisory] = []
+
+    if diag.component_count == 0 and pre_diag.component_count > 0:
+        warnings.append(
+            Advisory(
+                code="fill_erased_mask",
+                message=(
+                    f"Thresholding found {pre_diag.component_count} object(s), "
+                    f"the largest {pre_diag.largest_area} px, and then "
+                    f"fill_size={fill_size} removed every one of them. This is a "
+                    "fill_size problem, not a channel or method problem — the "
+                    "specimen is smaller than the speckle filter. Re-run "
+                    f"segment() with fill_size below {pre_diag.largest_area}."
+                ),
+            )
+        )
+    else:
+        empty = empty_mask_warning(diag)
+        if empty:
+            warnings.append(empty)
+
+    coverage = implausible_coverage_warning(diag)
+    if coverage:
+        warnings.append(coverage)
+
+    multi = multi_specimen_warning(diag)
+    if multi:
+        warnings.append(multi)
+
+    # frame_clipping asserts that size traits are a LOWER BOUND, which presumes
+    # the mask IS the plant. On an implausibly large (probably inverted) mask
+    # that claim actively misleads, so it is withheld rather than stacked on top.
+    if not coverage:
+        clipping = frame_clipping_warning(mask)
+        if clipping:
+            warnings.append(clipping)
+
+    session = _store.create(
+        image_path, mask, channel, method, digest=file_digest(image_path)
+    )
     overlay, scale = downscale(render_overlay(img, mask))
     png = encode_png(overlay)
     return {
         "session_id": session.session_id,
+        "channel": channel,
+        "method": method,
+        "object_type": object_type,
+        "fill_size": fill_size,
         "mask_fraction": diag.mask_fraction,
         "component_count": diag.component_count,
         "major_object_count": diag.major_object_count,
@@ -81,6 +159,13 @@ def _measure_impl(session_id: str) -> dict:
             "longer corresponds to its current content. Re-run segment() on "
             "the current file before measuring it."
         )
+    if session.digest and file_digest(session.image_path) != session.digest:
+        raise ImageChangedSinceSegmentationError(
+            f"Image at {session.image_path!r} still has shape {current_shape}, "
+            "but its CONTENT changed since segment() produced this session's "
+            "mask (SHA-256 mismatch). The mask describes pixels that are no "
+            "longer there. Re-run segment() on the current file."
+        )
     return {"session_id": session_id, "traits": measure_traits(img, session.mask)}
 
 
@@ -89,12 +174,16 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     def list_methods() -> dict:
-        """List available segmentation channels, methods, and the pinned PlantCV version."""
+        """List available segmentation channels, methods, object types, and the
+        pinned PlantCV version."""
         return list_methods_impl()
 
     @mcp.tool()
-    def suggest_segmentation(image_path: str, channel: str = "a") -> list:
-        """Return colourspace and threshold contact sheets so the channel/method
+    def suggest_segmentation(
+        image_path: str, channel: str = "a", method: str = "otsu"
+    ) -> list:
+        """Return colourspace and threshold contact sheets, plus what each
+        object_type would yield on this image, so the channel/method/polarity
         choice is informed rather than blind. Call this before segment()."""
         img = load_image(image_path)
         cs, cs_scale = downscale(colorspace_sheet(img))
@@ -104,6 +193,9 @@ def build_server() -> FastMCP:
                 {
                     "colorspace_sheet_scale": cs_scale,
                     "threshold_sheet_scale": th_scale,
+                    "channel": channel,
+                    "method": method,
+                    "polarity": polarity_report(img, channel, method),
                 }
             ),
             Image(data=encode_png(cs), format="png"),
@@ -111,10 +203,33 @@ def build_server() -> FastMCP:
         ]
 
     @mcp.tool()
-    def segment(image_path: str, channel: str, method: str) -> list:
+    def segment(
+        image_path: str,
+        channel: str,
+        method: str,
+        object_type: str = "dark",
+        fill_size: int = 200,
+        ksize: int = 11,
+        offset: int = 2,
+    ) -> list:
         """Segment an image. Returns the overlay image and mask diagnostics —
-        NOT traits. Use the returned session_id with measure() to get traits."""
-        result = _segment_impl(image_path, channel, method)
+        NOT traits. Use the returned session_id with measure() to get traits.
+
+        object_type picks which side of the threshold is the plant ('dark' or
+        'light'); the wrong one returns the background with plausible-looking
+        traits, so call suggest_segmentation() if unsure. fill_size drops
+        components smaller than itself and will erase a genuinely small
+        specimen. ksize and offset apply to the 'mean' and 'gaussian' methods.
+        """
+        result = _segment_impl(
+            image_path,
+            channel,
+            method,
+            object_type=object_type,
+            fill_size=fill_size,
+            ksize=ksize,
+            offset=offset,
+        )
         png = result.pop("_png")
         return [json.dumps(result), Image(data=png, format="png")]
 

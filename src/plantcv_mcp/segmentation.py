@@ -51,28 +51,39 @@ def to_gray(img: np.ndarray, channel: str) -> np.ndarray:
     return pcv.rgb2gray_hsv(rgb_img=img, channel=channel)
 
 
-def segment_mask(
+OBJECT_TYPES: tuple[str, ...] = ("dark", "light")
+
+
+class UnknownObjectTypeError(Exception):
+    """Raised for an object_type outside OBJECT_TYPES."""
+
+
+def threshold_mask(
     img: np.ndarray,
     channel: str,
     method: str,
     object_type: str = "dark",
-    fill_size: int = 200,
+    ksize: int = 11,
+    offset: int = 2,
 ) -> np.ndarray:
-    """Produce a binary mask. Raises on unknown channel or method — never guesses.
+    """Threshold only — no morphological fill.
+
+    Kept separate from the fill step so callers can tell "the threshold found
+    nothing" apart from "the threshold found something and fill deleted it".
+    Collapsing the two made a fill_size problem look like a bad channel choice.
 
     Args:
         img: RGB or BGR image array.
         channel: One of the keys in CHANNELS (e.g., "a", "s").
         method: One of the strings in METHODS (e.g., "otsu", "triangle").
-        object_type: "dark" or "light" (default "dark").
-        fill_size: size threshold for morphological fill.
-
-    Returns:
-        Binary uint8 mask with the same shape as img[:2].
+        object_type: "dark" or "light" — which side of the threshold is the
+            object. Getting this wrong yields the background as the mask, so it
+            is a first-class choice rather than a hidden default.
+        ksize: neighbourhood size for the adaptive methods (mean, gaussian).
+        offset: constant subtracted from the local mean (mean, gaussian).
 
     Raises:
-        UnknownChannelError: if channel not in CHANNELS.
-        UnknownMethodError: if method not in METHODS.
+        UnknownChannelError, UnknownMethodError, UnknownObjectTypeError.
     """
     if channel not in CHANNELS:
         raise UnknownChannelError(
@@ -84,17 +95,43 @@ def segment_mask(
             f"Unknown method {method!r}. Valid methods: {list(METHODS)}. "
             "Call suggest_segmentation() to compare them on this image."
         )
+    if object_type not in OBJECT_TYPES:
+        raise UnknownObjectTypeError(
+            f"Unknown object_type {object_type!r}. Valid: {list(OBJECT_TYPES)}. "
+            "'dark' selects pixels below the threshold, 'light' above it. "
+            "Call suggest_segmentation() to see which one yields the plant."
+        )
     gray = to_gray(img, channel)
     if method == "otsu":
-        mask = pcv.threshold.otsu(gray_img=gray, object_type=object_type)
-    elif method == "triangle":
-        mask = pcv.threshold.triangle(gray_img=gray, object_type=object_type, xstep=1)
-    elif method == "mean":
-        mask = pcv.threshold.mean(
-            gray_img=gray, ksize=11, offset=2, object_type=object_type
+        return pcv.threshold.otsu(gray_img=gray, object_type=object_type)
+    if method == "triangle":
+        return pcv.threshold.triangle(gray_img=gray, object_type=object_type, xstep=1)
+    if method == "mean":
+        return pcv.threshold.mean(
+            gray_img=gray, ksize=ksize, offset=offset, object_type=object_type
         )
-    else:
-        mask = pcv.threshold.gaussian(
-            gray_img=gray, ksize=11, offset=2, object_type=object_type
-        )
+    return pcv.threshold.gaussian(
+        gray_img=gray, ksize=ksize, offset=offset, object_type=object_type
+    )
+
+
+def segment_mask(
+    img: np.ndarray,
+    channel: str,
+    method: str,
+    object_type: str = "dark",
+    fill_size: int = 200,
+    ksize: int = 11,
+    offset: int = 2,
+) -> np.ndarray:
+    """Threshold then fill. Raises on unknown channel, method or object_type.
+
+    fill_size removes speckle, but it removes ANY component smaller than itself —
+    including a genuinely small specimen. Callers that need to tell those two
+    outcomes apart should use threshold_mask() and pcv.fill() separately, as the
+    server does.
+    """
+    mask = threshold_mask(
+        img, channel, method, object_type=object_type, ksize=ksize, offset=offset
+    )
     return pcv.fill(bin_img=mask, size=fill_size)

@@ -23,6 +23,10 @@ class Session:
     channel: str
     method: str
     shape: tuple[int, int]
+    # SHA-256 of the source file at segmentation time. Shape alone cannot detect
+    # a same-dimension content swap, which would silently measure a stale mask
+    # against new pixels.
+    digest: str = ""
 
 
 class SessionStore:
@@ -33,7 +37,12 @@ class SessionStore:
         self._sessions: OrderedDict[str, Session] = OrderedDict()
 
     def create(
-        self, image_path: str, mask: np.ndarray, channel: str, method: str
+        self,
+        image_path: str,
+        mask: np.ndarray,
+        channel: str,
+        method: str,
+        digest: str = "",
     ) -> Session:
         session = Session(
             session_id=str(uuid.uuid4()),
@@ -42,6 +51,7 @@ class SessionStore:
             channel=channel,
             method=method,
             shape=(int(mask.shape[0]), int(mask.shape[1])),
+            digest=digest,
         )
         self._sessions[session.session_id] = session
         while len(self._sessions) > self._max:

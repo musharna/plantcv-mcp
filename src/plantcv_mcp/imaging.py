@@ -1,5 +1,7 @@
 """Image I/O and rendering. The only module that touches the filesystem."""
 
+import hashlib
+
 import cv2
 import numpy as np
 from plantcv import plantcv as pcv
@@ -17,6 +19,21 @@ def load_image(path: str) -> np.ndarray:
     """
     img, _, _ = pcv.readimage(path)
     return img
+
+
+def file_digest(path: str) -> str:
+    """SHA-256 of the file's bytes.
+
+    The stale-image guard used to compare only the image's SHAPE, so swapping the
+    file for a DIFFERENT image of identical dimensions passed the check and
+    measured the old mask against new content. Shape is a weak proxy for
+    identity; the bytes are the identity.
+    """
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def downscale(img: np.ndarray, max_edge: int = 1024) -> tuple[np.ndarray, float]:

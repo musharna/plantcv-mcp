@@ -82,13 +82,31 @@ the methods, and the pinned PlantCV version.
 
 ## Tools
 
-- `suggest_segmentation(image_path, channel="a")` — colourspace and threshold contact sheets
-- `segment(image_path, channel, method)` — overlay + diagnostics + warnings, no traits
+- `suggest_segmentation(image_path, channel="a", method="otsu")` — colourspace and
+  threshold contact sheets, plus what each `object_type` would actually yield
+- `segment(image_path, channel, method, object_type="dark", fill_size=200, ksize=11, offset=2)`
+  — overlay + diagnostics + warnings, no traits
 - `measure(session_id)` — traits, or a raised error on a degenerate mask
-- `list_methods()` — channels, methods, pinned PlantCV version
+- `list_methods()` — channels, methods, object types, pinned PlantCV version
 
 Typical loop: `suggest_segmentation` → `segment` → look at the overlay →
-`segment` again with a different channel or method if it is wrong → `measure`.
+`segment` again with a different channel, method or polarity if it is wrong → `measure`.
+
+### Getting the polarity right
+
+`object_type` decides which side of the threshold is the plant. Choose wrong and the
+mask is the **background**, while the traits stay plausible and correctly united —
+measured on the bundled fixture, channel `s` with `object_type="dark"` covers 96% of
+the frame and yields `area=1007829` for a 1024×1024 image.
+
+Two things guard against this. `suggest_segmentation` reports what both polarities give
+before you commit, and `segment` emits an `implausible_coverage` warning when the mask
+covers more than half the frame. Neither refuses the measurement, because a macro shot
+of a single leaf legitimately fills the frame — they make the choice visible.
+
+`fill_size` deletes any component smaller than itself, so a small specimen can vanish
+entirely. When that happens `segment` reports `fill_erased_mask` and names the size to
+drop below, rather than letting it look like a bad channel choice.
 
 ## Security and trust boundary
 

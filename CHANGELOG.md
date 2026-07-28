@@ -4,6 +4,51 @@ All notable changes to `plantcv-mcp` are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Mask validity is now two-sided.** `assert_not_degenerate` only ever rejected masks
+  that were too _small_, which left inverting a threshold — the dominant failure of any
+  threshold operation — outside the set of outcomes this system could express as a
+  failure. A new `implausible_coverage` warning fires above 50% frame coverage.
+  Measured on the fixture: plant masks land at 0.031–0.046 and inverted ones at
+  0.959–0.967, so the boundary sits in a wide empty gap. It warns rather than raises,
+  because a macro shot of one leaf can legitimately fill the frame.
+- **`object_type` is exposed on `segment()`.** It was hardcoded to `"dark"` and
+  unreachable, so channels `s` and `b` returned the **background** as the plant:
+  `mask_fraction` 0.961, and `measure()` reported `area=1007829, width=1024,
+height=1024` — the whole frame — with no error. `list_methods()` made this worse by
+  recommending `'s'`. Its guidance is now correct and names the polarity each channel
+  needs.
+- **`suggest_segmentation` reports both polarities.** It now measures what `dark` and
+  `light` each yield on your image and recommends one, flagging the case where the two
+  are too close to call rather than guessing.
+- **`fill_size`, `ksize` and `offset` are exposed.** `fill_size=200` was hardcoded and
+  silently erased any specimen smaller than itself — a measured 144 px object became an
+  empty mask. Thresholding and filling are now separate steps, so this reports
+  `fill_erased_mask` naming `fill_size` and the size to drop below, instead of
+  presenting as a bad channel choice.
+- **`segment()` warns on an empty mask.** It previously returned `component_count=0`
+  with no warning at all, so the failure surfaced only if `measure()` happened to be
+  called afterwards.
+- **`frame_clipping` is withheld when coverage is implausible.** It asserts that size
+  traits are a lower bound, which presumes the mask is the plant; on an inverted mask
+  that misleads. A genuinely clipped, plausibly-sized plant still reports it.
+- **`measure()` no longer destroys the host's PlantCV state.** `pcv.outputs.clear()`
+  wiped a process-global table shared with any application also using PlantCV directly.
+  Observations are now snapshotted and restored in a `finally`.
+- **The stale-image guard compares content, not just shape.** Swapping the file for a
+  different image of identical dimensions previously passed, measuring a stale mask
+  against new pixels. A SHA-256 of the file is now recorded and re-checked.
+
+### Notes
+
+- Tool functions remain deliberately **synchronous**. mcp 1.28.1 runs sync tools inline
+  on the event loop, which serialises them and is what makes PlantCV's process-global
+  `pcv.outputs` safe here. Making a tool `async` would allow two analyses to interleave
+  on that global and needs a lock first.
+
 ## [0.1.0] — 2026-07-28
 
 Phase 1. PlantCV exposed as an MCP **measurement instrument**: the model proposes a

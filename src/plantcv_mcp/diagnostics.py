@@ -78,6 +78,62 @@ class Advisory:
     message: str
 
 
+def implausible_coverage_warning(
+    diag: MaskDiagnostics, max_fraction: float = 0.5
+) -> "Advisory | None":
+    """Warn when the mask covers implausibly much of the frame.
+
+    This is the OTHER half of mask validity. assert_not_degenerate only rejects
+    masks that are too SMALL, which leaves the dominant failure of any threshold
+    operation — selecting the background instead of the foreground — outside the
+    set of things this system could express as a failure at all. Measured on the
+    fixture with otsu: the plant masks land at 0.031-0.046 of the frame and the
+    inverted ones at 0.959-0.967, so 0.5 sits in a very wide empty gap rather
+    than being a hopeful guess. Like the other thresholds here it is a calibrated
+    starting value, not a constant.
+
+    This WARNS rather than raises: a legitimate macro shot of a single leaf can
+    fill most of the frame, and refusing to measure it would be its own silent
+    wrongness. Channels whose two polarities both land near 0.5 (l and v on the
+    fixture) are genuinely ambiguous and will not trip this — the polarity report
+    from suggest_segmentation is the remedy there.
+    """
+    if diag.mask_fraction <= max_fraction:
+        return None
+    return Advisory(
+        code="implausible_coverage",
+        message=(
+            f"The mask covers {diag.mask_fraction:.1%} of the frame. If you "
+            "expected a plant against a background, this mask is probably "
+            "INVERTED — it is the background, and every trait would describe "
+            "that instead of the plant. Re-run segment() with the opposite "
+            "object_type ('light' instead of 'dark', or vice versa). Ignore "
+            "this if the subject genuinely fills the frame, such as a macro "
+            "shot of a single leaf."
+        ),
+    )
+
+
+def empty_mask_warning(diag: MaskDiagnostics) -> "Advisory | None":
+    """Say plainly that the segmentation found nothing.
+
+    segment() previously returned component_count=0 with no warning at all, so
+    the failure only surfaced if measure() happened to be called afterwards. The
+    tool whose entire job is to show whether a segmentation can be trusted has to
+    state this itself.
+    """
+    if diag.component_count > 0:
+        return None
+    return Advisory(
+        code="empty_mask",
+        message=(
+            "Segmentation found no objects at all — the mask is empty. No traits "
+            "can be measured from it. Try the opposite object_type, a different "
+            "channel or method, or a smaller fill_size."
+        ),
+    )
+
+
 def multi_specimen_warning(diag: MaskDiagnostics) -> "Advisory | None":
     """Warn when the mask holds two or more comparably-sized objects.
 

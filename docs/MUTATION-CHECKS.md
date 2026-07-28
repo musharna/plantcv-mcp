@@ -25,3 +25,29 @@ No mutation produced zero reds — every guard listed here has at least one
 test that depends on it.
 
 Re-run these whenever a guard's logic changes.
+
+## Round 2 — the two-sided mask-validity model (2026-07-28)
+
+Baseline before mutation: `uv run pytest -q` → 60 passed. Each mutant was applied
+to the working tree, the named test was run against the mutated code, and the file
+was restored from a backup before the next mutant.
+
+| guard                              | mutation applied                                                               | result               |
+| ---------------------------------- | ------------------------------------------------------------------------------ | -------------------- |
+| implausible coverage               | `if diag.mask_fraction <= max_fraction:` → `if True:` (always returns None)    | RED — test caught it |
+| frame_clipping suppression         | `if not coverage:` → `if True:` in `_segment_impl`                             | RED — test caught it |
+| fill-erasure diagnosis             | `if diag.component_count == 0 and pre_diag.component_count > 0:` → `if False:` | RED — test caught it |
+| empty-mask warning                 | `if diag.component_count > 0:` → `if True:` (always returns None)              | RED — test caught it |
+| `pcv.outputs` restore              | the `finally:` restore body replaced with `pass`                               | RED — test caught it |
+| content-digest guard               | `if session.digest and file_digest(...) != session.digest:` → `if False:`      | RED — test caught it |
+| `object_type` passthrough (server) | `object_type=object_type` → `object_type='dark'` in `_segment_impl`            | RED — test caught it |
+| `fill_size` passthrough (server)   | `size=fill_size` → `size=200` in `_segment_impl`                               | RED — test caught it |
+
+**The `object_type` passthrough mutant initially SURVIVED.** The first pass paired
+it with a test that happened to use `object_type="dark"`, so hardcoding `'dark'`
+changed nothing observable — and `test_object_type_is_reachable_and_changes_the_mask`
+exercises `segment_mask` directly, never the server. The original P0 (a parameter
+correct in the library but dropped at the server) was therefore untested.
+`test_server_honours_object_type_end_to_end` and its `fill_size` counterpart were
+added specifically to close that, and both mutants then went red. A surviving
+mutant is a coverage report, not a nuisance.
