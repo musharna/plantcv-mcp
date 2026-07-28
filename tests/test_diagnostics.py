@@ -49,3 +49,67 @@ def test_degenerate_below_min_fraction_raises_and_just_above_does_not():
 
     above = _mask_with_squares((100, 100), [(0, 0, 4)])
     assert_not_degenerate(analyze_mask(above))  # positive control
+
+
+def test_major_object_count_four_comparable_and_tail():
+    """Four comparable objects plus small tail — must count exactly 4 major.
+
+    Target areas 8628, 7981, 7106, 6748, 570, 454.
+    Using int(sqrt(area)) per side gives actual areas:
+    8464, 7921, 7056, 6724, 529, 441.
+    The four large are all ≥78% of largest (8464); the tail is ≤6.6%,
+    well under the 0.25 threshold.
+    """
+    target_areas = [8628, 7981, 7106, 6748, 570, 454]
+    sides = [int(np.sqrt(a)) for a in target_areas]  # [92, 89, 84, 82, 23, 21]
+    # Actual areas: [8464, 7921, 7056, 6724, 529, 441]
+
+    # Place squares horizontally with 2-pixel gaps to ensure disjoint components
+    height = max(sides)
+    squares = []
+    col = 0
+    for side in sides:
+        squares.append((0, col, side))
+        col += side + 2
+
+    mask = _mask_with_squares((height, col), squares)
+
+    # Verify components are disjoint (sanity check)
+    areas = component_areas(mask)
+    assert len(areas) == 6, f"Expected 6 components, got {len(areas)}"
+
+    # Test major_object_count
+    diag = analyze_mask(mask)
+    assert diag.major_object_count == 4
+
+
+def test_major_object_count_one_large_plus_fragments():
+    """One large object plus small fragments — must count exactly 1 major.
+
+    Target areas 8628, 570, 454, 274.
+    Using int(sqrt(area)) per side gives actual areas:
+    8464, 529, 441, 256.
+    The large is ≥2116 (threshold); fragments are all <256.
+    Positive control: proves threshold actually discriminates.
+    """
+    target_areas = [8628, 570, 454, 274]
+    sides = [int(np.sqrt(a)) for a in target_areas]  # [92, 23, 21, 16]
+    # Actual areas: [8464, 529, 441, 256]
+
+    # Place squares horizontally with 2-pixel gaps
+    height = max(sides)
+    squares = []
+    col = 0
+    for side in sides:
+        squares.append((0, col, side))
+        col += side + 2
+
+    mask = _mask_with_squares((height, col), squares)
+
+    # Verify components are disjoint (sanity check)
+    areas = component_areas(mask)
+    assert len(areas) == 4, f"Expected 4 components, got {len(areas)}"
+
+    # Test major_object_count: only the largest should count as major
+    diag = analyze_mask(mask)
+    assert diag.major_object_count == 1
