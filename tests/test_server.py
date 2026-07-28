@@ -1,7 +1,14 @@
+import json
+
 import numpy as np
 import pytest
 
-from plantcv_mcp.server import _measure_impl, _segment_impl, list_methods_impl
+from plantcv_mcp.server import (
+    _measure_impl,
+    _segment_impl,
+    build_server,
+    list_methods_impl,
+)
 
 
 def _write_green_png(tmp_path):
@@ -46,6 +53,20 @@ def _write_large_green_png(tmp_path):
     img = np.full((2000, 2000, 3), 128, dtype=np.uint8)
     img[500:1500, 500:1500] = (60, 180, 60)
     p = tmp_path / "large.png"
+    cv2.imwrite(str(p), img)
+    return str(p)
+
+
+def _write_huge_green_png(tmp_path):
+    """A 3000x3000 image with an interior green blob. Big enough that
+    colorspace_sheet's contact-sheet grid (which is larger than the input
+    itself) also clears max_edge=1024, exercising a second downscale()
+    call with a different scale than the overlay's."""
+    import cv2
+
+    img = np.full((3000, 3000, 3), 128, dtype=np.uint8)
+    img[500:2500, 500:2500] = (60, 180, 60)
+    p = tmp_path / "huge.png"
     cv2.imwrite(str(p), img)
     return str(p)
 
@@ -112,3 +133,56 @@ def test_segment_reports_real_overlay_scale(tmp_path):
     large_path = _write_large_green_png(tmp_path)  # 2000x2000
     seg_large = _segment_impl(large_path, channel="a", method="otsu")
     assert seg_large["overlay_scale"] == pytest.approx(1024 / 2000)
+
+
+@pytest.mark.anyio
+async def test_suggest_segmentation_reports_downscale_factors(tmp_path):
+    """Design spec S5: any downsampling must be reported, never silent.
+    server.py previously did `cs, _ = downscale(...)` / `th, _ = downscale(...)`
+    for suggest_segmentation, discarding both scale factors -- the one tool
+    whose entire purpose is making the channel/method choice informed. Values
+    independently reproduced before writing this test: for a 3000x3000 input,
+    colorspace_sheet's contact-sheet grid is (4125, 9000, 3) -> scale
+    1024/9000 = 0.11377..., and threshold_sheet is (3000, 3000, 3) ->
+    scale 1024/3000 = 0.34133...
+    """
+    path = _write_huge_green_png(tmp_path)
+    mcp = build_server()
+    result = await mcp.call_tool(
+        "suggest_segmentation", {"image_path": path, "channel": "a"}
+    )
+    payload = json.loads(result[0].text)
+    assert payload["colorspace_sheet_scale"] == pytest.approx(1024 / 9000)
+    assert payload["threshold_sheet_scale"] == pytest.approx(1024 / 3000)
+
+
+@pytest.mark.anyio
+async def test_server_registers_exactly_the_four_expected_tools():
+    """No test previously referenced build_server/list_tools/call_tool -- every
+    server test drove the private _impl helpers instead. Dropping a
+    @mcp.tool() decorator would still pass all of those. Go through the real
+    FastMCP registration."""
+    mcp = build_server()
+    tools = await mcp.list_tools()
+    names = {t.name for t in tools}
+    assert names == {"list_methods", "suggest_segmentation", "segment", "measure"}
+
+
+@pytest.mark.anyio
+async def test_segment_tool_carries_no_traits_through_the_real_mcp_layer(tmp_path):
+    """The load-bearing assertion `assert "traits" not in seg` elsewhere in this
+    file checks the HELPER's dict, not the actual tool payload a client
+    receives. Drive it through build_server() + call_tool("segment", ...) so
+    a `traits` key added inside the segment() WRAPPER (rather than
+    _segment_impl) would be caught."""
+    path = _write_green_png(tmp_path)
+    mcp = build_server()
+    result = await mcp.call_tool(
+        "segment", {"image_path": path, "channel": "a", "method": "otsu"}
+    )
+    text_block, image_block = result
+    payload = json.loads(text_block.text)
+    assert "traits" not in payload
+    assert payload["session_id"]
+    assert payload["largest_area"] == 10000
+    assert image_block.type == "image"

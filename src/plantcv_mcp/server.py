@@ -79,9 +79,15 @@ def build_server() -> FastMCP:
         """Return colourspace and threshold contact sheets so the channel/method
         choice is informed rather than blind. Call this before segment()."""
         img = load_image(image_path)
-        cs, _ = downscale(colorspace_sheet(img))
-        th, _ = downscale(threshold_sheet(img, channel))
+        cs, cs_scale = downscale(colorspace_sheet(img))
+        th, th_scale = downscale(threshold_sheet(img, channel))
         return [
+            json.dumps(
+                {
+                    "colorspace_sheet_scale": cs_scale,
+                    "threshold_sheet_scale": th_scale,
+                }
+            ),
             Image(data=encode_png(cs), format="png"),
             Image(data=encode_png(th), format="png"),
         ]
