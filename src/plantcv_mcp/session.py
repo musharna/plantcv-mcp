@@ -1,0 +1,59 @@
+"""In-memory session store.
+
+Sessions hold the mask (uint8 HxW) but NOT the RGB image — that is re-read from
+disk on demand, keeping memory bounded when several sessions are live.
+"""
+
+import uuid
+from collections import OrderedDict
+from dataclasses import dataclass
+
+import numpy as np
+
+
+class UnknownSessionError(Exception):
+    """Raised when a session_id is not in the store."""
+
+
+@dataclass
+class Session:
+    session_id: str
+    image_path: str
+    mask: np.ndarray
+    channel: str
+    method: str
+    shape: tuple[int, int]
+
+
+class SessionStore:
+    def __init__(self, max_sessions: int = 8) -> None:
+        self._max = max_sessions
+        self._sessions: OrderedDict[str, Session] = OrderedDict()
+
+    def create(
+        self, image_path: str, mask: np.ndarray, channel: str, method: str
+    ) -> Session:
+        session = Session(
+            session_id=str(uuid.uuid4()),
+            image_path=image_path,
+            mask=mask,
+            channel=channel,
+            method=method,
+            shape=(int(mask.shape[0]), int(mask.shape[1])),
+        )
+        self._sessions[session.session_id] = session
+        while len(self._sessions) > self._max:
+            self._sessions.popitem(last=False)  # evict least-recently-used
+        return session
+
+    def get(self, session_id: str) -> Session:
+        if session_id not in self._sessions:
+            raise UnknownSessionError(
+                f"Unknown session_id {session_id!r}. Sessions are in-memory and "
+                f"capped at {self._max}; the oldest are evicted. Re-run segment()."
+            )
+        self._sessions.move_to_end(session_id)  # refresh recency
+        return self._sessions[session_id]
+
+    def __len__(self) -> int:
+        return len(self._sessions)
