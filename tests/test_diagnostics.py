@@ -21,11 +21,20 @@ def _mask_with_squares(shape, squares):
 def _mask_from_areas(shape, areas):
     """Build a mask with disjoint square blobs of the given pixel areas.
 
-    Raises ValueError if the blobs do not fit within the canvas width.
+    Raises ValueError if the blobs do not fit within the canvas height or width.
     """
     height, width = shape
     sides = [int(np.sqrt(a)) for a in areas]
-    # Total width needed: sum of sides + gaps (5 pixels between each blob)
+
+    # Validate height: blobs are written to m[0:side, ...], so max(side) must fit
+    max_height = max(sides) if sides else 0
+    if max_height > height:
+        raise ValueError(
+            f"Canvas height {height} is insufficient for blobs requiring {max_height}px "
+            f"(max side: {max_height})"
+        )
+
+    # Validate width: sum of sides + gaps (5 pixels between each blob)
     total_width = sum(sides) + 5 * (len(areas) - 1)
     if total_width > width:
         raise ValueError(
@@ -139,12 +148,34 @@ def test_major_object_count_one_large_plus_fragments():
     assert diag.major_object_count == 1
 
 
+def test_mask_from_areas_guard_rejects_insufficient_canvas_and_accepts_sufficient():
+    """Validates the fail-loud guard on _mask_from_areas. The positive control lives
+    in the SAME test so an always-raises or never-raises bug cannot pass silently."""
+    # NEGATIVE CASE: canvas too small in width
+    # Sizes [92, 89, 84, 82, 23, 21] need 391 + 25 gaps = 416px, but only 400 provided
+    with pytest.raises(ValueError, match="Canvas width 400 is insufficient"):
+        _mask_from_areas((400, 400), [8628, 7981, 7106, 6748, 570, 454])
+
+    # POSITIVE CONTROL: same areas but canvas wide enough must NOT raise
+    mask = _mask_from_areas((400, 450), [8628, 7981, 7106, 6748, 570, 454])
+    assert mask is not None
+
+    # NEGATIVE CASE: canvas too small in height
+    # Largest side is 92, but only 50px height provided
+    with pytest.raises(ValueError, match="Canvas height 50 is insufficient"):
+        _mask_from_areas((50, 500), [8628, 7981, 7106, 6748, 570, 454])
+
+    # POSITIVE CONTROL: same areas but canvas tall enough must NOT raise
+    mask = _mask_from_areas((100, 500), [8628, 7981, 7106, 6748, 570, 454])
+    assert mask is not None
+
+
 def test_multi_specimen_fires_on_measured_failure_and_not_on_single_plant():
     """Calibrated on the real mode-1 failure. The positive control lives in the
     SAME test so an always-fires bug cannot masquerade as detection."""
 
     # Real measured areas from bio3d-arena/.../736_multi4.png
-    # Sizes: [92, 89, 84, 82, 23, 21], total width needed: 371 + 25 (gaps) = 396px
+    # Sizes: [92, 89, 84, 82, 23, 21], total width needed: 391 + 25 (gaps) = 416px
     four_plants = _mask_from_areas((400, 450), [8628, 7981, 7106, 6748, 570, 454])
     # Verify the constructed areas match intentions (fail-loud: we measure what we built)
     expected_areas = [8464, 7921, 7056, 6724, 529, 441]  # int(sqrt(x))^2 for each area
