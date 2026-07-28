@@ -14,11 +14,13 @@ done without a lock around the measurement section.
 """
 
 import json
-from typing import TypedDict
 
 from mcp.server.fastmcp import FastMCP, Image
 from mcp.types import ToolAnnotations
 from plantcv import plantcv as pcv
+
+# See measurement.py: typing.TypedDict breaks schema generation on 3.11.
+from typing_extensions import TypedDict
 
 from . import plantcv_version
 from .diagnostics import (

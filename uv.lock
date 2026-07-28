@@ -1326,6 +1326,7 @@ dependencies = [
     { name = "numpy" },
     { name = "opencv-python" },
     { name = "plantcv" },
+    { name = "typing-extensions" },
 ]
 
 [package.dev-dependencies]
@@ -1340,6 +1341,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26" },
     { name = "opencv-python", specifier = ">=4.9" },
     { name = "plantcv", specifier = "==4.11.3" },
+    { name = "typing-extensions", specifier = ">=4.12" },
 ]
 
 [package.metadata.requires-dev]

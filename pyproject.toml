@@ -40,6 +40,10 @@ dependencies = [
     # opencv-python-headless would NOT yield a headless install.
     "opencv-python>=4.9",
     "numpy>=1.26",
+    # Declared explicitly rather than leaned on as a pydantic transitive: our
+    # outputSchema TypedDicts MUST come from typing_extensions, because pydantic
+    # raises PydanticUserError on typing.TypedDict under Python < 3.12.
+    "typing-extensions>=4.12",
 ]
 
 [project.urls]

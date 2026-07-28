@@ -1,10 +1,15 @@
 """Trait extraction, gated on mask validity."""
 
 import math
-from typing import Any, TypedDict
+from typing import Any
 
 import numpy as np
 from plantcv import plantcv as pcv
+
+# pydantic refuses typing.TypedDict on Python < 3.12 and raises
+# PydanticUserError when it builds a schema from one, so the TypedDicts that
+# back our outputSchema must come from typing_extensions on every version.
+from typing_extensions import TypedDict
 
 from .diagnostics import analyze_mask, assert_not_degenerate
 
