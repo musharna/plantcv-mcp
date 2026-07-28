@@ -101,7 +101,17 @@ jobs:
           set -uo pipefail
           pattern='/home/[a-z]|/mnt/c/Users|C:\\Users'
 
-          check() { git ls-files -z | xargs -0 grep -nIE "$pattern"; }
+          # The workflow directory is excluded because THIS FILE necessarily
+          # contains the pattern it searches for, plus the planted probe literal
+          # below. Without the exclusion the gate reports itself and fails every
+          # run — a guard whose scope includes its own definition cannot tell a
+          # real developer path from a description of one. The exclusion is a
+          # pathspec on the SAME `git ls-files` call, so the negative control
+          # still exercises the identical query.
+          check() {
+            git ls-files -z -- . ':(exclude).github/workflows/*' \
+              | xargs -0 grep -nIE "$pattern"
+          }
 
           if check; then
             echo "::error::absolute developer paths found in tracked files"
