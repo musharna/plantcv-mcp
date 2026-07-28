@@ -39,11 +39,10 @@ def test_area_matches_the_known_mask_size():
     assert traits["area"]["value"] == pytest.approx(10000, rel=0.02)
 
 
-def test_successive_measurements_do_not_contaminate():
-    """Regression test for global-state contamination. pcv.outputs.observations
-    accumulates process-wide; without pcv.outputs.clear(), old observation groups
-    could persist and contaminate next() iteration. This test checks exact areas
-    to detect if observations from prior measurements leak in."""
+def test_successive_measurements_return_correct_results():
+    """Verify that successive measure_traits() calls return correct independent
+    results, regardless of calling order. Each call should return traits matching
+    its own mask, with exact area equality (10000 for 100x100, 900 for 30x30)."""
     img = np.full((200, 200, 3), 128, dtype=np.uint8)
 
     # First: 100×100 square (area=10000)
