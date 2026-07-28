@@ -38,8 +38,13 @@ def to_gray(img: np.ndarray, channel: str) -> np.ndarray:
         Greyscale image as uint8 array.
 
     Raises:
-        KeyError: if channel is not in CHANNELS.
+        UnknownChannelError: if channel is not in CHANNELS.
     """
+    if channel not in CHANNELS:
+        raise UnknownChannelError(
+            f"Unknown channel {channel!r}. Valid channels: {sorted(CHANNELS)}. "
+            "Call suggest_segmentation() to see which separates plant from background."
+        )
     space = CHANNELS[channel]
     if space == "lab":
         return pcv.rgb2gray_lab(rgb_img=img, channel=channel)
