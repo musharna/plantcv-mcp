@@ -11,7 +11,7 @@ numbers **and the picture they were computed from**, and refuses to return numbe
 segmentation is degenerate.
 
 > Unofficial. Not affiliated with, endorsed by, or sponsored by the Donald
-> Danforth Plant Science Center or the PlantCV maintainers. See [NOTICE](NOTICE).
+> Danforth Plant Science Center or the PlantCV maintainers. See [NOTICE](https://github.com/musharna/plantcv-mcp/blob/master/NOTICE).
 
 ## Why you are handed the overlay
 
@@ -20,7 +20,7 @@ same threshold method — the only difference is one parameter.
 
 | ✅ `channel="a", object_type="dark"`                          | ❌ `channel="s", object_type="dark"`                             |
 | ------------------------------------------------------------- | ---------------------------------------------------------------- |
-| ![correct segmentation](docs/assets/overlay-correct.png)      | ![inverted segmentation](docs/assets/overlay-inverted.png)       |
+| ![correct segmentation](https://raw.githubusercontent.com/musharna/plantcv-mcp/master/docs/assets/overlay-correct.png)      | ![inverted segmentation](https://raw.githubusercontent.com/musharna/plantcv-mcp/master/docs/assets/overlay-inverted.png)       |
 | Mask covers **3.1%** of the frame, 9 components. `area=32427` | Mask covers **96.1%** — it is the **background**. `area=1007829` |
 
 The failure on the right is what this server exists to prevent. Without the picture, both
@@ -159,7 +159,7 @@ get a confidently wrong answer — that is the right-hand image at the top of th
 Two things guard against it. `suggest_segmentation` reports what **both** polarities yield on
 your image before you commit, alongside a contact sheet of every colourspace:
 
-![colourspace contact sheet](docs/assets/suggest-colorspaces.png)
+![colourspace contact sheet](https://raw.githubusercontent.com/musharna/plantcv-mcp/master/docs/assets/suggest-colorspaces.png)
 
 And `segment` emits an `implausible_coverage` warning when the mask covers more than half the
 frame. Neither refuses the measurement, because a macro shot of a single leaf legitimately
@@ -312,12 +312,12 @@ This project is MIT licensed. It depends on
 [PlantCV](https://github.com/danforthcenter/plantcv), which is licensed under the
 **Mozilla Public License 2.0**. No PlantCV source is vendored or redistributed
 here — it is an ordinary runtime dependency — so the MIT license applies to this
-project's own files. See [NOTICE](NOTICE) for the full statement.
+project's own files. See [NOTICE](https://github.com/musharna/plantcv-mcp/blob/master/NOTICE) for the full statement.
 
 ## More
 
-- [CHANGELOG.md](CHANGELOG.md) — what changed, and why
-- [docs/MUTATION-CHECKS.md](docs/MUTATION-CHECKS.md) — every guard disabled on purpose, and
+- [CHANGELOG.md](https://github.com/musharna/plantcv-mcp/blob/master/CHANGELOG.md) — what changed, and why
+- [docs/MUTATION-CHECKS.md](https://github.com/musharna/plantcv-mcp/blob/master/docs/MUTATION-CHECKS.md) — every guard disabled on purpose, and
   the test that went red for it. A guard whose test passes with the guard removed is not a test.
 
 Images on this page are rendered from `tests/fixtures/multi_specimen.png`, an original render
