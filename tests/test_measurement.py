@@ -126,14 +126,12 @@ def test_keyed_lookup_immune_to_foreign_sample_labels():
         pcv.outputs.observations.clear()
 
 
-def test_keyed_lookup_raises_on_missing_key():
+def test_keyed_lookup_raises_on_missing_key(monkeypatch):
     """Regression test: KeyError raised when expected observation key is missing.
-    The implementation looks up observations by sample_label_1. If that key is
-    absent, it raises KeyError with a message naming expected and actual keys.
-    This guard prevents silent failures if PlantCV's behavior changes.
-
-    The test verifies: (1) positive control - normal case works; (2) error
-    handling is in place should the key go missing."""
+    When pcv.analyze.size() fails to create the expected observation group,
+    measure_traits must raise KeyError (not silently fall back to next(iter(...))).
+    This test verifies both the positive control (normal case works) and the
+    negative control (missing key raises with a clear error message)."""
     img = np.full((200, 200, 3), 128, dtype=np.uint8)
     mask = np.zeros((200, 200), dtype=np.uint8)
     mask[50:150, 50:150] = 255
@@ -142,8 +140,18 @@ def test_keyed_lookup_raises_on_missing_key():
     traits = measure_traits(img, mask)
     assert traits["area"]["value"] == 10000, "Positive control: normal case failed"
 
-    # The missing-key scenario is inherently hard to trigger in practice because
-    # analyze.size() always creates the expected key. However, the code path is
-    # verified: if expected_key not in observations, raise KeyError with message
-    # listing both expected key and actual keys present. This defensive check
-    # prevents silent fallback to next(iter(...)) if PlantCV's labeling changes.
+    # Negative control: make analyze.size() a no-op so no observation group is created
+    def no_op(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(pcv.analyze, "size", no_op)
+
+    # Now measure_traits will call clear(), run the analysis (no-op), and try to
+    # look up 'default_1' in an empty observations dict. It MUST raise KeyError.
+    with pytest.raises(KeyError) as exc_info:
+        measure_traits(img, mask)
+
+    # Verify the error message names the expected key and lists actual keys
+    error_message = str(exc_info.value)
+    assert "default_1" in error_message, "Error message should name expected key"
+    assert "Available keys" in error_message, "Error message should list actual keys"
