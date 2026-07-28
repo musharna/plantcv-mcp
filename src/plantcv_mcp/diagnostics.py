@@ -156,6 +156,66 @@ def multi_specimen_warning(diag: MaskDiagnostics) -> "Advisory | None":
     )
 
 
+# Warnings meaning the traits would describe something other than the plant.
+# Anything listed here BLOCKS an unattended measurement: with nobody looking at an
+# overlay, these are the cases where a number must not be returned at all.
+BLOCKING_CODES: frozenset[str] = frozenset(
+    {"empty_mask", "fill_erased_mask", "implausible_coverage"}
+)
+
+
+def segmentation_warnings(
+    mask: np.ndarray,
+    diag: MaskDiagnostics,
+    pre_fill_diag: MaskDiagnostics,
+    fill_size: int,
+) -> list["Advisory"]:
+    """Every advisory a segmented mask earns, in one place.
+
+    Shared by the interactive segment() path and the unattended batch path so the
+    two cannot drift apart — a batch applying weaker guards than the interactive
+    tool would be the worst of both worlds.
+    """
+    warnings: list[Advisory] = []
+
+    if diag.component_count == 0 and pre_fill_diag.component_count > 0:
+        warnings.append(
+            Advisory(
+                code="fill_erased_mask",
+                message=(
+                    f"Thresholding found {pre_fill_diag.component_count} object(s), "
+                    f"the largest {pre_fill_diag.largest_area} px, and then "
+                    f"fill_size={fill_size} removed every one of them. This is a "
+                    "fill_size problem, not a channel or method problem — the "
+                    "specimen is smaller than the speckle filter. Re-run with "
+                    f"fill_size below {pre_fill_diag.largest_area}."
+                ),
+            )
+        )
+    else:
+        empty = empty_mask_warning(diag)
+        if empty:
+            warnings.append(empty)
+
+    coverage = implausible_coverage_warning(diag)
+    if coverage:
+        warnings.append(coverage)
+
+    multi = multi_specimen_warning(diag)
+    if multi:
+        warnings.append(multi)
+
+    # frame_clipping asserts that size traits are a LOWER BOUND, which presumes the
+    # mask IS the plant. On an implausibly large (probably inverted) mask that claim
+    # actively misleads, so it is withheld rather than stacked on top.
+    if not coverage:
+        clipping = frame_clipping_warning(mask)
+        if clipping:
+            warnings.append(clipping)
+
+    return warnings
+
+
 def frame_clipping_warning(mask: np.ndarray) -> "Advisory | None":
     """Warn when mask pixels touch the frame edge.
 

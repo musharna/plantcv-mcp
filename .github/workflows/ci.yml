@@ -79,7 +79,14 @@ jobs:
 
           server = build_server()
           names = sorted(t.name for t in asyncio.run(server.list_tools()))
-          expected = ["list_methods", "measure", "segment", "suggest_segmentation"]
+          expected = [
+              "calibrate_scale_from_marker",
+              "list_methods",
+              "measure",
+              "measure_images",
+              "segment",
+              "suggest_segmentation",
+          ]
           assert names == expected, f"tool surface changed: {names!r} != {expected!r}"
           print("wheel OK, tools:", names)
           PY

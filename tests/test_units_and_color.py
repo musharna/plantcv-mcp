@@ -155,7 +155,7 @@ def test_server_publishes_instructions_that_state_the_discipline():
 
 def test_every_tool_publishes_annotations_and_a_title():
     tools = asyncio.run(build_server().list_tools())
-    assert len(tools) == 4
+    assert len(tools) == 6
     for t in tools:
         assert t.title, f"{t.name} has no title"
         assert t.annotations is not None, f"{t.name} has no annotations"
@@ -175,6 +175,27 @@ def test_typed_tools_publish_an_output_schema():
 
     assert "traits" in by_name["measure"].outputSchema["properties"]
     assert "px_per_mm" in by_name["measure"].outputSchema["properties"]
+
+
+def test_every_structured_tool_publishes_an_output_schema():
+    """Generalises the check above so a NEW tool cannot quietly regress it.
+
+    Written after exactly that happened: calibrate_scale_from_marker and
+    measure_images were first added with a bare `-> dict`, so they returned a JSON
+    string in a text block and no schema, while the older tools returned structured
+    content. Only the two tools that return IMAGE blocks are exempt.
+    """
+    returns_images = {"segment", "suggest_segmentation"}
+    for tool in asyncio.run(build_server().list_tools()):
+        if tool.name in returns_images:
+            assert tool.outputSchema is None, (
+                f"{tool.name} returns image content; it should have no outputSchema"
+            )
+            continue
+        assert tool.outputSchema is not None, (
+            f"{tool.name} returns structured data but publishes no outputSchema — "
+            "annotate its return type with a TypedDict"
+        )
 
 
 def test_measure_over_the_real_mcp_layer_returns_structured_content():

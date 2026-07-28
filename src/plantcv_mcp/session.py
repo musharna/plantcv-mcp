@@ -27,6 +27,10 @@ class Session:
     # a same-dimension content swap, which would silently measure a stale mask
     # against new pixels.
     digest: str = ""
+    # Whether the image was colour-corrected before segmentation. measure()
+    # re-reads from disk, so it must re-apply the same transform or it would
+    # measure different pixels than the ones the mask was drawn on.
+    color_correct: bool = False
 
 
 class SessionStore:
@@ -43,6 +47,7 @@ class SessionStore:
         channel: str,
         method: str,
         digest: str = "",
+        color_correct: bool = False,
     ) -> Session:
         session = Session(
             session_id=str(uuid.uuid4()),
@@ -52,6 +57,7 @@ class SessionStore:
             method=method,
             shape=(int(mask.shape[0]), int(mask.shape[1])),
             digest=digest,
+            color_correct=color_correct,
         )
         self._sessions[session.session_id] = session
         while len(self._sessions) > self._max:

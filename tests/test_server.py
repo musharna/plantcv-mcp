@@ -195,7 +195,7 @@ async def test_suggest_segmentation_reports_downscale_factors(tmp_path):
 
 
 @pytest.mark.anyio
-async def test_server_registers_exactly_the_four_expected_tools():
+async def test_server_registers_exactly_the_expected_tools():
     """No test previously referenced build_server/list_tools/call_tool -- every
     server test drove the private _impl helpers instead. Dropping a
     @mcp.tool() decorator would still pass all of those. Go through the real
@@ -203,7 +203,14 @@ async def test_server_registers_exactly_the_four_expected_tools():
     mcp = build_server()
     tools = await mcp.list_tools()
     names = {t.name for t in tools}
-    assert names == {"list_methods", "suggest_segmentation", "segment", "measure"}
+    assert names == {
+        "list_methods",
+        "suggest_segmentation",
+        "segment",
+        "measure",
+        "calibrate_scale_from_marker",
+        "measure_images",
+    }
 
 
 @pytest.mark.anyio

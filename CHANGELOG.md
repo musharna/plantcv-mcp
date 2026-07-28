@@ -8,6 +8,28 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **`calibrate_scale_from_marker`** — measures a marker of known real size and returns
+  `px_per_mm`, closing the half of real-world units that was previously left to the caller.
+  It does **not** wrap `pcv.report_size_marker_area`: that function takes an ROI, and against
+  a synthetic disc of known 80 px diameter it returns `major_axis=79.1` with a whole-frame ROI
+  but **348.0 with a tight ROI around the marker** — a silent 4.35× scale error under the most
+  intuitive usage, because its ROI filter can select a background component that merely
+  intersects the region. Here the region is **cropped before thresholding**, so nothing outside
+  the box can be selected. That removes the mechanism instead of compensating for it.
+  A `marker_touches_crop_edge` warning catches the wrong-polarity case: measured on a centred
+  80 px disc in a 100×100 crop, the correct and inverted polarities both give `crop_fraction`
+  0.50, so coverage cannot discriminate and edge contact is the guard that can.
+- **Colour-card correction.** `segment(..., color_correct=true)` detects a ColorChecker and
+  corrects to a standard reference; `measure()` re-applies it so traits are measured on the
+  pixels the mask was drawn on. If no card is found it **raises** rather than silently
+  measuring the uncorrected image. Previously deferred for want of a test fixture — a
+  synthetic Macbeth chart driving the real detector, plus a known colour distortion, gives
+  ground truth: mean absolute error to the undistorted original falls from 8.77 to 3.43.
+- **`measure_images`** — one recipe across up to 200 images. Batch cannot honour "no number
+  without the picture" literally, so the overlay is replaced by automated validation plus
+  explicit refusal: every image runs the **same** guards as `segment()` via shared code, and
+  any image tripping a blocking guard returns **no traits**, only a reason. That is weaker
+  than a human reading a mask and is documented as such rather than implied.
 - **Real-world units.** `measure(session_id, px_per_mm=…)` converts spatial traits to `mm`
   and `mm2`. Without it every size is in pixels, and pixel sizes are not comparable between
   images shot at different distance or zoom — the largest practical limitation the tool had.
@@ -21,26 +43,22 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   feature. This takes the server from 1 to 2 of PlantCV's 11 `analyze` functions.
 - **Server instructions.** The server now publishes MCP `instructions` telling the client to
   look at the overlay before trusting a number, and what each warning code means. The product
-  is a discipline as much as four functions, and nothing was conveying that.
-- **Tool metadata.** All four tools now publish a human title and `ToolAnnotations`
+  is a discipline as much as a set of functions, and nothing was conveying that.
+- **Tool metadata.** Every tool now publishes a human title and `ToolAnnotations`
   (`readOnlyHint`, `destructiveHint=false`, `idempotentHint`, `openWorldHint=false`) so a
   client can tell they only read and compute. `measure` and `list_methods` publish an
   `outputSchema` derived from typed returns, so callers get structured content instead of
-  parsing JSON out of a text block. `segment` and `suggest_segmentation` return image blocks
-  and so have no structured schema, by nature.
+  parsing JSON out of a text block — as do `calibrate_scale_from_marker` and
+  `measure_images`. `segment` and `suggest_segmentation` return image blocks and so have
+  no structured schema, by nature; a test asserts exactly that split so a new tool cannot
+  quietly ship without one.
 
-### Not added, deliberately
+### Previously deferred, now resolved
 
-- **Automatic scale from a size marker.** `pcv.report_size_marker_area` exists, but measured
-  against a synthetic disc of known diameter (80 px) it returns `major_axis=79.1` with a
-  whole-frame ROI and **`348.0` with a tight ROI around the marker** — a silent 4.35× scale
-  error under the most intuitive usage. A whole-frame ROI cannot generalise to a real image
-  containing both a plant and a marker, so wrapping this safely is a design problem rather
-  than a thin wrapper. `px_per_mm` is supplied by the caller until that is solved.
-- **Colour-card correction.** `pcv.transform.detect_color_card` and `affine_color_correction`
-  exist and would make colour traits comparable across lighting, but no fixture in this repo
-  contains a colour card, so the happy path could not be verified by real execution. Shipping
-  an untested colour correction is worse than shipping none.
+Both of the items this section used to hold have shipped. Automatic scale is implemented
+without wrapping the ROI-based API that produced the 4.35× error, and colour correction is
+implemented now that a synthetic ColorChecker gives its happy path a ground-truth test. The
+measured reasons are preserved in the entries above so neither is re-litigated from scratch.
 
 ### Documentation
 
@@ -141,7 +159,7 @@ segmentation, the server returns the numbers _and the overlay it measured_.
 - Continuous integration: lint, format check, and the full suite on Python 3.11, 3.12 and
   3.13; a packaging job that asserts the sdist ships `NOTICE`/`LICENSE`/`CHANGELOG.md` and
   leaks none of `.superpowers`, `docs/superpowers` or `.claude`, and that the built wheel
-  imports and still registers exactly four tools; and an absolute-path check that runs its
+  imports and still registers exactly the expected tool surface; and an absolute-path check that runs its
   own negative control so a silently-disabled check fails the build.
 - `NOTICE` — attribution for PlantCV (MPL-2.0), an explicit statement that this project is
   unofficial and unaffiliated with the Donald Danforth Plant Science Center, and the

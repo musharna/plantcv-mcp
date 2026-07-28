@@ -100,12 +100,14 @@ the methods, and the pinned PlantCV version.
 
 ## Tools
 
-| tool                                                | returns                                                 |
-| --------------------------------------------------- | ------------------------------------------------------- |
-| `suggest_segmentation(image_path, channel, method)` | contact sheets, and what each `object_type` would yield |
-| `segment(image_path, channel, method, ...)`         | overlay + diagnostics + warnings — **no traits**        |
-| `measure(session_id, analyses, px_per_mm, ...)`     | traits, or a raised error on a degenerate mask          |
-| `list_methods()`                                    | channels, methods, object types, pinned PlantCV version |
+| tool                                                                    | returns                                                 |
+| ----------------------------------------------------------------------- | ------------------------------------------------------- |
+| `suggest_segmentation(image_path, channel, method)`                     | contact sheets, and what each `object_type` would yield |
+| `segment(image_path, channel, method, ...)`                             | overlay + diagnostics + warnings — **no traits**        |
+| `measure(session_id, analyses, px_per_mm, ...)`                         | traits, or a raised error on a degenerate mask          |
+| `calibrate_scale_from_marker(image_path, x, y, w, h, marker_length_mm)` | `px_per_mm` from a marker of known real size            |
+| `measure_images(image_paths, channel, method, ...)`                     | one recipe across many images; traits only where valid  |
+| `list_methods()`                                                        | channels, methods, object types, pinned PlantCV version |
 
 Typical loop: `suggest_segmentation` → `segment` → **look at the overlay** → `segment` again
 with a different channel, method or polarity if it is wrong → `measure`.
@@ -208,8 +210,67 @@ every area wrong by exactly a factor of `px_per_mm`, plausibly and silently. Pos
 (`center_of_mass`, `ellipse_center`) stay in pixels, since a millimetre coordinate means
 nothing without a defined origin.
 
-Deriving `px_per_mm` automatically from a size marker in the frame is **not** implemented.
-[CHANGELOG.md](CHANGELOG.md) records the measured reason.
+If you have a marker of known real size in the frame — a coin, a printed disc — put a box
+around it and let the server measure it:
+
+```
+calibrate_scale_from_marker(image_path, x=100, y=100, w=100, h=100, marker_length_mm=20)
+  -> px_per_mm 4.05, marker_length_px 81
+```
+
+`marker_length_mm` is the marker's longest real dimension. **Check `marker_length_px` against
+what you expect**, because a wrong scale silently rescales every trait you measure afterwards.
+The region is cropped before thresholding, so nothing outside your box can be selected;
+PlantCV's own `report_size_marker_area` takes an ROI instead, and measured against a disc of
+known 80 px diameter it returns 348 with a tight ROI — a silent 4.35× error. If the detected
+object reaches the crop edge you get a `marker_touches_crop_edge` warning, which usually means
+the polarity is wrong and the background was measured.
+
+## Colour correction
+
+`segment(..., color_correct=true)` detects a Macbeth-style ColorChecker in the frame and
+corrects to a standard reference, which is what makes colour traits comparable between images
+shot under different lighting. `measure()` re-applies the same correction, so traits are always
+measured on the pixels the mask was drawn on.
+
+If no card is found this **raises** rather than quietly measuring the uncorrected image —
+returning colour traits that look corrected and are not would be the same kind of confident
+wrongness as an inverted mask.
+
+## Measuring many images
+
+`measure_images(image_paths, channel, method, ...)` applies one fixed recipe across up to 200
+images.
+
+This is the one place the two-step discipline cannot hold literally: nobody reviews two hundred
+overlays. So the overlay is replaced by the only honest substitute — **every image runs the same
+guards as `segment()`, and any image that trips a blocking guard comes back with no traits at
+all**, just a reason and an instruction to inspect it individually. Advisory warnings such as
+`multi_specimen` are attached to the traits rather than suppressing them.
+
+```json
+{
+  "summary": {
+    "submitted": 2,
+    "measured": 1,
+    "needs_review": 1,
+    "review_paths": ["blank.png"]
+  },
+  "results": [
+    {
+      "image_path": "blank.png",
+      "measured": false,
+      "traits": null,
+      "refused_because": "empty_mask — traits withheld because the mask probably does not describe the plant."
+    }
+  ]
+}
+```
+
+Settle the recipe on one representative image with `suggest_segmentation` and `segment` first,
+looking at the overlay, then apply it here. A batch never returns a number the server could not
+validate — which is weaker than a human looking at a mask, and is stated plainly rather than
+implied.
 
 ## Security and trust boundary
 

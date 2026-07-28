@@ -75,3 +75,29 @@ against `test_measure_over_the_real_mcp_layer_returns_structured_content` it goe
 Same lesson as the `object_type` mutant above: **pair a mutant with a test that exercises
 the layer the mutation is in.** When a mutant survives, check the pairing first — then check
 the coverage.
+
+## Round 4 — scale, colour correction, and batch (2026-07-28)
+
+Baseline: `uv run pytest -q` → 84 passed.
+
+| guard                            | mutation applied                                                   | result |
+| -------------------------------- | ------------------------------------------------------------------ | ------ |
+| crop-before-threshold            | `crop = img[y0:y1, x0:x1]` → `crop = img` (reverts the causal fix) | RED    |
+| marker edge-touch guard          | `if touches:` → `if False:`                                        | RED    |
+| colour correction applied        | `tr.auto_correct_color(rgb_img=img)` → `img` (no-op)               | RED    |
+| missing-card raises              | early `return img` inserted before the raise (silent fallback)     | RED    |
+| `BLOCKING_CODES` populated       | frozenset emptied                                                  | RED    |
+| batch honours blocking guards    | `blocking = [...]` → `blocking = []`                               | RED    |
+| batch size cap                   | `if len(image_paths) > MAX_BATCH:` → `if False:`                   | RED    |
+| batch scale/analyses passthrough | `analyses=analyses, px_per_mm=px_per_mm` → `("size",), None`       | RED    |
+| new tools' `outputSchema`        | `-> BatchResult` → `-> dict`                                       | RED    |
+| new tools' `outputSchema`        | `-> ScaleResult` → `-> dict`                                       | RED    |
+
+The last two are worth noting. `calibrate_scale_from_marker` and `measure_images` were first
+written with a bare `-> dict`, so they returned a JSON string in a text block and published no
+schema, while the older tools returned structured content — the exact regression the round-3
+work had just fixed, reintroduced by new code. It was caught by calling the tool and looking at
+what came back, not by any test. `test_every_structured_tool_publishes_an_output_schema` now
+asserts the rule for **every** tool rather than a named list, and the two mutants above confirm
+it fires. A per-tool assertion protects the tools that exist; a rule protects the ones that
+have not been written yet.
