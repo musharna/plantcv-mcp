@@ -37,3 +37,39 @@ def test_area_matches_the_known_mask_size():
     img, mask = _img_and_mask()  # 100x100 filled square
     traits = measure_traits(img, mask)
     assert traits["area"]["value"] == pytest.approx(10000, rel=0.02)
+
+
+def test_successive_measurements_do_not_contaminate():
+    """Regression test for global-state contamination. pcv.outputs.observations
+    accumulates process-wide; without pcv.outputs.clear(), old observation groups
+    could persist and contaminate next() iteration. This test checks exact areas
+    to detect if observations from prior measurements leak in."""
+    img = np.full((200, 200, 3), 128, dtype=np.uint8)
+
+    # First: 100×100 square (area=10000)
+    mask_100 = np.zeros((200, 200), dtype=np.uint8)
+    mask_100[50:150, 50:150] = 255
+    traits_100_first = measure_traits(img, mask_100)
+    # Use exact equality: if contamination occurs, the area will mismatch
+    assert traits_100_first["area"]["value"] == 10000, (
+        f"First 100x100 measurement returned {traits_100_first['area']['value']}, expected 10000"
+    )
+
+    # Second: 30×30 square (area=900)
+    mask_30 = np.zeros((200, 200), dtype=np.uint8)
+    mask_30[85:115, 85:115] = 255
+    traits_30_second = measure_traits(img, mask_30)
+    assert traits_30_second["area"]["value"] == 900, (
+        f"First 30x30 measurement returned {traits_30_second['area']['value']}, expected 900"
+    )
+
+    # Reverse order: verify contamination doesn't flow backward either
+    traits_30_first = measure_traits(img, mask_30)
+    assert traits_30_first["area"]["value"] == 900, (
+        f"Second 30x30 measurement returned {traits_30_first['area']['value']}, expected 900"
+    )
+
+    traits_100_second = measure_traits(img, mask_100)
+    assert traits_100_second["area"]["value"] == 10000, (
+        f"Second 100x100 measurement returned {traits_100_second['area']['value']}, expected 10000"
+    )
