@@ -1,19 +1,37 @@
 # plantcv-mcp
 
-PlantCV as an MCP **measurement instrument**: it returns plant trait numbers
-**and the segmentation overlay they were computed from**, and refuses to return
-numbers when the segmentation is degenerate.
+**Plant phenotyping over MCP — traits, plus the segmentation overlay they were measured from.**
+
+[![ci](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml)
+![python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
+![license](https://img.shields.io/badge/license-MIT-green)
+
+[PlantCV](https://plantcv.org) as an MCP **measurement instrument**: it returns plant trait
+numbers **and the picture they were computed from**, and refuses to return numbers when the
+segmentation is degenerate.
 
 > Unofficial. Not affiliated with, endorsed by, or sponsored by the Donald
 > Danforth Plant Science Center or the PlantCV maintainers. See [NOTICE](NOTICE).
 
-## Why the two-step API
+## Why you are handed the overlay
 
-`segment()` returns an overlay and diagnostics but **no traits**. `measure()`
-requires the `session_id` that `segment()` mints. You cannot get a number
-without first being handed the picture it came from.
+Red marks the pixels that were measured. Both images below come from the same file and the
+same threshold method — the only difference is one parameter.
 
-This is not a style preference. Measured on real images with PlantCV 4.11.3:
+| ✅ `channel="a", object_type="dark"`                          | ❌ `channel="s", object_type="dark"`                             |
+| ------------------------------------------------------------- | ---------------------------------------------------------------- |
+| ![correct segmentation](docs/assets/overlay-correct.png)      | ![inverted segmentation](docs/assets/overlay-inverted.png)       |
+| Mask covers **3.1%** of the frame, 9 components. `area=32427` | Mask covers **96.1%** — it is the **background**. `area=1007829` |
+
+The failure on the right is what this server exists to prevent. Without the picture, both
+runs return seventeen traits with correct units and entirely believable magnitudes. The one
+on the right is measuring the wall behind the plants.
+
+`segment()` returns the overlay and diagnostics but **no traits**. `measure()` requires the
+`session_id` that `segment()` mints. You cannot get a number without first being handed the
+image it came from.
+
+That is not a style preference. Measured on real images with PlantCV 4.11.3:
 
 | failure                           | what you get without the overlay                            |
 | --------------------------------- | ----------------------------------------------------------- |
@@ -82,31 +100,88 @@ the methods, and the pinned PlantCV version.
 
 ## Tools
 
-- `suggest_segmentation(image_path, channel="a", method="otsu")` — colourspace and
-  threshold contact sheets, plus what each `object_type` would actually yield
-- `segment(image_path, channel, method, object_type="dark", fill_size=200, ksize=11, offset=2)`
-  — overlay + diagnostics + warnings, no traits
-- `measure(session_id)` — traits, or a raised error on a degenerate mask
-- `list_methods()` — channels, methods, object types, pinned PlantCV version
+| tool                                                | returns                                                 |
+| --------------------------------------------------- | ------------------------------------------------------- |
+| `suggest_segmentation(image_path, channel, method)` | contact sheets, and what each `object_type` would yield |
+| `segment(image_path, channel, method, ...)`         | overlay + diagnostics + warnings — **no traits**        |
+| `measure(session_id)`                               | traits, or a raised error on a degenerate mask          |
+| `list_methods()`                                    | channels, methods, object types, pinned PlantCV version |
 
-Typical loop: `suggest_segmentation` → `segment` → look at the overlay →
-`segment` again with a different channel, method or polarity if it is wrong → `measure`.
+Typical loop: `suggest_segmentation` → `segment` → **look at the overlay** → `segment` again
+with a different channel, method or polarity if it is wrong → `measure`.
 
-### Getting the polarity right
+### `segment` parameters
 
-`object_type` decides which side of the threshold is the plant. Choose wrong and the
-mask is the **background**, while the traits stay plausible and correctly united —
-measured on the bundled fixture, channel `s` with `object_type="dark"` covers 96% of
-the frame and yields `area=1007829` for a 1024×1024 image.
+| parameter     | default  | what it does                                                    |
+| ------------- | -------- | --------------------------------------------------------------- |
+| `image_path`  | required | image to read from the host filesystem                          |
+| `channel`     | required | one of `l a b h s v` — never guessed for you                    |
+| `method`      | required | one of `otsu triangle mean gaussian`                            |
+| `object_type` | `"dark"` | which side of the threshold is the plant. **See below**         |
+| `fill_size`   | `200`    | drops components smaller than this; can erase a small specimen  |
+| `ksize`       | `11`     | neighbourhood size, `mean` and `gaussian` only                  |
+| `offset`      | `2`      | constant subtracted from the local mean, `mean`/`gaussian` only |
 
-Two things guard against this. `suggest_segmentation` reports what both polarities give
-before you commit, and `segment` emits an `implausible_coverage` warning when the mask
-covers more than half the frame. Neither refuses the measurement, because a macro shot
-of a single leaf legitimately fills the frame — they make the choice visible.
+The `segment()` response for the image at the top of this page — verbatim, apart from a
+shortened `session_id` and an elided warning message:
+
+```json
+{
+  "session_id": "9d2384c8-…",
+  "channel": "a",
+  "method": "otsu",
+  "object_type": "dark",
+  "fill_size": 200,
+  "mask_fraction": 0.031,
+  "component_count": 9,
+  "major_object_count": 4,
+  "largest_area": 8628,
+  "overlay_scale": 1.0,
+  "overlay_png_bytes": 748233,
+  "warnings": [
+    {
+      "code": "multi_specimen",
+      "message": "4 comparably-sized objects detected (areas: [8628, 7981, 7106, 6748]). …"
+    }
+  ]
+}
+```
+
+The overlay arrives alongside this as a second content block, as an image.
+
+## Getting the polarity right
+
+`object_type` decides which side of the threshold is the plant, and it is the easiest way to
+get a confidently wrong answer — that is the right-hand image at the top of this page.
+
+Two things guard against it. `suggest_segmentation` reports what **both** polarities yield on
+your image before you commit, alongside a contact sheet of every colourspace:
+
+![colourspace contact sheet](docs/assets/suggest-colorspaces.png)
+
+And `segment` emits an `implausible_coverage` warning when the mask covers more than half the
+frame. Neither refuses the measurement, because a macro shot of a single leaf legitimately
+fills the frame — they make the choice visible rather than making it for you.
 
 `fill_size` deletes any component smaller than itself, so a small specimen can vanish
-entirely. When that happens `segment` reports `fill_erased_mask` and names the size to
-drop below, rather than letting it look like a bad channel choice.
+entirely. When that happens `segment` reports `fill_erased_mask` and names the size to drop
+below, rather than letting it look like a bad channel choice.
+
+## What it measures
+
+One `measure()` call returns seventeen traits, each with a unit.
+
+| group         | traits                                                                                                   |
+| ------------- | -------------------------------------------------------------------------------------------------------- |
+| size          | `area`, `convex_hull_area`, `perimeter`, `total_edge_length`, `width`, `height`, `longest_path` (pixels) |
+| shape         | `solidity`, `convex_hull_vertices`, `ellipse_eccentricity` (unitless)                                    |
+| ellipse fit   | `ellipse_major_axis`, `ellipse_minor_axis` (pixels), `ellipse_angle` (degrees)                           |
+| position      | `center_of_mass`, `ellipse_center` (x, y)                                                                |
+| PlantCV flags | `in_bounds`, `object_in_frame`                                                                           |
+
+The last two are PlantCV's own flags. They are passed through as **information, never as
+validity signals** — on an all-zero mask PlantCV reports both as `True` while returning
+seventeen zeros. They are bounds checks, not success checks.
 
 ## Security and trust boundary
 
@@ -132,14 +207,6 @@ Restricting reads to a configured root directory is a candidate for a future
 release; it is deliberately **not** implemented today, and this section exists so
 that is a decision you make rather than a surprise you discover.
 
-## Attribution and licensing
-
-This project is MIT licensed. It depends on
-[PlantCV](https://github.com/danforthcenter/plantcv), which is licensed under the
-**Mozilla Public License 2.0**. No PlantCV source is vendored or redistributed
-here — it is an ordinary runtime dependency — so the MIT license applies to this
-project's own files. See [NOTICE](NOTICE) for the full statement.
-
 ## Limitations
 
 Phase 1 is single-ROI: `measure()` uses the whole image as its region of
@@ -149,3 +216,20 @@ iterative mask refinement are phase 2.
 
 Sessions are in-memory and capped (8 by default, LRU-evicted). They do not
 survive a server restart.
+
+## Attribution and licensing
+
+This project is MIT licensed. It depends on
+[PlantCV](https://github.com/danforthcenter/plantcv), which is licensed under the
+**Mozilla Public License 2.0**. No PlantCV source is vendored or redistributed
+here — it is an ordinary runtime dependency — so the MIT license applies to this
+project's own files. See [NOTICE](NOTICE) for the full statement.
+
+## More
+
+- [CHANGELOG.md](CHANGELOG.md) — what changed, and why
+- [docs/MUTATION-CHECKS.md](docs/MUTATION-CHECKS.md) — every guard disabled on purpose, and
+  the test that went red for it. A guard whose test passes with the guard removed is not a test.
+
+Images on this page are rendered from `tests/fixtures/multi_specimen.png`, an original render
+by the author, and regenerate from committed code.

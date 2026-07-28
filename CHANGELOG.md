@@ -6,6 +6,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Documentation
+
+- **The README now shows an overlay.** A tool whose entire argument is "you get the picture
+  the numbers came from" had no pictures in it. The top of the page is now the same image
+  segmented correctly (3.1% mask, `area=32427`) beside the same image segmented with the
+  wrong polarity (96.1% mask — the background — `area=1007829`), which makes the case in
+  one glance instead of three paragraphs. Assets render from the bundled fixture via
+  committed code; each is a standalone image laid out with a table, not a stitched grid.
+- **The seventeen traits are listed.** Previously the README named exactly one (`area`) and
+  only as part of a failure example, so a reader could not tell whether the tool measured
+  what they needed.
+- Added a `segment` parameter table, a verbatim example response, a colourspace contact
+  sheet, CI/Python/licence badges, and links to the changelog and the mutation-check log.
+  Reordered so the reader sees what the tool produces before installation instructions, and
+  promoted "Getting the polarity right" to a top-level section since it is the main
+  correctness trap.
+
 ### Fixed
 
 - **Mask validity is now two-sided.** `assert_not_degenerate` only ever rejected masks
