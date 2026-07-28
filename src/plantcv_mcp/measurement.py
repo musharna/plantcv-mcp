@@ -20,7 +20,18 @@ def measure_traits(img: np.ndarray, mask: np.ndarray) -> dict[str, dict]:
     labeled, n = pcv.create_labels(mask=mask, rois=roi, roi_type="partial")
     pcv.analyze.size(img=img, labeled_mask=labeled, n_labels=n)
 
-    group = next(iter(pcv.outputs.observations.values()))
+    # Select observation group by explicit key, not by insertion order.
+    # PlantCV keys observations by sample_label (default: 'default') + '_1'.
+    # Keyed lookup is immune to foreign keys and avoids concurrency hazards.
+    expected_key = f"{pcv.params.sample_label}_1"
+    if expected_key not in pcv.outputs.observations:
+        raise KeyError(
+            f"Expected observation group '{expected_key}' not found. "
+            f"Available keys: {list(pcv.outputs.observations.keys())}. "
+            f"This may indicate a change in PlantCV's labeling behavior or "
+            f"an incomplete analysis."
+        )
+    group = pcv.outputs.observations[expected_key]
     return {
         name: {"value": obs.get("value"), "unit": obs.get("label")}
         for name, obs in group.items()
