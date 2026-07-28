@@ -40,6 +40,17 @@ segmentation, the server returns the numbers _and the overlay it measured_.
 - 47 tests, including a real-execution integration test over a tracked fixture render and
   determinism checks across repeat runs.
 - `docs/MUTATION-CHECKS.md` — the mutants each guard test was confirmed to go red against.
+- Continuous integration: lint, format check, and the full suite on Python 3.11, 3.12 and
+  3.13; a packaging job that asserts the sdist ships `NOTICE`/`LICENSE`/`CHANGELOG.md` and
+  leaks none of `.superpowers`, `docs/superpowers` or `.claude`, and that the built wheel
+  imports and still registers exactly four tools; and an absolute-path check that runs its
+  own negative control so a silently-disabled check fails the build.
+- `NOTICE` — attribution for PlantCV (MPL-2.0), an explicit statement that this project is
+  unofficial and unaffiliated with the Donald Danforth Plant Science Center, and the
+  provenance of the test fixture.
+- PyPI metadata: authors, keywords, classifiers, and project URLs.
+- README sections covering MCP client configuration (Claude Code and Claude Desktop) and the
+  server's security/trust boundary.
 
 ### Notes
 
@@ -54,6 +65,13 @@ segmentation, the server returns the numbers _and the overlay it measured_.
   computes its own degeneracy gate instead.
 - The 25% multi-specimen threshold and the 0.1% degeneracy floor are calibrated starting
   values, not constants, and are expected to be re-tuned against a wider image set.
+- **The server reads image files from anywhere the host user can read**, with no directory
+  allow-list or sandbox, and returns them to the model as base64 images. This is the same
+  trust boundary as any local filesystem MCP server, and it is documented rather than
+  silently assumed. Restricting reads to a configured root is a candidate for a later release.
+- `plantcv` is hard-pinned to `==4.11.3` on purpose: trait values can shift between PlantCV
+  releases and determinism is a tested guarantee. `opencv-python` is deliberately left without
+  an upper bound, because PlantCV already caps it and duplicating that ceiling would drift.
 
 ### Not included (phase 2)
 

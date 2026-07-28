@@ -1,0 +1,121 @@
+name: ci
+
+# Action majors are pinned to floating vN tags that were verified to EXIST.
+# astral-sh/setup-uv publishes releases/latest = v9.0.0 but has NO floating v9
+# tag (404), so v7 is the highest usable float here. Re-verify before bumping.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is the floor declared by requires-python. It is in the matrix so
+        # the claim is tested rather than asserted.
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install (locked)
+        run: uv sync --locked --python ${{ matrix.python-version }}
+
+      - name: Lint
+        run: uv run --python ${{ matrix.python-version }} ruff check .
+
+      - name: Format check
+        run: uv run --python ${{ matrix.python-version }} ruff format --check .
+
+      - name: Tests
+        run: uv run --python ${{ matrix.python-version }} pytest -q
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Build sdist + wheel
+        run: uv build
+
+      # The sdist allow-list is the only thing stopping internal build artifacts
+      # from being published. Assert both directions: the files that must ship do,
+      # and the directories that must never ship do not.
+      - name: Sdist contents are exactly what we intend
+        run: |
+          set -euo pipefail
+          listing=$(tar tzf dist/*.tar.gz)
+          echo "$listing"
+
+          for want in README.md CHANGELOG.md LICENSE NOTICE pyproject.toml; do
+            echo "$listing" | grep -q "/$want$" \
+              || { echo "::error::sdist is MISSING $want"; exit 1; }
+          done
+
+          for forbid in .superpowers docs/superpowers .claude; do
+            if echo "$listing" | grep -q "$forbid"; then
+              echo "::error::sdist leaked $forbid"
+              exit 1
+            fi
+          done
+          echo "sdist contents OK"
+
+      - name: Wheel imports and registers all four tools
+        run: |
+          set -euo pipefail
+          uv venv /tmp/wheelcheck
+          uv pip install --python /tmp/wheelcheck/bin/python dist/*.whl
+          /tmp/wheelcheck/bin/python - <<'PY'
+          import asyncio
+          from plantcv_mcp.server import build_server
+
+          server = build_server()
+          names = sorted(t.name for t in asyncio.run(server.list_tools()))
+          expected = ["list_methods", "measure", "segment", "suggest_segmentation"]
+          assert names == expected, f"tool surface changed: {names!r} != {expected!r}"
+          print("wheel OK, tools:", names)
+          PY
+
+  no-absolute-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # A gate that only ever passes proves nothing, so this job runs the check
+      # twice: once for real, and once against a planted violation that it MUST
+      # reject. The negative control stages the probe with `git add` so it flows
+      # through the IDENTICAL `git ls-files` query as the real check. A control
+      # that queried differently (say, untracked files) would not notice if
+      # `git ls-files` itself stopped returning anything — the exact failure that
+      # would make this gate pass everything forever.
+      - name: No developer-machine paths in tracked files
+        run: |
+          set -uo pipefail
+          pattern='/home/[a-z]|/mnt/c/Users|C:\\Users'
+
+          check() { git ls-files -z | xargs -0 grep -nIE "$pattern"; }
+
+          if check; then
+            echo "::error::absolute developer paths found in tracked files"
+            exit 1
+          fi
+          echo "real check OK: no absolute paths in tracked files"
+
+          printf 'p = "/home/someone/should_fail.csv"\n' > __probe.py
+          git add __probe.py
+          if check >/dev/null; then
+            echo "negative control OK: the check rejects a planted absolute path"
+            git rm -f --quiet __probe.py
+          else
+            echo "::error::negative control FAILED - the check cannot detect a violation"
+            git rm -f --quiet __probe.py
+            exit 1
+          fi

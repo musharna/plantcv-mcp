@@ -5,13 +5,48 @@ description = "MCP server exposing PlantCV as a measurement instrument — trait
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
+authors = [{ name = "Jaret Arnold" }]
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "plantcv",
+    "phenotyping",
+    "plant-science",
+    "image-analysis",
+    "computer-vision",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
 dependencies = [
     # 1.28.1 is a SECURITY floor, not a feature floor.
     "mcp>=1.28.1,<2",
+    # Hard pin, deliberately. Trait values can shift between PlantCV releases, and
+    # determinism is a tested design goal (tests/test_determinism.py) surfaced to
+    # callers by list_methods(). Loosening this would weaken a guarantee the server
+    # advertises. Re-pin explicitly when validating a new PlantCV release.
     "plantcv==4.11.3",
+    # No upper bound here on purpose: plantcv already caps opencv-python at <=4.12,
+    # and duplicating that ceiling would silently drift when plantcv raises it.
+    # NOTE: plantcv requires non-headless opencv-python, so switching this to
+    # opencv-python-headless would NOT yield a headless install.
     "opencv-python>=4.9",
     "numpy>=1.26",
 ]
+
+[project.urls]
+Homepage = "https://github.com/musharna/plantcv-mcp"
+Repository = "https://github.com/musharna/plantcv-mcp"
+Issues = "https://github.com/musharna/plantcv-mcp/issues"
+Changelog = "https://github.com/musharna/plantcv-mcp/blob/master/CHANGELOG.md"
 
 [project.scripts]
 plantcv-mcp = "plantcv_mcp.server:main"
@@ -35,6 +70,7 @@ include = [
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
+    "NOTICE",
     "pyproject.toml",
 ]
 exclude = [
@@ -44,5 +80,14 @@ exclude = [
     "dist",
 ]
 
+[tool.ruff]
+# ruff formats Python code blocks embedded in Markdown. docs/ holds the design
+# spec and the implementation plan, which are a historical record — reformatting
+# their quoted snippets would make the record differ from what was actually
+# executed. Lint and format apply to source and tests only.
+extend-exclude = ["docs"]
+
 [dependency-groups]
-dev = ["pytest>=8.0"]
+# ruff is declared here so CI lints with a pinned, locked version rather than
+# whatever happens to be on the runner.
+dev = ["pytest>=8.0", "ruff>=0.6"]

@@ -1,0 +1,35 @@
+plantcv-mcp
+Copyright (c) 2026 Jaret Arnold
+Licensed under the MIT License. See LICENSE.
+
+--------------------------------------------------------------------------------
+Third-party dependency notice: PlantCV
+--------------------------------------------------------------------------------
+
+This project is an independent, UNOFFICIAL Model Context Protocol server that
+depends on PlantCV. It is not affiliated with, endorsed by, or sponsored by the
+Donald Danforth Plant Science Center or the PlantCV maintainers. The name
+"PlantCV" is used only to identify the upstream library this server wraps.
+
+    PlantCV — https://plantcv.org
+    Source  — https://github.com/danforthcenter/plantcv
+    License — Mozilla Public License 2.0 (MPL-2.0)
+              https://www.mozilla.org/en-US/MPL/2.0/
+
+PlantCV is licensed under the MPL-2.0 and remains under that license. No PlantCV
+source code is copied, modified, or redistributed as part of this project;
+PlantCV is consumed as an ordinary installed dependency at runtime. MPL-2.0 is a
+file-level copyleft that expressly permits combining MPL-covered files with files
+under other licenses in a Larger Work (MPL-2.0 Section 3.3), so the MIT license
+on this project's own source files stands.
+
+If you redistribute PlantCV itself (for example, by vendoring it or shipping it
+inside a container image), the MPL-2.0 source-availability obligations apply to
+those PlantCV files. They do not attach to this project's own files.
+
+--------------------------------------------------------------------------------
+Test fixture provenance
+--------------------------------------------------------------------------------
+
+tests/fixtures/multi_specimen.png is an original render produced by the author.
+It carries no third-party copyright.
