@@ -10,11 +10,12 @@ When this fixture runs through `_segment_impl` with channel="a" and method="otsu
 
 ## Observed measurements
 
-Measured with the current pipeline:
+Measured with the current pipeline (deterministic):
 
 - **Connected components**: 9
-- **Major objects** (after filtering): ≥2
-- **Component areas**: varies by processing, but the top components correspond to individual plant views
+- **Major objects** (comparably-sized): 4
+- **Top-four component areas**: [8628, 7981, 7106, 6748]
+- **Mask fraction**: 0.030925 (≈3.1% of image)
 
 ## Copyright
 
