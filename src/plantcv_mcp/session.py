@@ -27,6 +27,8 @@ class Session:
 
 class SessionStore:
     def __init__(self, max_sessions: int = 8) -> None:
+        if max_sessions < 1:
+            raise ValueError(f"max_sessions must be >= 1, got {max_sessions}")
         self._max = max_sessions
         self._sessions: OrderedDict[str, Session] = OrderedDict()
 
@@ -36,7 +38,7 @@ class SessionStore:
         session = Session(
             session_id=str(uuid.uuid4()),
             image_path=image_path,
-            mask=mask,
+            mask=np.array(mask, copy=True),
             channel=channel,
             method=method,
             shape=(int(mask.shape[0]), int(mask.shape[1])),
