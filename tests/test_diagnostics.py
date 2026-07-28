@@ -215,3 +215,32 @@ def test_frame_clipping_fires_when_touching_edge_and_not_when_interior():
     interior = np.zeros((100, 100), dtype=np.uint8)
     interior[20:60, 20:60] = 255
     assert frame_clipping_warning(interior) is None
+
+
+def test_frame_clipping_fires_on_bottom_only_contact():
+    """The top+left test above cannot catch a regression that drops or
+    duplicates the `binary[-1, :]` (bottom) disjunct — exercise it alone."""
+    bottom_only = np.zeros((100, 100), dtype=np.uint8)
+    bottom_only[60:100, 20:60] = 255  # touches bottom edge only
+    warn = frame_clipping_warning(bottom_only)
+    assert warn is not None
+    assert warn.code == "frame_clipping"
+
+    # POSITIVE CONTROL, same test: interior object must NOT fire
+    interior = np.zeros((100, 100), dtype=np.uint8)
+    interior[20:60, 20:60] = 255
+    assert frame_clipping_warning(interior) is None
+
+
+def test_frame_clipping_fires_on_right_only_contact():
+    """Independent coverage for the `binary[:, -1]` (right) disjunct."""
+    right_only = np.zeros((100, 100), dtype=np.uint8)
+    right_only[20:60, 60:100] = 255  # touches right edge only
+    warn = frame_clipping_warning(right_only)
+    assert warn is not None
+    assert warn.code == "frame_clipping"
+
+    # POSITIVE CONTROL, same test: interior object must NOT fire
+    interior = np.zeros((100, 100), dtype=np.uint8)
+    interior[20:60, 20:60] = 255
+    assert frame_clipping_warning(interior) is None

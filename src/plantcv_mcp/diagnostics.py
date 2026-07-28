@@ -73,12 +73,12 @@ def assert_not_degenerate(diag: MaskDiagnostics, min_fraction: float = 0.001) ->
 
 
 @dataclass(frozen=True)
-class Warning:
+class Advisory:
     code: str
     message: str
 
 
-def multi_specimen_warning(diag: MaskDiagnostics) -> "Warning | None":
+def multi_specimen_warning(diag: MaskDiagnostics) -> "Advisory | None":
     """Warn when the mask holds two or more comparably-sized objects.
 
     Calibrated on a real failure: a 4-view render segmented to areas
@@ -88,7 +88,7 @@ def multi_specimen_warning(diag: MaskDiagnostics) -> "Warning | None":
     """
     if diag.major_object_count < 2:
         return None
-    return Warning(
+    return Advisory(
         code="multi_specimen",
         message=(
             f"{diag.major_object_count} comparably-sized objects detected "
@@ -100,7 +100,7 @@ def multi_specimen_warning(diag: MaskDiagnostics) -> "Warning | None":
     )
 
 
-def frame_clipping_warning(mask: np.ndarray) -> "Warning | None":
+def frame_clipping_warning(mask: np.ndarray) -> "Advisory | None":
     """Warn when mask pixels touch the frame edge.
 
     Computed here rather than trusting PlantCV's in_bounds, which reports True
@@ -114,7 +114,7 @@ def frame_clipping_warning(mask: np.ndarray) -> "Warning | None":
         or binary[:, -1].any()
     ):
         return None
-    return Warning(
+    return Advisory(
         code="frame_clipping",
         message=(
             "Plant material touches the frame edge, so it is cut off by the "
