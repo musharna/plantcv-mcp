@@ -5,6 +5,8 @@ requires that session. The split is deliberate: it forces the visual evidence
 into the model's context before a number can be obtained.
 """
 
+import json
+
 from mcp.server.fastmcp import FastMCP, Image
 
 from . import plantcv_version
@@ -90,7 +92,7 @@ def build_server() -> FastMCP:
         NOT traits. Use the returned session_id with measure() to get traits."""
         result = _segment_impl(image_path, channel, method)
         png = result.pop("_png")
-        return [str(result), Image(data=png, format="png")]
+        return [json.dumps(result), Image(data=png, format="png")]
 
     @mcp.tool()
     def measure(session_id: str) -> dict:
