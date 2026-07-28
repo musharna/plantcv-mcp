@@ -6,6 +6,7 @@ from plantcv_mcp.diagnostics import (
     analyze_mask,
     assert_not_degenerate,
     component_areas,
+    frame_clipping_warning,
     multi_specimen_warning,
 )
 
@@ -200,3 +201,17 @@ def test_multi_specimen_fires_on_measured_failure_and_not_on_single_plant():
     )
 
     assert multi_specimen_warning(analyze_mask(one_plant)) is None
+
+
+def test_frame_clipping_fires_when_touching_edge_and_not_when_interior():
+    clipped = np.zeros((100, 100), dtype=np.uint8)
+    clipped[0:40, 0:40] = 255  # touches top and left edges
+    warn = frame_clipping_warning(clipped)
+    assert warn is not None
+    assert warn.code == "frame_clipping"
+    assert "lower bound" in warn.message.lower()
+
+    # POSITIVE CONTROL in the same test: interior object must NOT fire
+    interior = np.zeros((100, 100), dtype=np.uint8)
+    interior[20:60, 20:60] = 255
+    assert frame_clipping_warning(interior) is None

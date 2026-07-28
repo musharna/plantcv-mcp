@@ -98,3 +98,27 @@ def multi_specimen_warning(diag: MaskDiagnostics) -> "Warning | None":
             "(phase 2) or pass an explicit single-plant roi to measure()."
         ),
     )
+
+
+def frame_clipping_warning(mask: np.ndarray) -> "Warning | None":
+    """Warn when mask pixels touch the frame edge.
+
+    Computed here rather than trusting PlantCV's in_bounds, which reports True
+    on an all-zero mask and so cannot discriminate this case.
+    """
+    binary = mask > 0
+    if not (
+        binary[0, :].any()
+        or binary[-1, :].any()
+        or binary[:, 0].any()
+        or binary[:, -1].any()
+    ):
+        return None
+    return Warning(
+        code="frame_clipping",
+        message=(
+            "Plant material touches the frame edge, so it is cut off by the "
+            "image boundary. Size traits (area, width, height, perimeter) are "
+            "a LOWER BOUND on the true plant, not a measurement of it."
+        ),
+    )
