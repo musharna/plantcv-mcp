@@ -104,7 +104,7 @@ the methods, and the pinned PlantCV version.
 | --------------------------------------------------- | ------------------------------------------------------- |
 | `suggest_segmentation(image_path, channel, method)` | contact sheets, and what each `object_type` would yield |
 | `segment(image_path, channel, method, ...)`         | overlay + diagnostics + warnings — **no traits**        |
-| `measure(session_id)`                               | traits, or a raised error on a degenerate mask          |
+| `measure(session_id, analyses, px_per_mm, ...)`     | traits, or a raised error on a degenerate mask          |
 | `list_methods()`                                    | channels, methods, object types, pinned PlantCV version |
 
 Typical loop: `suggest_segmentation` → `segment` → **look at the overlay** → `segment` again
@@ -182,6 +182,34 @@ One `measure()` call returns seventeen traits, each with a unit.
 The last two are PlantCV's own flags. They are passed through as **information, never as
 validity signals** — on an all-zero mask PlantCV reports both as `True` while returning
 seventeen zeros. They are bounds checks, not success checks.
+
+Passing `analyses=["size", "color"]` adds hue, saturation and value statistics —
+`hue_circular_mean`, `hue_circular_std`, `hue_median` (degrees), `saturation_mean`,
+`saturation_median`, `value_mean`, `value_median` (percent). The three frequency histograms
+that accompany them total 692 numbers, so they are withheld unless you ask for them with
+`include_histograms=true`.
+
+### Real-world units
+
+**Traits are in pixels by default, and pixel sizes are not comparable between images shot at
+different distances or zoom levels.** Pass `px_per_mm` to `measure()` and spatial traits come
+back in `mm` and `mm2`:
+
+```
+measure(session_id, px_per_mm=12.5)
+  area    207.533 mm2     (32427 pixels)
+  width    54.880 mm      (686 pixels)
+```
+
+Lengths divide by `px_per_mm`, areas by its square. That distinction is a hard-coded table
+rather than something inferred from PlantCV's unit strings, because PlantCV labels **both**
+`area` and `width` as `"pixels"` — scaling everything with that label linearly would leave
+every area wrong by exactly a factor of `px_per_mm`, plausibly and silently. Positions
+(`center_of_mass`, `ellipse_center`) stay in pixels, since a millimetre coordinate means
+nothing without a defined origin.
+
+Deriving `px_per_mm` automatically from a size marker in the frame is **not** implemented.
+[CHANGELOG.md](CHANGELOG.md) records the measured reason.
 
 ## Security and trust boundary
 

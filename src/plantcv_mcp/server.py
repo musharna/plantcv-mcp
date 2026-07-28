@@ -14,8 +14,10 @@ done without a lock around the measurement section.
 """
 
 import json
+from typing import TypedDict
 
 from mcp.server.fastmcp import FastMCP, Image
+from mcp.types import ToolAnnotations
 from plantcv import plantcv as pcv
 
 from . import plantcv_version
@@ -28,12 +30,59 @@ from .diagnostics import (
     multi_specimen_warning,
 )
 from .imaging import downscale, encode_png, file_digest, load_image, render_overlay
-from .measurement import measure_traits
+from .measurement import ANALYSES, TraitValue, measure_traits
 from .segmentation import CHANNELS, METHODS, OBJECT_TYPES, threshold_mask
 from .session import SessionStore
 from .suggest import colorspace_sheet, polarity_report, threshold_sheet
 
 _store = SessionStore()
+
+# Shown to clients at connection time. The product is a discipline, not just four
+# functions, and the discipline has to be stated somewhere the model will read it
+# before it starts calling things.
+INSTRUCTIONS = """\
+PlantCV as a measurement instrument for plant images.
+
+Work in this order: suggest_segmentation -> segment -> LOOK AT THE OVERLAY -> measure.
+
+segment() deliberately returns no traits. It returns an overlay image with the
+measured pixels tinted red, plus diagnostics. Look at that image before you trust
+any number that follows: a segmentation that selected the background instead of
+the plant still produces seventeen traits with correct units and believable
+magnitudes. The overlay is the only thing that distinguishes the two.
+
+Read the `warnings` array on every segment() response. `implausible_coverage`
+means the mask is probably inverted — re-run with the opposite `object_type`.
+`multi_specimen` means several plants were merged into one measurement.
+`fill_erased_mask` means `fill_size` deleted the specimen. `empty_mask` means the
+segmentation found nothing.
+
+Do not guess `channel` or `object_type`. suggest_segmentation reports what both
+polarities actually yield on the image in front of you.
+
+Traits are in PIXELS unless you pass px_per_mm to measure(), and pixel sizes are
+not comparable between images taken at different distances or zoom levels.\
+"""
+
+
+class MeasureResult(TypedDict):
+    """Return type of measure(). Annotated so MCP can publish an outputSchema."""
+
+    session_id: str
+    analyses: list[str]
+    px_per_mm: float | None
+    traits: dict[str, TraitValue]
+
+
+class MethodsInfo(TypedDict):
+    """Return type of list_methods()."""
+
+    plantcv_version: str
+    channels: list[str]
+    methods: list[str]
+    object_types: list[str]
+    analyses: list[str]
+    guidance: str
 
 
 class ImageChangedSinceSegmentationError(Exception):
@@ -45,12 +94,13 @@ class ImageChangedSinceSegmentationError(Exception):
     """
 
 
-def list_methods_impl() -> dict:
+def list_methods_impl() -> MethodsInfo:
     return {
         "plantcv_version": plantcv_version(),
         "channels": sorted(CHANNELS),
         "methods": list(METHODS),
         "object_types": list(OBJECT_TYPES),
+        "analyses": list(ANALYSES),
         "guidance": (
             "Pick a channel AND the object_type that goes with it. object_type "
             "says which side of the threshold is the plant: 'dark' selects "
@@ -147,7 +197,13 @@ def _segment_impl(
     }
 
 
-def _measure_impl(session_id: str) -> dict:
+def _measure_impl(
+    session_id: str,
+    analyses: list[str] | None = None,
+    px_per_mm: float | None = None,
+    include_histograms: bool = False,
+) -> MeasureResult:
+    requested = tuple(analyses) if analyses else ("size",)
     session = _store.get(session_id)
     img = load_image(session.image_path)  # re-read; sessions do not hold RGB
     current_shape = (int(img.shape[0]), int(img.shape[1]))
@@ -166,19 +222,40 @@ def _measure_impl(session_id: str) -> dict:
             "mask (SHA-256 mismatch). The mask describes pixels that are no "
             "longer there. Re-run segment() on the current file."
         )
-    return {"session_id": session_id, "traits": measure_traits(img, session.mask)}
+    return {
+        "session_id": session_id,
+        "analyses": list(requested),
+        "px_per_mm": px_per_mm,
+        "traits": measure_traits(
+            img,
+            session.mask,
+            analyses=requested,
+            px_per_mm=px_per_mm,
+            include_histograms=include_histograms,
+        ),
+    }
 
 
 def build_server() -> FastMCP:
-    mcp = FastMCP("plantcv-mcp")
+    mcp = FastMCP("plantcv-mcp", instructions=INSTRUCTIONS)
 
-    @mcp.tool()
-    def list_methods() -> dict:
-        """List available segmentation channels, methods, object types, and the
-        pinned PlantCV version."""
+    # Every tool here only reads from disk and computes. None mutates anything,
+    # none reaches the network. Saying so lets a client decide what is safe to
+    # run without asking, instead of treating all four as opaque.
+    READ_ONLY = ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+
+    @mcp.tool(title="List segmentation methods", annotations=READ_ONLY)
+    def list_methods() -> MethodsInfo:
+        """List available segmentation channels, methods, object types, analyses,
+        and the pinned PlantCV version."""
         return list_methods_impl()
 
-    @mcp.tool()
+    @mcp.tool(title="Suggest a segmentation", annotations=READ_ONLY)
     def suggest_segmentation(
         image_path: str, channel: str = "a", method: str = "otsu"
     ) -> list:
@@ -202,7 +279,7 @@ def build_server() -> FastMCP:
             Image(data=encode_png(th), format="png"),
         ]
 
-    @mcp.tool()
+    @mcp.tool(title="Segment an image (returns the overlay)", annotations=READ_ONLY)
     def segment(
         image_path: str,
         channel: str,
@@ -233,11 +310,28 @@ def build_server() -> FastMCP:
         png = result.pop("_png")
         return [json.dumps(result), Image(data=png, format="png")]
 
-    @mcp.tool()
-    def measure(session_id: str) -> dict:
+    @mcp.tool(title="Measure traits from a segmentation", annotations=READ_ONLY)
+    def measure(
+        session_id: str,
+        analyses: list[str] | None = None,
+        px_per_mm: float | None = None,
+        include_histograms: bool = False,
+    ) -> MeasureResult:
         """Return plant traits for a segmentation produced by segment().
-        Raises if the mask is degenerate rather than returning zeros."""
-        return _measure_impl(session_id)
+        Raises if the mask is degenerate rather than returning zeros.
+
+        analyses defaults to ["size"]; add "color" for hue/saturation/value
+        statistics. px_per_mm converts spatial traits to mm and mm2 — without it
+        every size is in PIXELS and is not comparable between images shot at
+        different distances or zoom. include_histograms adds three frequency
+        arrays totalling 692 numbers, off by default.
+        """
+        return _measure_impl(
+            session_id,
+            analyses=analyses,
+            px_per_mm=px_per_mm,
+            include_histograms=include_histograms,
+        )
 
     return mcp
 

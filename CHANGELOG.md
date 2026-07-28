@@ -6,6 +6,42 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **Real-world units.** `measure(session_id, px_per_mm=…)` converts spatial traits to `mm`
+  and `mm2`. Without it every size is in pixels, and pixel sizes are not comparable between
+  images shot at different distance or zoom — the largest practical limitation the tool had.
+  Lengths divide by `px_per_mm` and areas by its square, from an explicit table rather than
+  from PlantCV's unit strings: PlantCV labels **both** `area` and `width` as `"pixels"`, so
+  a unit-derived rule would leave every area wrong by exactly a factor of `px_per_mm`.
+  Positions stay in pixels, having no meaning in mm without an origin.
+- **Colour analysis.** `measure(session_id, analyses=["size", "color"])` adds hue,
+  saturation and value statistics. Their three frequency histograms total 692 numbers and
+  are withheld unless `include_histograms=true` — that is a context-window cost, not a
+  feature. This takes the server from 1 to 2 of PlantCV's 11 `analyze` functions.
+- **Server instructions.** The server now publishes MCP `instructions` telling the client to
+  look at the overlay before trusting a number, and what each warning code means. The product
+  is a discipline as much as four functions, and nothing was conveying that.
+- **Tool metadata.** All four tools now publish a human title and `ToolAnnotations`
+  (`readOnlyHint`, `destructiveHint=false`, `idempotentHint`, `openWorldHint=false`) so a
+  client can tell they only read and compute. `measure` and `list_methods` publish an
+  `outputSchema` derived from typed returns, so callers get structured content instead of
+  parsing JSON out of a text block. `segment` and `suggest_segmentation` return image blocks
+  and so have no structured schema, by nature.
+
+### Not added, deliberately
+
+- **Automatic scale from a size marker.** `pcv.report_size_marker_area` exists, but measured
+  against a synthetic disc of known diameter (80 px) it returns `major_axis=79.1` with a
+  whole-frame ROI and **`348.0` with a tight ROI around the marker** — a silent 4.35× scale
+  error under the most intuitive usage. A whole-frame ROI cannot generalise to a real image
+  containing both a plant and a marker, so wrapping this safely is a design problem rather
+  than a thin wrapper. `px_per_mm` is supplied by the caller until that is solved.
+- **Colour-card correction.** `pcv.transform.detect_color_card` and `affine_color_correction`
+  exist and would make colour traits comparable across lighting, but no fixture in this repo
+  contains a colour card, so the happy path could not be verified by real execution. Shipping
+  an untested colour correction is worse than shipping none.
+
 ### Documentation
 
 - **The README now shows an overlay.** A tool whose entire argument is "you get the picture

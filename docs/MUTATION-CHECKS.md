@@ -51,3 +51,27 @@ correct in the library but dropped at the server) was therefore untested.
 `test_server_honours_object_type_end_to_end` and its `fill_size` counterpart were
 added specifically to close that, and both mutants then went red. A surviving
 mutant is a coverage report, not a nuisance.
+
+## Round 3 — units, colour, and protocol metadata (2026-07-28)
+
+Baseline: `uv run pytest -q` → 72 passed.
+
+| guard                          | mutation applied                                          | result |
+| ------------------------------ | --------------------------------------------------------- | ------ |
+| area scales quadratically      | `value / (px_per_mm**2)` → `value / px_per_mm` (the trap) | RED    |
+| `px_per_mm` passthrough (impl) | `px_per_mm=px_per_mm` → `None` inside `_measure_impl`     | RED    |
+| `px_per_mm` passthrough (tool) | `px_per_mm=px_per_mm` → `None` inside the `measure` tool  | RED    |
+| `analyses` passthrough         | `requested = tuple(analyses)…` → hardcoded `("size",)`    | RED    |
+| histogram suppression          | `if not include_histograms:` → `if False:`                | RED    |
+| colour analysis                | `if "color" in analyses:` → `if False:`                   | RED    |
+| server instructions            | `FastMCP(name, instructions=…)` → `FastMCP(name)`         | RED    |
+| tool annotations               | `annotations=READ_ONLY` removed from `measure`            | RED    |
+| typed return → `outputSchema`  | `-> MeasureResult` → `-> dict`                            | RED    |
+| unknown-analysis guard         | `if unknown:` → `if False:`                               | RED    |
+
+The `px_per_mm` **tool-layer** mutant survived its first pairing, because that run named a
+test which calls `_measure_impl` directly and so never crosses the tool boundary. Re-run
+against `test_measure_over_the_real_mcp_layer_returns_structured_content` it goes red.
+Same lesson as the `object_type` mutant above: **pair a mutant with a test that exercises
+the layer the mutation is in.** When a mutant survives, check the pairing first — then check
+the coverage.
