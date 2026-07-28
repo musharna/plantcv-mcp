@@ -22,9 +22,13 @@ All three produce correctly-united, entirely believable numbers.
 
 ## Install
 
+Not yet published to PyPI. Install from a local checkout:
+
 ```bash
-uv add plantcv-mcp
+uv add /path/to/plantcv-mcp
 ```
+
+(Once this repo has a git remote, `uv add git+<url>` will also work.)
 
 ## Tools
 

@@ -23,5 +23,25 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/plantcv_mcp"]
 
+[tool.hatch.build.targets.sdist]
+# Hatchling does not honour nested .gitignore files, so without an explicit
+# allow-list the sdist packs .superpowers/sdd/** (task briefs, implementer
+# reports, review diffs, and progress.md with internal agent IDs) plus
+# docs/superpowers and .claude. Restrict to what a source distribution
+# should actually carry.
+include = [
+    "src/**",
+    "tests/**",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+]
+exclude = [
+    ".superpowers",
+    "docs/superpowers",
+    ".claude",
+    "dist",
+]
+
 [dependency-groups]
 dev = ["pytest>=8.0"]
