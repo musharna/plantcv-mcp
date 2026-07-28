@@ -18,9 +18,12 @@ def test_colorspace_sheet_returns_exact_shape():
 
 
 def test_threshold_sheet_returns_exact_shape():
-    sheet = threshold_sheet(_img(), channel="a")
+    img = _img()
+    sheet = threshold_sheet(img, channel="a")
     assert sheet.ndim == 3
     assert sheet.shape == (200, 200, 3)
+    # Ensure it's not just a passthrough of the input image
+    assert not np.array_equal(sheet, img), "Output must not be identical to input"
 
 
 def test_threshold_sheet_unknown_channel_raises_and_valid_channel_works():
