@@ -68,7 +68,7 @@ jobs:
           done
           echo "sdist contents OK"
 
-      - name: Wheel imports and registers all four tools
+      - name: Wheel imports and registers the expected tool surface
         run: |
           set -euo pipefail
           uv venv /tmp/wheelcheck
