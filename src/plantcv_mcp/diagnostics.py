@@ -70,3 +70,31 @@ def assert_not_degenerate(diag: MaskDiagnostics, min_fraction: float = 0.001) ->
             "segmentation, not a very small plant. Re-run segment() with a "
             "different channel or method."
         )
+
+
+@dataclass(frozen=True)
+class Warning:
+    code: str
+    message: str
+
+
+def multi_specimen_warning(diag: MaskDiagnostics) -> "Warning | None":
+    """Warn when the mask holds two or more comparably-sized objects.
+
+    Calibrated on a real failure: a 4-view render segmented to areas
+    8628/7981/7106/6748 (all >= 78% of the largest -> 4 major objects) with a
+    tail at 570 and below (<= 6.6% -> excluded). A whole-image ROI merges them
+    into one "plant" and every size trait becomes meaningless.
+    """
+    if diag.major_object_count < 2:
+        return None
+    return Warning(
+        code="multi_specimen",
+        message=(
+            f"{diag.major_object_count} comparably-sized objects detected "
+            f"(areas: {diag.areas[: diag.major_object_count]}). A whole-image "
+            "ROI will merge them into one object and every size trait will "
+            "describe the group, not a plant. Consider roi.auto_grid "
+            "(phase 2) or pass an explicit single-plant roi to measure()."
+        ),
+    )

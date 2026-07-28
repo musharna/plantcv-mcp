@@ -17,6 +17,17 @@ def _mask_with_squares(shape, squares):
     return m
 
 
+def _mask_from_areas(shape, areas):
+    """Build a mask with disjoint square blobs of the given pixel areas."""
+    m = np.zeros(shape, dtype=np.uint8)
+    col = 0
+    for a in areas:
+        side = int(np.sqrt(a))
+        m[0:side, col : col + side] = 255
+        col += side + 5  # gap keeps components disjoint
+    return m
+
+
 def test_component_areas_descending_excludes_background():
     mask = _mask_with_squares((100, 100), [(0, 0, 10), (50, 50, 5)])
     assert component_areas(mask) == [100, 25]
@@ -113,3 +124,20 @@ def test_major_object_count_one_large_plus_fragments():
     # Test major_object_count: only the largest should count as major
     diag = analyze_mask(mask)
     assert diag.major_object_count == 1
+
+
+def test_multi_specimen_fires_on_measured_failure_and_not_on_single_plant():
+    """Calibrated on the real mode-1 failure. The positive control lives in the
+    SAME test so an always-fires bug cannot masquerade as detection."""
+    from plantcv_mcp.diagnostics import multi_specimen_warning
+
+    # Real measured areas from bio3d-arena/.../736_multi4.png
+    four_plants = _mask_from_areas((400, 400), [8628, 7981, 7106, 6748, 570, 454])
+    warn = multi_specimen_warning(analyze_mask(four_plants))
+    assert warn is not None
+    assert warn.code == "multi_specimen"
+    assert "auto_grid" in warn.message
+
+    # POSITIVE CONTROL: one plant + disconnected leaf tips -> must NOT fire
+    one_plant = _mask_from_areas((400, 400), [8628, 570, 454, 274])
+    assert multi_specimen_warning(analyze_mask(one_plant)) is None
