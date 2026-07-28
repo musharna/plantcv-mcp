@@ -6,6 +6,7 @@ from plantcv_mcp.diagnostics import (
     analyze_mask,
     assert_not_degenerate,
     component_areas,
+    multi_specimen_warning,
 )
 
 
@@ -18,11 +19,23 @@ def _mask_with_squares(shape, squares):
 
 
 def _mask_from_areas(shape, areas):
-    """Build a mask with disjoint square blobs of the given pixel areas."""
+    """Build a mask with disjoint square blobs of the given pixel areas.
+
+    Raises ValueError if the blobs do not fit within the canvas width.
+    """
+    height, width = shape
+    sides = [int(np.sqrt(a)) for a in areas]
+    # Total width needed: sum of sides + gaps (5 pixels between each blob)
+    total_width = sum(sides) + 5 * (len(areas) - 1)
+    if total_width > width:
+        raise ValueError(
+            f"Canvas width {width} is insufficient for blobs requiring {total_width}px "
+            f"(sides: {sides}, gaps: 5px each)"
+        )
+
     m = np.zeros(shape, dtype=np.uint8)
     col = 0
-    for a in areas:
-        side = int(np.sqrt(a))
+    for side in sides:
         m[0:side, col : col + side] = 255
         col += side + 5  # gap keeps components disjoint
     return m
@@ -129,15 +142,30 @@ def test_major_object_count_one_large_plus_fragments():
 def test_multi_specimen_fires_on_measured_failure_and_not_on_single_plant():
     """Calibrated on the real mode-1 failure. The positive control lives in the
     SAME test so an always-fires bug cannot masquerade as detection."""
-    from plantcv_mcp.diagnostics import multi_specimen_warning
 
     # Real measured areas from bio3d-arena/.../736_multi4.png
-    four_plants = _mask_from_areas((400, 400), [8628, 7981, 7106, 6748, 570, 454])
+    # Sizes: [92, 89, 84, 82, 23, 21], total width needed: 371 + 25 (gaps) = 396px
+    four_plants = _mask_from_areas((400, 450), [8628, 7981, 7106, 6748, 570, 454])
+    # Verify the constructed areas match intentions (fail-loud: we measure what we built)
+    expected_areas = [8464, 7921, 7056, 6724, 529, 441]  # int(sqrt(x))^2 for each area
+    actual_areas = component_areas(four_plants)
+    assert actual_areas == expected_areas, (
+        f"Expected areas {expected_areas}, got {actual_areas}"
+    )
+
     warn = multi_specimen_warning(analyze_mask(four_plants))
     assert warn is not None
     assert warn.code == "multi_specimen"
     assert "auto_grid" in warn.message
 
     # POSITIVE CONTROL: one plant + disconnected leaf tips -> must NOT fire
-    one_plant = _mask_from_areas((400, 400), [8628, 570, 454, 274])
+    # Sizes: [92, 23, 21, 16], total width needed: 152 + 15 (gaps) = 167px
+    one_plant = _mask_from_areas((400, 200), [8628, 570, 454, 274])
+    # Verify areas match intentions
+    expected_areas_control = [8464, 529, 441, 256]
+    actual_areas_control = component_areas(one_plant)
+    assert actual_areas_control == expected_areas_control, (
+        f"Expected areas {expected_areas_control}, got {actual_areas_control}"
+    )
+
     assert multi_specimen_warning(analyze_mask(one_plant)) is None
