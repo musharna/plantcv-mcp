@@ -4,6 +4,38 @@ All notable changes to `plantcv-mcp` are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] — 2026-07-30
+
+A docs-and-metadata release. No behaviour changes; it exists because two claims
+the package made about itself were wrong, and one of them could only be corrected
+by publishing.
+
+### Fixed
+
+- **The README told users the package was unpublished.** The Install section read
+  "Not published to PyPI. Install from the repository", so anyone following it
+  built from a git checkout while `pip install plantcv-mcp` had worked since
+  0.2.0. Corrected on `master` before this release — but PyPI renders the
+  description captured at release time, so the project page kept serving the
+  false claim regardless. **That is what this release is for.**
+
+- **`plantcv_mcp.__version__` reported `0.1.0` from the published 0.2.0.** It was
+  a literal sitting beside a `pyproject.toml` that said 0.2.0, with nothing
+  enforcing agreement. It now reads from installed metadata — the source the
+  packaging already enforces — so the two cannot drift again.
+
+  `tests/test_version.py` asserted only that the version was a non-empty string,
+  which is exactly what a wrong version is, so it passed throughout. It now
+  compares the reported version against the one `pyproject.toml` declares, and
+  was confirmed to fail on the old code before being kept.
+
+### Changed
+
+- Status is now derived rather than asserted: PyPI version and `pyversions`
+  badges replace the hand-written publication claim and the static python badge.
+  A hand-typed status line is only true until someone forgets, which is how the
+  Install section went stale in the first place.
+
 ## [0.2.0] — 2026-07-28
 
 First release published to PyPI. 0.1.0 was tagged in this changelog but never uploaded,
