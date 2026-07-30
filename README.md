@@ -3,7 +3,8 @@
 **Plant phenotyping over MCP — traits, plus the segmentation overlay they were measured from.**
 
 [![ci](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml)
-![python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
+[![PyPI](https://img.shields.io/pypi/v/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
+[![python](https://img.shields.io/pypi/pyversions/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 [PlantCV](https://plantcv.org) as an MCP **measurement instrument**: it returns plant trait
@@ -18,10 +19,10 @@ segmentation is degenerate.
 Red marks the pixels that were measured. Both images below come from the same file and the
 same threshold method — the only difference is one parameter.
 
-| ✅ `channel="a", object_type="dark"`                          | ❌ `channel="s", object_type="dark"`                             |
-| ------------------------------------------------------------- | ---------------------------------------------------------------- |
-| ![correct segmentation](https://raw.githubusercontent.com/musharna/plantcv-mcp/master/docs/assets/overlay-correct.png)      | ![inverted segmentation](https://raw.githubusercontent.com/musharna/plantcv-mcp/master/docs/assets/overlay-inverted.png)       |
-| Mask covers **3.1%** of the frame, 9 components. `area=32427` | Mask covers **96.1%** — it is the **background**. `area=1007829` |
+| ✅ `channel="a", object_type="dark"`                                                                                   | ❌ `channel="s", object_type="dark"`                                                                                     |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| ![correct segmentation](https://raw.githubusercontent.com/musharna/plantcv-mcp/master/docs/assets/overlay-correct.png) | ![inverted segmentation](https://raw.githubusercontent.com/musharna/plantcv-mcp/master/docs/assets/overlay-inverted.png) |
+| Mask covers **3.1%** of the frame, 9 components. `area=32427`                                                          | Mask covers **96.1%** — it is the **background**. `area=1007829`                                                         |
 
 The failure on the right is what this server exists to prevent. Without the picture, both
 runs return seventeen traits with correct units and entirely believable magnitudes. The one
@@ -43,7 +44,11 @@ All three produce correctly-united, entirely believable numbers.
 
 ## Install
 
-Not published to PyPI. Install from the repository:
+```bash
+pip install plantcv-mcp
+```
+
+Or from the repository, to track unreleased changes:
 
 ```bash
 uv add git+https://github.com/musharna/plantcv-mcp
