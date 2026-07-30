@@ -189,7 +189,9 @@ async def test_suggest_segmentation_reports_downscale_factors(tmp_path):
     result = await mcp.call_tool(
         "suggest_segmentation", {"image_path": path, "channel": "a"}
     )
-    payload = json.loads(result[0].text)
+    # .content since mcp 2.x: call_tool returns a CallToolResult, not the bare
+    # block sequence that could be indexed directly.
+    payload = json.loads(result.content[0].text)
     assert payload["colorspace_sheet_scale"] == pytest.approx(1024 / 9000)
     assert payload["threshold_sheet_scale"] == pytest.approx(1024 / 3000)
 
@@ -225,7 +227,7 @@ async def test_segment_tool_carries_no_traits_through_the_real_mcp_layer(tmp_pat
     result = await mcp.call_tool(
         "segment", {"image_path": path, "channel": "a", "method": "otsu"}
     )
-    text_block, image_block = result
+    text_block, image_block = result.content
     payload = json.loads(text_block.text)
     assert "traits" not in payload
     assert payload["session_id"]

@@ -159,22 +159,26 @@ def test_every_tool_publishes_annotations_and_a_title():
     for t in tools:
         assert t.title, f"{t.name} has no title"
         assert t.annotations is not None, f"{t.name} has no annotations"
-        assert t.annotations.readOnlyHint is True, f"{t.name} not marked read-only"
-        assert t.annotations.openWorldHint is False, f"{t.name} not marked closed-world"
+        # snake_case since mcp 2.x. camelCase survives as a pydantic ALIAS for
+        # constructing annotations, but that does not extend to reading them.
+        assert t.annotations.read_only_hint is True, f"{t.name} not marked read-only"
+        assert t.annotations.open_world_hint is False, (
+            f"{t.name} not marked closed-world"
+        )
 
 
 def test_typed_tools_publish_an_output_schema():
-    """A bare `-> dict` yields outputSchema=None; a TypedDict return generates a
+    """A bare `-> dict` yields output_schema=None; a TypedDict return generates a
     real schema, which is what lets a client consume traits without parsing text."""
     by_name = {t.name: t for t in asyncio.run(build_server().list_tools())}
 
     for name in ("measure", "list_methods"):
-        schema = by_name[name].outputSchema
-        assert schema is not None, f"{name} publishes no outputSchema"
+        schema = by_name[name].output_schema
+        assert schema is not None, f"{name} publishes no output_schema"
         assert schema.get("type") == "object"
 
-    assert "traits" in by_name["measure"].outputSchema["properties"]
-    assert "px_per_mm" in by_name["measure"].outputSchema["properties"]
+    assert "traits" in by_name["measure"].output_schema["properties"]
+    assert "px_per_mm" in by_name["measure"].output_schema["properties"]
 
 
 def test_every_structured_tool_publishes_an_output_schema():
@@ -188,12 +192,12 @@ def test_every_structured_tool_publishes_an_output_schema():
     returns_images = {"segment", "suggest_segmentation"}
     for tool in asyncio.run(build_server().list_tools()):
         if tool.name in returns_images:
-            assert tool.outputSchema is None, (
-                f"{tool.name} returns image content; it should have no outputSchema"
+            assert tool.output_schema is None, (
+                f"{tool.name} returns image content; it should have no output_schema"
             )
             continue
-        assert tool.outputSchema is not None, (
-            f"{tool.name} returns structured data but publishes no outputSchema — "
+        assert tool.output_schema is not None, (
+            f"{tool.name} returns structured data but publishes no output_schema — "
             "annotate its return type with a TypedDict"
         )
 
@@ -205,14 +209,18 @@ def test_measure_over_the_real_mcp_layer_returns_structured_content():
             "segment", {"image_path": FIXTURE, "channel": "a", "method": "otsu"}
         )
     )
-    blocks = seg[0] if isinstance(seg, tuple) else seg
+    # mcp 2.x returns a CallToolResult; 1.x returned a (content, structured)
+    # tuple, which is what the old isinstance sniff handled. We are 2.x-only, so
+    # read the fields. A shape sniff is worse than useless here: under 2.x it
+    # falls through and hands back the RESULT OBJECT, so the mismatch surfaces
+    # somewhere downstream instead of at the call.
+    blocks = seg.content
     sid = json.loads(
         next(b for b in blocks if getattr(b, "type", None) == "text").text
     )["session_id"]
 
     res = server.call_tool("measure", {"session_id": sid, "px_per_mm": 4.0})
-    out = asyncio.run(res)
-    payload = out[1] if isinstance(out, tuple) else out
+    payload = asyncio.run(res).structured_content
     assert isinstance(payload, dict), (
         f"expected structured content, got {type(payload)}"
     )
