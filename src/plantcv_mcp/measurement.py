@@ -8,7 +8,7 @@ from plantcv import plantcv as pcv
 
 # pydantic refuses typing.TypedDict on Python < 3.12 and raises
 # PydanticUserError when it builds a schema from one, so the TypedDicts that
-# back our outputSchema must come from typing_extensions on every version.
+# back our output_schema must come from typing_extensions on every version.
 from typing_extensions import TypedDict
 
 from .diagnostics import analyze_mask, assert_not_degenerate

@@ -27,8 +27,12 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Image Processing",
 ]
 dependencies = [
-    # 1.28.1 is a SECURITY floor, not a feature floor.
-    "mcp>=1.28.1,<2",
+    # 2.x only. The old 1.28.1 floor was a SECURITY floor rather than a feature
+    # one, and every 2.x release clears it. The range MOVES rather than widening
+    # to <3: this package imports mcp.server.mcpserver, which does not exist in
+    # 1.x, so a range spanning both majors could resolve to a version that cannot
+    # import the server. mcp 2.x requires Python >=3.10, below our >=3.11 floor.
+    "mcp>=2,<3",
     # Hard pin, deliberately. Trait values can shift between PlantCV releases, and
     # determinism is a tested design goal (tests/test_determinism.py) surfaced to
     # callers by list_methods(). Loosening this would weaken a guarantee the server

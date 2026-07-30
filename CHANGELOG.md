@@ -4,6 +4,30 @@ All notable changes to `plantcv-mcp` are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Migrated to `mcp` 2.x.** `FastMCP` was renamed, not removed: it is now
+  `mcp.server.mcpserver.MCPServer`, and `Image` moved with it. The dependency
+  **moves** to `mcp>=2,<3` rather than widening to `<3` — this package imports
+  `mcp.server.mcpserver`, absent in 1.x, so a range spanning both majors could
+  resolve to a version that cannot import the server. mcp 2.x requires Python
+
+  > =3.10, below this package's >=3.11 floor, so the support matrix is unchanged.
+
+- **`call_tool` returns a `CallToolResult`**, not a bare block sequence or a
+  `(content, structured)` tuple. Tests read `.content` and `.structured_content`;
+  the old `res[0] if isinstance(res, tuple) else res` shims are removed rather
+  than extended, because under 2.x that sniff falls through and hands back the
+  result object, moving the failure away from its cause.
+
+- **`mcp.types` fields are snake_case** (`outputSchema` → `output_schema`,
+  `readOnlyHint` → `read_only_hint`). Constructing `ToolAnnotations` still
+  accepts camelCase via pydantic aliases, but reading the attributes does not —
+  so construction would have stayed green while every read broke. Both spellings
+  are now aligned, including in the comments that named the old field.
+
 ## [0.2.1] — 2026-07-30
 
 A docs-and-metadata release. No behaviour changes; it exists because two claims

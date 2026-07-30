@@ -288,7 +288,9 @@ def test_suggest_reports_both_polarities_so_the_choice_is_informed():
             "suggest_segmentation", {"image_path": FIXTURE, "channel": "s"}
         )
     )
-    blocks = res[0] if isinstance(res, tuple) else res
+    # .content since mcp 2.x: call_tool returns a CallToolResult. The old
+    # isinstance sniff would fall through here and hand back the result object.
+    blocks = res.content
     payload = json.loads(
         next(b for b in blocks if getattr(b, "type", None) == "text").text
     )

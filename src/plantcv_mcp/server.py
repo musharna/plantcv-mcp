@@ -15,7 +15,10 @@ done without a lock around the measurement section.
 
 import json
 
-from mcp.server.fastmcp import FastMCP, Image
+# mcp 2.x renamed FastMCP to MCPServer and removed mcp.server.fastmcp. Same
+# class, same decorator, same kwargs — a rename, not a rewrite. Image moved with
+# it. ToolAnnotations stayed in mcp.types, though its fields are snake_case now.
+from mcp.server.mcpserver import Image, MCPServer
 from mcp.types import ToolAnnotations
 from plantcv import plantcv as pcv
 
@@ -64,7 +67,7 @@ not comparable between images taken at different distances or zoom levels.\
 
 
 class MeasureResult(TypedDict):
-    """Return type of measure(). Annotated so MCP can publish an outputSchema."""
+    """Return type of measure(). Annotated so MCP can publish an output_schema."""
 
     session_id: str
     analyses: list[str]
@@ -273,17 +276,22 @@ def _measure_impl(
     }
 
 
-def build_server() -> FastMCP:
-    mcp = FastMCP("plantcv-mcp", instructions=INSTRUCTIONS)
+def build_server() -> MCPServer:
+    mcp = MCPServer("plantcv-mcp", instructions=INSTRUCTIONS)
 
     # Every tool here only reads from disk and computes. None mutates anything,
     # none reaches the network. Saying so lets a client decide what is safe to
     # run without asking, instead of treating all four as opaque.
+    #
+    # snake_case since mcp 2.x. The camelCase spellings still work here as
+    # constructor kwargs — pydantic keeps them as aliases — but the ATTRIBUTES
+    # are snake_case now, so camelCase would keep this line green while every
+    # read of these annotations broke.
     READ_ONLY = ToolAnnotations(
-        readOnlyHint=True,
-        destructiveHint=False,
-        idempotentHint=True,
-        openWorldHint=False,
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
     )
 
     @mcp.tool(title="List segmentation methods", annotations=READ_ONLY)
