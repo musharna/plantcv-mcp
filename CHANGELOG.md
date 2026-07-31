@@ -4,6 +4,43 @@ All notable changes to `plantcv-mcp` are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`measure_regions()` — one row per plant.** `measure()` treats the whole frame
+  as a single region, so a tray of seedlings was merged into one object and every
+  size trait described the group; `multi_specimen` could warn about it but nothing
+  could measure it. Regions come from `mode="auto_grid"` (PlantCV infers the
+  layout from the mask; give only rows and columns) or `mode="rect_grid"`
+  (explicit geometry). The response carries an overlay with every region outlined
+  and numbered, because per-region numbers are unreadable without a picture
+  saying which region is which.
+
+  **An empty cell is refused by name, not reported as zero.** Measured on PlantCV
+  4.11.3: for a 2×2 grid with one empty cell, `create_labels` returns n=4 and the
+  analysis emits a complete trait set with `area = 0.0` for the empty one. That is
+  the same failure `assert_not_degenerate` exists to stop in the single-region
+  path. `np.unique(labeled)` is the discriminator, and such a region returns
+  `measured: false` with a reason.
+
+  That same measurement settled the index mapping: group `default_{i+1}`
+  corresponds to region `i`, with **no shifting when a cell is empty**. Had
+  empties been dropped, every trait after a gap would have been attributed to the
+  neighbouring plant. The tests use plants of deliberately different sizes so a
+  one-off shift is detectable at all — a fixture of identical plants could not
+  fail that test.
+
+### Changed
+
+- The `multi_specimen` warning pointed at "roi.auto_grid (phase 2)". Phase 2 is
+  this release; it now names `measure_regions()`. A warning pointing at unbuilt
+  work is worse than no pointer.
+- `_load_session_image()` extracted so `measure()` and `measure_regions()` share
+  one copy of the stale-image guards. A second entry point with its own copy is a
+  copy that can drift, and a drifted staleness check measures a mask against
+  pixels it was never drawn on.
+
 ## [0.3.2] — 2026-07-31
 
 ### Added

@@ -114,6 +114,7 @@ the methods, and the pinned PlantCV version.
 | `segment(image_path, channel, method, ...)`                             | overlay + diagnostics + warnings — **no traits**        |
 | `measure(session_id, analyses, px_per_mm, ...)`                         | traits, or a raised error on a degenerate mask          |
 | `calibrate_scale_from_marker(image_path, x, y, w, h, marker_length_mm)` | `px_per_mm` from a marker of known real size            |
+| `measure_regions(session_id, nrows, ncols, ...)`                         | one row per plant in a tray, plus the numbered overlay  |
 | `measure_images(image_paths, channel, method, ...)`                     | one recipe across many images; traits only where valid  |
 | `list_methods()`                                                        | channels, methods, object types, pinned PlantCV version |
 
@@ -306,10 +307,13 @@ that is a decision you make rather than a surprise you discover.
 
 ## Limitations
 
-Phase 1 is single-ROI: `measure()` uses the whole image as its region of
-interest, which is why the multi-specimen warning can only advise rather than
-correct. Multi-plant grids, morphology traits (leaf angles, stem, skeleton) and
-iterative mask refinement are phase 2.
+`measure()` is single-ROI by design: it treats the whole image as one region,
+so on a tray it merges every plant into one object. Use `measure_regions()` for
+multi-plant images — it measures each region separately and returns an overlay
+with the regions outlined and numbered.
+
+Morphology traits (leaf angles, stem, skeleton) and iterative mask refinement
+are still not implemented.
 
 Sessions are in-memory and capped (8 by default, LRU-evicted). They do not
 survive a server restart.

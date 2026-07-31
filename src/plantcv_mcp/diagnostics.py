@@ -150,8 +150,9 @@ def multi_specimen_warning(diag: MaskDiagnostics) -> "Advisory | None":
             f"{diag.major_object_count} comparably-sized objects detected "
             f"(areas: {diag.areas[: diag.major_object_count]}). A whole-image "
             "ROI will merge them into one object and every size trait will "
-            "describe the group, not a plant. Consider roi.auto_grid "
-            "(phase 2) or pass an explicit single-plant roi to measure()."
+            "describe the group, not a plant. Call measure_regions() "
+            "instead: it measures each plant separately and returns an "
+            "overlay with the regions outlined and numbered."
         ),
     )
 
