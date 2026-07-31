@@ -14,18 +14,36 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   cut. Zenodo archives the tag, not the default branch, so a release was the only
   way to get the metadata into an archived snapshot.
 
-### Fixed
+### Changed
 
-- **`.zenodo.json` declared the licence in SPDX casing, which Zenodo does not
-  resolve.** Its vocabulary uses lowercase IDs: `MIT`, `GPL-3.0-or-later` and
-  `GPL-2.0-only` all return 404 from
-  `zenodo.org/api/vocabularies/licenses/<id>`, while `mit`, `gpl-3.0-or-later`
-  and `gpl-2.0-only` return 200.
+- **`.zenodo.json` now uses Zenodo's lowercase licence identifier**
+  (`mit` rather than `MIT`). That is the canonical spelling —
+  `zenodo.org/api/vocabularies/licenses/<id>` returns 200 for the lowercase form
+  and 404 for the SPDX-cased one. See the correction below: it fixed nothing.
 
-  This was measured on a real minted record rather than assumed: the sibling
-  `ldraw-mcp` archived with the SPDX casing still in place and its Zenodo record
-  came out with **`rights` absent entirely**. The identifier did not block
-  archival — it silently dropped the licence from the published record.
+### Correction — added after this release was published
+
+This release was originally described here as **fixing** a defect in which the
+SPDX casing "silently dropped the licence from the published record". **That was
+wrong, and the entry is corrected rather than quietly deleted.**
+
+Zenodo normalises the licence identifier on ingest. The sibling `ldraw-mcp`
+archived with `"MIT"` still in place and its record reads `license: mit-license`;
+this project's record reads `license: mit`. The licence was never dropped.
+
+The apparent evidence was two of my own measurement errors, both the same
+mistake — probing a proxy instead of the artifact:
+
+1. Querying the licence **vocabulary endpoint** and treating a 404 there as what
+   the ingest accepts. It is not; the ingest normalises casing.
+2. Reading the **RDM-era field names** (`rights`, `subjects`,
+   `creators[].person_or_org`) against an API endpoint that returns the **legacy**
+   shape (`metadata.license`, `metadata.keywords`, `creators[].orcid`). Every
+   field reported as absent was present throughout.
+
+What remains true is the reason this release exists: the previous tag predated
+`.zenodo.json` and `CITATION.cff`, and Zenodo archives the **tag**, not the
+default branch. DOI: [10.5281/zenodo.21713869](https://doi.org/10.5281/zenodo.21713869).
 
 ### Notes
 
