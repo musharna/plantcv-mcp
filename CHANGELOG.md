@@ -4,6 +4,33 @@ All notable changes to `plantcv-mcp` are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] — 2026-07-31
+
+### Added
+
+- **Zenodo archival.** This release exists to be archived: the Zenodo↔GitHub
+  integration mints a DOI from the tag's tarball, and the previous tag predated
+  `.zenodo.json` and `CITATION.cff` entirely — those files were added after it was
+  cut. Zenodo archives the tag, not the default branch, so a release was the only
+  way to get the metadata into an archived snapshot.
+
+### Fixed
+
+- **`.zenodo.json` declared the licence in SPDX casing, which Zenodo does not
+  resolve.** Its vocabulary uses lowercase IDs: `MIT`, `GPL-3.0-or-later` and
+  `GPL-2.0-only` all return 404 from
+  `zenodo.org/api/vocabularies/licenses/<id>`, while `mit`, `gpl-3.0-or-later`
+  and `gpl-2.0-only` return 200.
+
+  This was measured on a real minted record rather than assumed: the sibling
+  `ldraw-mcp` archived with the SPDX casing still in place and its Zenodo record
+  came out with **`rights` absent entirely**. The identifier did not block
+  archival — it silently dropped the licence from the published record.
+
+### Notes
+
+No functional change. Tools, guards and dependency pins are identical to 0.3.1.
+
 ## [0.3.1] — 2026-07-31
 
 ### Added
