@@ -6,6 +6,7 @@
 [![PyPI](https://img.shields.io/pypi/v/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
 [![python](https://img.shields.io/pypi/pyversions/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
 ![license](https://img.shields.io/badge/license-MIT-green)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21713516.svg)](https://doi.org/10.5281/zenodo.21713516)
 
 <!-- mcp-name: io.github.musharna/plantcv-mcp -->
 
