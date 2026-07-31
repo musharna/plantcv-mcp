@@ -1,0 +1,48 @@
+name: Publish to MCP Registry
+# Submits server.json to the official MCP registry via GitHub Actions OIDC
+# (mcp-publisher login github-oidc) -- no device flow, no stored credentials.
+# The OIDC token's repository_owner ("musharna") grants the io.github.musharna/*
+# namespace.
+#
+# The registry verifies PyPI ownership by looking for the `mcp-name` marker in
+# the package README AS PUBLISHED TO PYPI -- PyPI captures long_description at
+# release time, so a marker on master is not enough. The wait step below blocks
+# until the matching PyPI release exists, and then asserts the marker is
+# actually in that release's description, because publishing would otherwise
+# fail validation for a reason the logs would not name.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+jobs:
+  registry-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Wait for the PyPI release, then verify it carries the mcp-name marker
+        run: |
+          VER=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          for i in $(seq 1 30); do
+            if curl -fsSL "https://pypi.org/pypi/plantcv-mcp/$VER/json" >/dev/null; then
+              echo "PyPI $VER is live"
+              break
+            fi
+            echo "waiting for PyPI $VER ($i/30)"; sleep 10
+            if [ "$i" -eq 30 ]; then echo "PyPI $VER did not appear within 5 minutes"; exit 1; fi
+          done
+          curl -fsSL "https://pypi.org/pypi/plantcv-mcp/$VER/json" \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); m='mcp-name: io.github.musharna/plantcv-mcp' in (d['info']['description'] or ''); print('marker present:', m); sys.exit(0 if m else 1)"
+      - name: Install mcp-publisher
+        run: curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.0/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+      - name: Validate server.json before authenticating
+        # Cheap, and it fails with the registry's own message (e.g. "expected
+        # length <= 100" on description) instead of surfacing as a publish
+        # failure after login. Exits non-zero on genuine invalidity -- verified.
+        run: ./mcp-publisher validate server.json
+      - name: Log in to the MCP registry via GitHub Actions OIDC
+        run: ./mcp-publisher login github-oidc
+      - name: Publish server.json
+        run: ./mcp-publisher publish
