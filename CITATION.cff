@@ -20,6 +20,7 @@ authors:
     given-names: Jaret
     orcid: "https://orcid.org/0009-0003-4055-5238"
 repository-code: "https://github.com/musharna/plantcv-mcp"
+doi: 10.5281/zenodo.21713516
 url: "https://pypi.org/project/plantcv-mcp/"
 license: MIT
 version: 0.3.2
