@@ -63,6 +63,43 @@ def render_overlay(img: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return out
 
 
+MEASURED_BGR = (0, 220, 0)  # green: this region produced traits
+EMPTY_BGR = (0, 200, 255)  # amber: this region was refused, no plant found
+
+
+def render_region_overlay(
+    img: np.ndarray,
+    mask: np.ndarray,
+    bboxes: list[tuple[int, int, int, int]],
+    measured: list[bool],
+) -> np.ndarray:
+    """Tint the mask, then outline and number every region.
+
+    The whole point of returning per-region numbers is that a reader can tell
+    WHICH plant each row describes. A tinted mask alone cannot do that on a tray
+    of twenty seedlings, so the region index is drawn onto the region itself.
+
+    Refused regions are drawn too, in a different colour. Omitting them would
+    make an empty cell indistinguishable from a cell the grid never covered —
+    and those call for opposite fixes (re-segment vs. correct the geometry).
+    """
+    out = render_overlay(img, mask)
+    for i, (x, y, w, h) in enumerate(bboxes):
+        colour = MEASURED_BGR if i < len(measured) and measured[i] else EMPTY_BGR
+        cv2.rectangle(out, (x, y), (x + w, y + h), colour, 2)
+        cv2.putText(
+            out,
+            str(i),
+            (x + 4, y + 22),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            colour,
+            2,
+            cv2.LINE_AA,
+        )
+    return out
+
+
 def encode_png(img: np.ndarray) -> bytes:
     ok, buf = cv2.imencode(".png", img)
     if not ok:

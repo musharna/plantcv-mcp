@@ -210,6 +210,7 @@ async def test_server_registers_exactly_the_expected_tools():
         "suggest_segmentation",
         "segment",
         "measure",
+        "measure_regions",
         "calibrate_scale_from_marker",
         "measure_images",
     }

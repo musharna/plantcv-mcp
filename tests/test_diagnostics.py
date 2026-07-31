@@ -188,7 +188,10 @@ def test_multi_specimen_fires_on_measured_failure_and_not_on_single_plant():
     warn = multi_specimen_warning(analyze_mask(four_plants))
     assert warn is not None
     assert warn.code == "multi_specimen"
-    assert "auto_grid" in warn.message
+    # Names the remedy that EXISTS. It used to point at "roi.auto_grid (phase 2)";
+    # phase 2 shipped as measure_regions(), and a warning pointing at unbuilt
+    # work is worse than no pointer.
+    assert "measure_regions" in warn.message
 
     # POSITIVE CONTROL: one plant + disconnected leaf tips -> must NOT fire
     # Sizes: [92, 23, 21, 16], total width needed: 152 + 15 (gaps) = 167px

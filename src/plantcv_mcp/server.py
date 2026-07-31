@@ -15,6 +15,8 @@ done without a lock around the measurement section.
 
 import json
 
+import numpy as np
+
 # mcp 2.x renamed FastMCP to MCPServer and removed mcp.server.fastmcp. Same
 # class, same decorator, same kwargs — a rename, not a rewrite. Image moved with
 # it. ToolAnnotations stayed in mcp.types, though its fields are snake_case now.
@@ -29,8 +31,17 @@ from . import plantcv_version
 from .batch import measure_batch
 from .color import correct_color
 from .diagnostics import analyze_mask, segmentation_warnings
-from .imaging import downscale, encode_png, file_digest, load_image, render_overlay
+from .imaging import (
+    downscale,
+    encode_png,
+    file_digest,
+    load_image,
+    render_overlay,
+    render_region_overlay,
+)
 from .measurement import ANALYSES, TraitValue, measure_traits
+from .regions import REGION_MODES, RegionSpecError, build_regions
+from .regions import measure_regions as _measure_each_region
 from .scale import calibrate_scale
 from .segmentation import CHANNELS, METHODS, OBJECT_TYPES, threshold_mask
 from .session import SessionStore
@@ -141,6 +152,7 @@ class MethodsInfo(TypedDict):
     methods: list[str]
     object_types: list[str]
     analyses: list[str]
+    region_modes: list[str]
     guidance: str
 
 
@@ -160,6 +172,7 @@ def list_methods_impl() -> MethodsInfo:
         "methods": list(METHODS),
         "object_types": list(OBJECT_TYPES),
         "analyses": list(ANALYSES),
+        "region_modes": list(REGION_MODES),
         "guidance": (
             "Pick a channel AND the object_type that goes with it. object_type "
             "says which side of the threshold is the plant: 'dark' selects "
@@ -232,14 +245,15 @@ def _segment_impl(
     }
 
 
-def _measure_impl(
-    session_id: str,
-    analyses: list[str] | None = None,
-    px_per_mm: float | None = None,
-    include_histograms: bool = False,
-) -> MeasureResult:
-    requested = tuple(analyses) if analyses else ("size",)
-    session = _store.get(session_id)
+def _load_session_image(session) -> np.ndarray:
+    """Re-read the session's image, refusing it if the file changed underneath.
+
+    Shared by every measuring path. Extracted rather than duplicated when
+    per-region measurement was added: a second entry point with its own copy of
+    these guards is a copy that can drift, and the failure mode of a drifted
+    stale-image check is measuring a mask against pixels it was never drawn on —
+    silently, with plausible numbers.
+    """
     img = load_image(session.image_path)  # re-read; sessions do not hold RGB
     current_shape = (int(img.shape[0]), int(img.shape[1]))
     if current_shape != session.shape:
@@ -262,6 +276,18 @@ def _measure_impl(
         # a stale-image error. The mask was drawn on corrected pixels, so the
         # traits have to be measured on corrected pixels too.
         img = correct_color(img)
+    return img
+
+
+def _measure_impl(
+    session_id: str,
+    analyses: list[str] | None = None,
+    px_per_mm: float | None = None,
+    include_histograms: bool = False,
+) -> MeasureResult:
+    requested = tuple(analyses) if analyses else ("size",)
+    session = _store.get(session_id)
+    img = _load_session_image(session)
     return {
         "session_id": session_id,
         "analyses": list(requested),
@@ -273,6 +299,89 @@ def _measure_impl(
             px_per_mm=px_per_mm,
             include_histograms=include_histograms,
         ),
+    }
+
+
+def _as_xy(pair: list[int] | None, name: str) -> tuple[int, int] | None:
+    """Coerce an [x, y] list from the wire into a checked 2-tuple.
+
+    Length is validated rather than sliced or padded. A three-element `spacing`
+    is a caller who thinks it means something else, and silently taking the
+    first two would lay the grid down in the wrong place and measure the
+    neighbouring plant — with numbers that look entirely reasonable.
+    """
+    if pair is None:
+        return None
+    if len(pair) != 2:
+        raise RegionSpecError(
+            f"{name} must be exactly [x, y]; got {len(pair)} values: {pair!r}."
+        )
+    return (int(pair[0]), int(pair[1]))
+
+
+def _measure_regions_impl(
+    session_id: str,
+    mode: str = "auto_grid",
+    nrows: int = 1,
+    ncols: int = 1,
+    coord: list[int] | None = None,
+    height: int | None = None,
+    width: int | None = None,
+    spacing: list[int] | None = None,
+    radius: int | None = None,
+    analyses: list[str] | None = None,
+    px_per_mm: float | None = None,
+    include_histograms: bool = False,
+) -> dict:
+    requested = tuple(analyses) if analyses else ("size",)
+    session = _store.get(session_id)
+    img = _load_session_image(session)
+
+    regions = build_regions(
+        img,
+        session.mask,
+        mode=mode,
+        nrows=nrows,
+        ncols=ncols,
+        coord=_as_xy(coord, "coord"),
+        height=height,
+        width=width,
+        spacing=_as_xy(spacing, "spacing"),
+        radius=radius,
+    )
+    measurements = _measure_each_region(
+        img,
+        session.mask,
+        regions,
+        analyses=requested,
+        px_per_mm=px_per_mm,
+        include_histograms=include_histograms,
+    )
+
+    overlay = render_region_overlay(
+        img,
+        session.mask,
+        regions.bboxes,
+        [bool(m["measured"]) for m in measurements],
+    )
+    small, scale = downscale(overlay)
+    png = encode_png(small)
+
+    measured = [m for m in measurements if m["measured"]]
+    return {
+        "session_id": session_id,
+        "mode": regions.mode,
+        "nrows": regions.nrows,
+        "ncols": regions.ncols,
+        "regions_total": len(measurements),
+        "regions_measured": len(measured),
+        "regions_empty": len(measurements) - len(measured),
+        "analyses": list(requested),
+        "px_per_mm": px_per_mm,
+        "regions": measurements,
+        "warnings": [{"code": w.code, "message": w.message} for w in regions.warnings],
+        "overlay_scale": scale,
+        "_png": png,
     }
 
 
@@ -381,6 +490,58 @@ def build_server() -> MCPServer:
             px_per_mm=px_per_mm,
             include_histograms=include_histograms,
         )
+
+    @mcp.tool(
+        title="Measure each plant in a tray (returns the labelled overlay)",
+        annotations=READ_ONLY,
+    )
+    def measure_regions(
+        session_id: str,
+        nrows: int,
+        ncols: int,
+        mode: str = "auto_grid",
+        coord: list[int] | None = None,
+        height: int | None = None,
+        width: int | None = None,
+        spacing: list[int] | None = None,
+        radius: int | None = None,
+        analyses: list[str] | None = None,
+        px_per_mm: float | None = None,
+        include_histograms: bool = False,
+    ) -> list:
+        """Measure EACH plant in a multi-plant image separately.
+
+        measure() treats the whole frame as one region, so on a tray it merges
+        every plant into a single object and every size trait describes the
+        group. This returns one row per region, plus an overlay with each region
+        outlined and numbered so you can tell which row is which plant.
+
+        mode='auto_grid' (default) infers the grid geometry from the MASK — give
+        only nrows and ncols. mode='rect_grid' takes explicit geometry: coord
+        [x, y] of the first cell, height and width of a cell, and spacing [x, y]
+        between cell origins; use it when the mask is too sparse to infer a
+        layout or the cells must line up with physical pots.
+
+        A region with no plant in it returns measured=false and a reason, NOT
+        zeros: PlantCV reports a full trait set of zeros for an empty region,
+        which is indistinguishable from a genuinely zero-area plant.
+        """
+        result = _measure_regions_impl(
+            session_id,
+            mode=mode,
+            nrows=nrows,
+            ncols=ncols,
+            coord=coord,
+            height=height,
+            width=width,
+            spacing=spacing,
+            radius=radius,
+            analyses=analyses,
+            px_per_mm=px_per_mm,
+            include_histograms=include_histograms,
+        )
+        png = result.pop("_png")
+        return [json.dumps(result), Image(data=png, format="png")]
 
     @mcp.tool(title="Calibrate pixels per millimetre", annotations=READ_ONLY)
     def calibrate_scale_from_marker(

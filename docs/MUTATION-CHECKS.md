@@ -101,3 +101,20 @@ what came back, not by any test. `test_every_structured_tool_publishes_an_output
 asserts the rule for **every** tool rather than a named list, and the two mutants above confirm
 it fires. A per-tool assertion protects the tools that exist; a rule protects the ones that
 have not been written yet.
+
+
+## Round 5 — per-region measurement (`measure_regions`)
+
+| mutant                              | change                                                              | result |
+| ----------------------------------- | ------------------------------------------------------------------- | ------ |
+| empty-region guard removed          | `if label not in present:` → `if False:`                             | RED    |
+| label mapping shifted by one        | `label = i + 1` → `i + 2` for the first two regions                   | RED    |
+| `_as_xy` slices instead of refusing | `if len(pair) != 2:` → `if False:`                                    | RED    |
+| overlay draws all regions as measured | `colour = ... else EMPTY_BGR` → `colour = MEASURED_BGR`             | RED    |
+
+The second mutant is the one that matters. Region indices and PlantCV's label
+indices are separate sequences that happen to line up, and nothing but this test
+holds them together; if they drift, every row after an empty cell describes the
+neighbouring plant, with numbers that look entirely reasonable. It is only
+detectable because the fixture's plants have deliberately different areas
+(1257 / 5027 / 11310 px). Identical plants would make the mutant invisible.

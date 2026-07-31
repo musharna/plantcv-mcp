@@ -84,6 +84,7 @@ jobs:
               "list_methods",
               "measure",
               "measure_images",
+              "measure_regions",
               "segment",
               "suggest_segmentation",
           ]
