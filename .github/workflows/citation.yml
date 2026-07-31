@@ -1,0 +1,56 @@
+name: citation
+
+# CITATION.cff records the release version in a second place, independent of
+# pyproject.toml, and nothing keeps the two in agreement. (.zenodo.json carries
+# no version -- Zenodo takes it from the release tag -- so it is not checked.)
+#
+# Stale citation metadata is worse than none: it is machine-readable, GitHub
+# renders it in the "Cite this repository" panel, and Zenodo mints DOI records
+# from it -- so a wrong version propagates into other people's bibliographies
+# where nobody will ever check it against the tag.
+#
+# This mirrors the release gate that refuses to publish a mislabeled artifact:
+# same invariant, one layer earlier.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  version-sync:
+    name: CITATION.cff matches pyproject
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: CITATION.cff version == pyproject version
+        run: |
+          set -euo pipefail
+
+          PY=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          CFF=$(grep -m1 '^version:' CITATION.cff | sed 's/^version:[[:space:]]*//' | tr -d '"'"'"'\047 ')
+
+          if [ -z "$PY" ]; then echo "::error::could not read version from pyproject.toml"; exit 1; fi
+          if [ -z "$CFF" ]; then echo "::error::could not read version from CITATION.cff"; exit 1; fi
+
+          echo "pyproject.toml : $PY"
+          echo "CITATION.cff   : $CFF"
+
+          if [ "$PY" != "$CFF" ]; then
+            echo "::error::CITATION.cff says $CFF but pyproject.toml says $PY. The citation metadata would ship stale into GitHub's cite panel and any Zenodo DOI record. Update CITATION.cff -- both 'version:' and 'date-released:' -- in this change."
+            exit 1
+          fi
+
+          echo "in sync"
+
+      - name: CITATION.cff validates against the CFF 1.2.0 schema
+        # A file that parses is not a file that validates: the first draft of
+        # these had `references` entries missing the required `authors` key and
+        # looked entirely reasonable.
+        run: |
+          pipx install cffconvert >/dev/null 2>&1 || pip install --quiet cffconvert
+          cffconvert --validate
