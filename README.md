@@ -7,6 +7,8 @@
 [![python](https://img.shields.io/pypi/pyversions/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
+<!-- mcp-name: io.github.musharna/plantcv-mcp -->
+
 [PlantCV](https://plantcv.org) as an MCP **measurement instrument**: it returns plant trait
 numbers **and the picture they were computed from**, and refuses to return numbers when the
 segmentation is degenerate.
