@@ -1,0 +1,51 @@
+cff-version: 1.2.0
+message: >-
+  If you use plantcv-mcp in your work, please cite it as below. PlantCV is the
+  analysis library this server wraps and must be cited separately — see
+  references.
+title: plantcv-mcp
+abstract: >-
+  A Model Context Protocol (MCP) server exposing PlantCV as a measurement
+  instrument: it returns plant trait numbers together with the segmentation
+  overlay they were computed from, and refuses to return numbers when the
+  segmentation is degenerate. Mask validity is two-sided, so an inverted
+  threshold — which otherwise reports the background as the plant with no error
+  at all — is an outcome the system can express as a failure. Traits convert to
+  real-world units from an explicit table rather than from PlantCV's unit
+  strings, and batch analysis withholds traits for any image that trips a
+  blocking guard instead of reporting an unreviewed number.
+type: software
+authors:
+  - family-names: Arnold
+    given-names: Jaret
+    orcid: "https://orcid.org/0009-0003-4055-5238"
+repository-code: "https://github.com/musharna/plantcv-mcp"
+url: "https://pypi.org/project/plantcv-mcp/"
+license: MIT
+version: 0.3.1
+date-released: "2026-07-31"
+keywords:
+  - plantcv
+  - phenotyping
+  - plant-science
+  - image-analysis
+  - computer-vision
+  - model-context-protocol
+  - mcp
+references:
+  - type: article
+    title: "PlantCV v4: Image analysis software for high-throughput plant phenotyping"
+    authors:
+      - name: "The PlantCV development team"
+    journal: The Plant Phenome Journal
+    volume: 9
+    issue: 1
+    year: 2026
+    doi: 10.1002/ppj2.70065
+    notes: >-
+      The analysis library this server wraps, pinned at plantcv==4.11.3 — so the
+      v4 paper is the correct citation, not the widely-cited v2 paper (Gehan et
+      al. 2017, 10.7717/peerj.4088). Cite PlantCV for any published result
+      produced with this tool; citing the wrapper does not discharge that. The
+      byline runs to 62 authors and is deliberately not transcribed here: resolve
+      the DOI for the authoritative list rather than trusting a hand-copied one.
