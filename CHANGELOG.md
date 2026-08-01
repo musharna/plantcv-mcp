@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-08-01
+
 ### Added
 
 - **`measure_regions()` — one row per plant.** `measure()` treats the whole frame
@@ -30,6 +32,33 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   neighbouring plant. The tests use plants of deliberately different sizes so a
   one-off shift is detectable at all — a fixture of identical plants could not
   fail that test.
+
+- **Traits are now checked against shapes whose geometry is known in advance.**
+  An 80×80 square must measure 6400 px, and it does. Every prior test compared
+  this server against its own previous output, which cannot catch a change that
+  is consistently wrong. This one can: an external oracle, arithmetic rather than
+  a stored baseline.
+
+- **`measure()` reports the engine that produced the numbers.** The result now
+  carries `engine` with the PlantCV version. It was previously reachable only
+  through `list_methods`, so a saved trait table could not be traced back to the
+  version that measured it — and PlantCV's own trait definitions do change
+  between versions.
+
+- **A fresh-process test that drives the tool layer and nothing else.** Three
+  sequential `call_tool` invocations in a subprocess that has never touched
+  PlantCV directly, asserting the 6400 px oracle at the end.
+
+  This exists because of a bug in a SIBLING server, not one found here: in
+  breedsim-mcp, rpy2 published its conversion rules into a `ContextVar` at import
+  time, the import happened inside the first request, and the rules were
+  discarded when that request returned — while 27 tests passed throughout,
+  because a test that imports the dependency into pytest's root context masks the
+  whole class of failure. Nothing here is known to be broken; what was missing was
+  the ability to notice. PlantCV has import-time global state of its own
+  (`pcv.params.sample_label`, which this package reads), so a case covers a host
+  process that sets it before importing us. The file carries its own positive
+  control proving the driver can actually fail.
 
 ### Changed
 
