@@ -84,6 +84,12 @@ class MeasureResult(TypedDict):
     analyses: list[str]
     px_per_mm: float | None
     traits: dict[str, TraitValue]
+    # Which PlantCV produced these numbers, travelling WITH them. The version
+    # was already reachable via list_methods, but a stored or forwarded trait
+    # table could not say what measured it, and two tables could not be told
+    # apart. Trait definitions shift between PlantCV releases, so a measurement
+    # that cannot name its version is not reproducible.
+    engine: dict[str, str]
 
 
 class WarningItem(TypedDict):
@@ -299,6 +305,7 @@ def _measure_impl(
             px_per_mm=px_per_mm,
             include_histograms=include_histograms,
         ),
+        "engine": {"name": "PlantCV", "version": plantcv_version()},
     }
 
 
