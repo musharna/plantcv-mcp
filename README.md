@@ -5,7 +5,8 @@
 [![ci](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
 [![python](https://img.shields.io/pypi/pyversions/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
-![license](https://img.shields.io/badge/license-MIT-green)
+[![license](https://img.shields.io/pypi/l/plantcv-mcp)](LICENSE)
+[![Glama](https://glama.ai/mcp/servers/musharna/plantcv-mcp/badges/score.svg)](https://glama.ai/mcp/servers/musharna/plantcv-mcp)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21713516.svg)](https://doi.org/10.5281/zenodo.21713516)
 
 <!-- mcp-name: io.github.musharna/plantcv-mcp -->
@@ -114,7 +115,7 @@ the methods, and the pinned PlantCV version.
 | `segment(image_path, channel, method, ...)`                             | overlay + diagnostics + warnings — **no traits**        |
 | `measure(session_id, analyses, px_per_mm, ...)`                         | traits, or a raised error on a degenerate mask          |
 | `calibrate_scale_from_marker(image_path, x, y, w, h, marker_length_mm)` | `px_per_mm` from a marker of known real size            |
-| `measure_regions(session_id, nrows, ncols, ...)`                         | one row per plant in a tray, plus the numbered overlay  |
+| `measure_regions(session_id, nrows, ncols, ...)`                        | one row per plant in a tray, plus the numbered overlay  |
 | `measure_images(image_paths, channel, method, ...)`                     | one recipe across many images; traits only where valid  |
 | `list_methods()`                                                        | channels, methods, object types, pinned PlantCV version |
 

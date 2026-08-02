@@ -1,0 +1,31 @@
+version: 2
+# Nothing proposed dependency updates in this repo before now, so pins could drift
+# silently and a deprecation deadline would arrive unwarned.
+#
+# `uv`, not `pip`: this project is uv-locked. Dependabot's uv ecosystem (GA March
+# 2025) reads pyproject.toml and uv.lock together; the pip ecosystem would update
+# pyproject and leave uv.lock stale, which CI installs with --frozen and would fail.
+#
+# Minor/patch are grouped to keep PR volume low. Majors arrive individually -- those
+# carry the runtime bumps and deserve their own CI run. These are proposals for a
+# human to judge, NOT auto-merge candidates: a dependabot PR on a sibling repo once
+# proposed widening an intentionally-narrow major bound and would have broken the
+# build.
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      uv-minor-patch:
+        update-types: ["minor", "patch"]
