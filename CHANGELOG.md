@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-08-02
+
 ### Added
 
 - **Community-health and repo-hygiene files, matching the standard set by
