@@ -6,6 +6,29 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **`server.json` is validated against the registry's own published schema.**
+  `breedsim-mcp` v0.4.0 was tagged, uploaded to PyPI and GitHub-released before
+  the MCP registry refused it with a 422: its description had grown past a
+  100-character cap that nothing local measured. The publish workflow is the only
+  thing that checks registry constraints, and it runs on tag push — after the
+  version is already burned. This server's description is **91 characters**: it
+  passes today with nine to spare, and nothing here was measuring it.
+
+  Rather than copy the one constant, the check validates the whole document
+  against the dated `$schema` `server.json` already declares, which is the
+  registry's own statement of what it accepts. That covers the four other length
+  caps and the required-field list as well. The schema is vendored at
+  `tests/server.schema.json` rather than fetched, keeping the suite offline and
+  deterministic, and a test asserts the vendored copy's `$id` still matches the
+  declared `$schema` so the pin cannot drift silently.
+
+  Verified by mutation rather than assumed: a 282-character description was
+  written into the real `server.json` and the suite watched to fail on it, with a
+  non-length failure (a missing required field) and an in-test positive control
+  so a validator that raised on everything could not read as a working guard.
+
 ## [0.4.0] — 2026-08-01
 
 ### Added

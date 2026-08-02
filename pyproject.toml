@@ -98,5 +98,8 @@ extend-exclude = ["docs"]
 
 [dependency-groups]
 # ruff is declared here so CI lints with a pinned, locked version rather than
-# whatever happens to be on the runner.
-dev = ["pytest>=8.0", "ruff>=0.6"]
+# whatever happens to be on the runner. jsonschema validates server.json against
+# the registry's own published schema (vendored at tests/server.schema.json) so
+# registry-side constraints fail here rather than in the publish workflow, which
+# only runs once the tag is already cut.
+dev = ["pytest>=8.0", "ruff>=0.6", "jsonschema>=4.0"]
