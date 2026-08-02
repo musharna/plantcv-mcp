@@ -29,3 +29,17 @@ updates:
     groups:
       uv-minor-patch:
         update-types: ["minor", "patch"]
+    ignore:
+      # Both of these are pinned on purpose, and saying so here is the difference
+      # between a clean job and a failing one: the first uv run reported
+      # `update_not_possible` for opencv-python and failed the job.
+      #
+      # plantcv is HARD-PINNED at 4.11.3 because trait values can shift between
+      # releases and determinism is a tested, advertised guarantee (see the
+      # comment on the pin in pyproject.toml). Moving it is an act of validation,
+      # not a dependency bump, so it must not arrive as an automated PR.
+      - dependency-name: "plantcv"
+      # opencv-python is bounded by plantcv itself (<=4.12), deliberately not
+      # re-capped here. Dependabot cannot raise it without moving plantcv, so
+      # every proposal is unsatisfiable by construction.
+      - dependency-name: "opencv-python"
