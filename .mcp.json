@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "plantcv": {
+      "command": "uvx",
+      "args": [
+        "plantcv-mcp"
+      ]
+    }
+  }
+}

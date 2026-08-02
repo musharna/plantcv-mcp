@@ -1,0 +1,71 @@
+name: Bug report
+description: Report a bug in plantcv-mcp
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please do **not** report security vulnerabilities here —
+        see [SECURITY.md](../SECURITY.md) for private disclosure.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: tool
+    attributes:
+      label: Which tool?
+      multiple: true
+      options:
+        - list_methods
+        - suggest_segmentation
+        - segment
+        - measure
+        - measure_regions
+        - calibrate_scale_from_marker
+        - measure_images
+        - not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `pip show plantcv-mcp` (or the version `uvx` pulled).
+      placeholder: "0.4.0"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.11"
+    validations:
+      required: false
+  - type: input
+    id: plantcvver
+    attributes:
+      label: PlantCV version
+      description: Pinned at 4.11.3 by this package; report if you overrode it.
+      placeholder: "4.11.3"
+    validations:
+      required: false
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact tool call and arguments. Include the input you fed it.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output
+      description: Paste the error or traceback in full. If a trait looks wrong, attach the returned overlay — the overlay is how polarity bugs are diagnosed.
+      render: shell
+    validations:
+      required: false
