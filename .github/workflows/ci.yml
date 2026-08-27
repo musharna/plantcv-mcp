@@ -107,8 +107,12 @@ jobs:
                   "measure_images",
                   "measure_morphology",
                   "measure_regions",
+                  "measure_spectral",
+                  "measure_thermal",
                   "refine",
                   "segment",
+                  "segment_hyperspectral",
+                  "segment_thermal",
                   "suggest_segmentation",
               ]
               assert info.name == "plantcv-mcp", info

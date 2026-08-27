@@ -14,10 +14,24 @@ from typing import Any
 import numpy as np
 
 from .batch import measure_batch
+from .hyperspectral import (
+    CubeLoad,
+    HsiSegmentation,
+    SpectralResult,
+    measure_spectral,
+    segment_hyperspectral,
+)
 from .measurement import measure_traits
 from .morphology import MorphologyResult, measure_morphology
 from .refine import apply_refinements
 from .regions import build_regions, measure_regions
+from .thermal import (
+    ThermalLoad,
+    ThermalResult,
+    ThermalSegmentation,
+    measure_thermal,
+    segment_thermal,
+)
 
 
 def measure(
@@ -111,7 +125,29 @@ def refine(mask: np.ndarray, ops: list[dict]) -> np.ndarray:
     return apply_refinements(mask, ops)
 
 
+def hsi_segment(cube_load: CubeLoad, **kwargs: Any) -> HsiSegmentation:
+    return segment_hyperspectral(cube_load.raw_path, cube_load=cube_load, **kwargs)
+
+
+def hsi_measure(cube_load: CubeLoad, mask: np.ndarray, **kwargs: Any) -> SpectralResult:
+    return measure_spectral(cube_load.raw_path, mask, cube_load=cube_load, **kwargs)
+
+
+def thermal_segment(load: ThermalLoad, path: str, **kwargs: Any) -> ThermalSegmentation:
+    return segment_thermal(path, load=load, **kwargs)
+
+
+def thermal_measure(
+    load: ThermalLoad, path: str, mask: np.ndarray, **kwargs: Any
+) -> ThermalResult:
+    return measure_thermal(path, mask, load=load, **kwargs)
+
+
 REGISTRY: dict[str, Any] = {
+    "hsi_segment": hsi_segment,
+    "hsi_measure": hsi_measure,
+    "thermal_segment": thermal_segment,
+    "thermal_measure": thermal_measure,
     "measure": measure,
     "regions": regions,
     "morphology": morphology,

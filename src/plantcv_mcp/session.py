@@ -37,6 +37,12 @@ class Session:
     # trait table so a stored result can say what produced its mask.
     lineage: list[dict] = field(default_factory=list)
     parent_id: str | None = None
+    # Modality. "rgb" sessions come from segment()/refine(); "hsi" and
+    # "thermal" from their own segmenters. Tools refuse the wrong kind by name.
+    kind: str = "rgb"
+    # Modality-specific record needed to re-derive the analysis at measure time
+    # (e.g. calibration references for a cube). Never the pixels themselves.
+    extra: dict = field(default_factory=dict)
 
 
 class SessionStore:
@@ -62,6 +68,8 @@ class SessionStore:
         color_correct: bool = False,
         lineage: list[dict] | None = None,
         parent_id: str | None = None,
+        kind: str = "rgb",
+        extra: dict | None = None,
     ) -> Session:
         session = Session(
             session_id=str(uuid.uuid4()),
@@ -74,6 +82,8 @@ class SessionStore:
             color_correct=color_correct,
             lineage=[dict(op) for op in (lineage or [])],
             parent_id=parent_id,
+            kind=kind,
+            extra=dict(extra or {}),
         )
         with self._lock:
             self._sessions[session.session_id] = session

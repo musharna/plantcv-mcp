@@ -119,6 +119,10 @@ the methods, and the pinned PlantCV version.
 | `calibrate_scale_from_marker(image_path, x, y, w, h, marker_length_mm)` | `px_per_mm` from a marker of known real size            |
 | `measure_regions(session_id, nrows, ncols, ...)`                        | one row per plant in a tray, plus the numbered overlay  |
 | `measure_images(image_paths, channel, method, ...)`                     | one recipe across many images; traits only where valid  |
+| `segment_hyperspectral(envi_path, index, threshold, ...)`               | an HSI session from a spectral-index threshold + pseudo-RGB overlay |
+| `measure_spectral(session_id, indices, ...)`                            | index statistics (and, opt-in, per-band reflectance)    |
+| `segment_thermal(path, min_c, max_c, ...)`                              | a thermal session from a °C band + grey-frame overlay   |
+| `measure_thermal(session_id, ...)`                                      | max/min/mean/median °C under the mask                   |
 | `list_methods()`                                                        | channels, methods, object types, pinned PlantCV version |
 
 Typical loop: `suggest_segmentation` → `segment` → **look at the overlay** → `segment` again
@@ -334,6 +338,35 @@ looking at the overlay, then apply it here. A batch never returns a number the s
 validate — which is weaker than a human looking at a mask, and is stated plainly rather than
 implied.
 
+## Hyperspectral and thermal
+
+ENVI cubes (`.raw` + `.hdr`; give either path) segment by a **spectral index**:
+`segment_hyperspectral(envi_path, index="ndvi", threshold=…)` computes one of
+PlantCV's 31 indices, thresholds it, and returns the overlay on the cube's
+pseudo-RGB. Two measured facts drive the guards here:
+
+- Cubes are usually **integer counts**, and an index computed on integer data
+  wraps around silently — NDVI on a uint16 test cube read 65.3 on a [-1, 1]
+  index. So the cube is either **calibrated** to reflectance from
+  `white_reference` + `dark_reference` (refused if `white − dark` is not positive
+  everywhere: PlantCV would clip the degenerate case to 1.0 silently), or cast to
+  float with the `uncalibrated_cube` warning — the indices are then relative, not
+  reflectance.
+- An index the cube's wavelength range cannot support is **refused by name**,
+  not returned as null.
+
+`measure_spectral(session_id, indices=[…])` reports mean/median/std/min/max per
+index; the full per-band spectrum (hundreds of numbers per list) is opt-in via
+`include_spectrum`, with `band_count` always reported.
+
+Thermal frames — FLIR radiometric `.jpg` (via `flyr`), `.csv`, or `.npz` of
+degrees Celsius — segment **by temperature**: `segment_thermal(path, min_c,
+max_c)`. A thermal frame is a different sensor from the RGB camera, so a mask is
+never borrowed from an RGB session. `measure_thermal` reports max/min/mean/median
+°C via PlantCV's `analyze.thermal`; validated against PlantCV's own test frame to
+six decimal places and against a real FLIR JPEG. Sessions are typed (`rgb`, `hsi`,
+`thermal`) and every measurer refuses the wrong kind naming the right tool.
+
 ## Crash containment: the analysis worker
 
 Every PlantCV analysis (`measure`, `measure_regions`, `measure_morphology`,
@@ -400,7 +433,8 @@ multi-plant images — it measures each region separately and returns an overlay
 with the regions outlined and numbered.
 
 Morphology traits are single-plant (`measure_morphology()` refuses a tray); per-region
-morphology is not implemented yet.
+morphology is not implemented. Hyperspectral support covers ENVI cubes; other cube
+formats (nd2, ArcGIS) and photosynthesis (PSII) data are not exposed.
 
 Sessions are in-memory and capped (8 by default, LRU-evicted). They do not
 survive a server restart.

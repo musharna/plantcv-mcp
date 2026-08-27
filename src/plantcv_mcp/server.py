@@ -1,4 +1,4 @@
-"""MCP server. Six tools over a session store.
+"""MCP server. Thirteen tools over a typed session store (rgb / hsi / thermal).
 
 segment() mints a session and returns the overlay but NO traits; measure()
 requires that session. The split is deliberate: it forces the visual evidence
@@ -15,6 +15,7 @@ session store carries its own lock.
 """
 
 import json
+from typing import Any, NotRequired
 
 import numpy as np
 
@@ -31,6 +32,7 @@ from typing_extensions import TypedDict
 from . import __version__, plantcv_version
 from .color import correct_color
 from .diagnostics import analyze_mask, segmentation_warnings
+from .hyperspectral import load_cube
 from .imaging import (
     downscale,
     encode_png,
@@ -51,6 +53,7 @@ from .scale import calibrate_scale
 from .segmentation import CHANNELS, METHODS, OBJECT_TYPES, threshold_mask
 from .session import SessionStore
 from .suggest import colorspace_sheet, polarity_report, threshold_sheet
+from .thermal import load_thermal
 from .workers import dispatch, set_isolation
 
 _store = SessionStore()
@@ -86,7 +89,13 @@ overlay too, and measure the refined session. Trait tables carry `lineage`, the
 ops that produced their mask.
 
 Traits are in PIXELS unless you pass px_per_mm to measure(), and pixel sizes are
-not comparable between images taken at different distances or zoom levels.\
+not comparable between images taken at different distances or zoom levels.
+
+Hyperspectral ENVI cubes and thermal frames have their own segmenters
+(segment_hyperspectral, segment_thermal) and their own measurers
+(measure_spectral, measure_thermal); sessions are typed, and a session handed to
+the wrong measurer is refused naming the right one. The same rule holds
+everywhere: look at the returned overlay before trusting any number.\
 """
 
 
@@ -171,6 +180,34 @@ class BatchResult(TypedDict):
     recipe: BatchRecipe
     summary: BatchSummary
     results: list[BatchImageResult]
+    engine: dict[str, str]
+
+
+class SpectralMeasureResult(TypedDict):
+    """Return type of measure_spectral()."""
+
+    session_id: str
+    kind: str
+    indices: dict[str, dict[str, Any]]
+    band_count: int
+    wavelength_range: list[float]
+    calibration: str
+    pixel_count: int
+    warnings: list[WarningItem]
+    spectrum: NotRequired[dict[str, Any]]
+    histograms: NotRequired[dict[str, Any]]
+    engine: dict[str, str]
+
+
+class ThermalMeasureResult(TypedDict):
+    """Return type of measure_thermal()."""
+
+    session_id: str
+    kind: str
+    temperature: dict[str, Any]
+    pixel_count: int
+    frame_range: list[float]
+    histogram: NotRequired[dict[str, Any]]
     engine: dict[str, str]
 
 
@@ -326,7 +363,7 @@ def _measure_impl(
     include_histograms: bool = False,
 ) -> MeasureResult:
     requested = tuple(analyses) if analyses else ("size",)
-    session = _store.get(session_id)
+    session = _session_of(session_id, "rgb")
     img = _load_session_image(session)
     return {
         "session_id": session_id,
@@ -341,7 +378,7 @@ def _measure_impl(
 
 
 def _refine_impl(session_id: str, ops: list[dict]) -> dict:
-    session = _store.get(session_id)
+    session = _session_of(session_id, "rgb")
     validated = validate_ops(ops)  # all-or-nothing, before anything runs
     mask = dispatch("refine", session.mask, validated)  # refuses a degenerate result
     before = analyze_mask(session.mask)
@@ -393,7 +430,7 @@ def _measure_morphology_impl(
     tangent_size: int = 25,
     px_per_mm: float | None = None,
 ) -> dict:
-    session = _store.get(session_id)
+    session = _session_of(session_id, "rgb")
     img = _load_session_image(session)
     res = dispatch("morphology", img, session.mask, prune_size, tangent_size, px_per_mm)
     small, scale = downscale(res.overlay)
@@ -411,6 +448,210 @@ def _measure_morphology_impl(
         "overlay_scale": scale,
         "engine": {"name": "PlantCV", "version": plantcv_version()},
         "_png": png,
+    }
+
+
+TOOL_FOR_KIND = {
+    "rgb": "measure(), measure_regions(), measure_morphology() or refine()",
+    "hsi": "measure_spectral()",
+    "thermal": "measure_thermal()",
+}
+
+
+class WrongSessionKindError(Exception):
+    """A session of one modality was handed to a tool for another."""
+
+
+def _session_of(session_id: str, kind: str):
+    """The session, if it is of `kind`; otherwise refuse naming the right tool."""
+    session = _store.get(session_id)
+    if session.kind != kind:
+        raise WrongSessionKindError(
+            f"Session {session_id!r} is a {session.kind} session (from "
+            f"{'segment_hyperspectral' if session.kind == 'hsi' else 'segment_thermal' if session.kind == 'thermal' else 'segment'}()), "
+            f"not {kind}. Use {TOOL_FOR_KIND[session.kind]} for it."
+        )
+    return session
+
+
+def _load_session_cube(session):
+    load = load_cube(session.image_path)
+    if session.digest and load.digest != session.digest:
+        raise ImageChangedSinceSegmentationError(
+            f"The ENVI cube at {session.image_path!r} (or its .hdr) changed since "
+            "segment_hyperspectral() produced this session's mask (SHA-256 "
+            "mismatch). Re-run segment_hyperspectral() on the current files."
+        )
+    return load
+
+
+def _load_session_thermal(session):
+    load = load_thermal(session.image_path)
+    if session.digest and load.digest != session.digest:
+        raise ImageChangedSinceSegmentationError(
+            f"The thermal file at {session.image_path!r} changed since "
+            "segment_thermal() produced this session's mask (SHA-256 mismatch). "
+            "Re-run segment_thermal() on the current file."
+        )
+    if load.celsius.shape != session.shape:
+        raise ImageChangedSinceSegmentationError(
+            f"The thermal frame at {session.image_path!r} is now "
+            f"{load.celsius.shape} but was {session.shape} at segmentation."
+        )
+    return load
+
+
+def _summary(diag) -> dict:
+    return {
+        "mask_fraction": diag.mask_fraction,
+        "component_count": diag.component_count,
+        "major_object_count": diag.major_object_count,
+        "largest_area": diag.largest_area,
+    }
+
+
+def _segment_hsi_impl(
+    envi_path: str,
+    index: str = "ndvi",
+    threshold: float = 0.2,
+    object_type: str = "light",
+    white_reference: str | None = None,
+    dark_reference: str | None = None,
+    fill_size: int = 200,
+) -> dict:
+    check_readable(envi_path)
+    for ref in (white_reference, dark_reference):
+        if ref is not None:
+            check_readable(ref)
+    load = load_cube(envi_path)
+    seg = dispatch(
+        "hsi_segment",
+        load,
+        index=index,
+        threshold=threshold,
+        object_type=object_type,
+        white_reference=white_reference,
+        dark_reference=dark_reference,
+        fill_size=fill_size,
+    )
+    session = _store.create(
+        load.raw_path,
+        seg.mask,
+        channel=f"index:{index}",
+        method=f"threshold:{threshold}",
+        digest=load.digest,
+        kind="hsi",
+        extra={
+            "index": index,
+            "threshold": float(threshold),
+            "object_type": object_type,
+            "calibration": seg.calibration,
+            "calibration_args": seg.calibration_args,
+        },
+    )
+    small, scale = downscale(seg.overlay)
+    png = encode_png(small)
+    return {
+        "session_id": session.session_id,
+        "kind": "hsi",
+        "envi_path": load.raw_path,
+        "index": index,
+        "threshold": float(threshold),
+        "object_type": object_type,
+        "calibration": seg.calibration,
+        "index_range": list(seg.index_range),
+        "band_count": seg.band_count,
+        "wavelength_range": list(seg.wavelength_range),
+        **_summary(seg.diagnostics),
+        "overlay_scale": scale,
+        "overlay_png_bytes": len(png),
+        "warnings": [{"code": w.code, "message": w.message} for w in seg.warnings],
+        "engine": {"name": "PlantCV", "version": plantcv_version()},
+        "_png": png,
+    }
+
+
+def _measure_spectral_impl(
+    session_id: str,
+    indices: list[str] | None = None,
+    include_spectrum: bool = False,
+    include_histograms: bool = False,
+) -> SpectralMeasureResult:
+    session = _session_of(session_id, "hsi")
+    load = _load_session_cube(session)
+    res = dispatch(
+        "hsi_measure",
+        load,
+        session.mask,
+        indices=tuple(indices) if indices else (session.extra.get("index", "ndvi"),),
+        calibration=session.extra.get("calibration_args"),
+        include_spectrum=include_spectrum,
+        include_histograms=include_histograms,
+    )
+    return {
+        "session_id": session_id,
+        "kind": "hsi",
+        **res.as_dict(),
+        "engine": {"name": "PlantCV", "version": plantcv_version()},
+    }
+
+
+def _segment_thermal_impl(
+    path: str,
+    min_c: float | None = None,
+    max_c: float | None = None,
+    fill_size: int = 200,
+) -> dict:
+    check_readable(path)
+    load = load_thermal(path)
+    seg = dispatch(
+        "thermal_segment", load, path, min_c=min_c, max_c=max_c, fill_size=fill_size
+    )
+    session = _store.create(
+        path,
+        seg.mask,
+        channel="celsius",
+        method=f"band:{min_c}-{max_c}",
+        digest=load.digest,
+        kind="thermal",
+        extra={"min_c": min_c, "max_c": max_c, "source": seg.source},
+    )
+    small, scale = downscale(seg.overlay)
+    png = encode_png(small)
+    return {
+        "session_id": session.session_id,
+        "kind": "thermal",
+        "path": path,
+        "source": seg.source,
+        "min_c": min_c,
+        "max_c": max_c,
+        "frame_range": list(seg.frame_range),
+        **_summary(seg.diagnostics),
+        "overlay_scale": scale,
+        "overlay_png_bytes": len(png),
+        "warnings": [{"code": w.code, "message": w.message} for w in seg.warnings],
+        "engine": {"name": "PlantCV", "version": plantcv_version()},
+        "_png": png,
+    }
+
+
+def _measure_thermal_impl(
+    session_id: str, include_histograms: bool = False
+) -> ThermalMeasureResult:
+    session = _session_of(session_id, "thermal")
+    load = _load_session_thermal(session)
+    res = dispatch(
+        "thermal_measure",
+        load,
+        session.image_path,
+        session.mask,
+        include_histograms=include_histograms,
+    )
+    return {
+        "session_id": session_id,
+        "kind": "thermal",
+        **res.as_dict(),
+        "engine": {"name": "PlantCV", "version": plantcv_version()},
     }
 
 
@@ -446,7 +687,7 @@ def _measure_regions_impl(
     include_histograms: bool = False,
 ) -> dict:
     requested = tuple(analyses) if analyses else ("size",)
-    session = _store.get(session_id)
+    session = _session_of(session_id, "rgb")
     img = _load_session_image(session)
 
     regions = dispatch(
@@ -792,6 +1033,101 @@ def build_server() -> MCPServer:
             analyses=tuple(analyses) if analyses else ("size",),
             px_per_mm=px_per_mm,
         )
+
+    @mcp.tool(
+        title="Segment a hyperspectral cube by a spectral index (returns the overlay)",
+        annotations=READ_ONLY,
+    )
+    def segment_hyperspectral(
+        envi_path: str,
+        index: str = "ndvi",
+        threshold: float = 0.2,
+        object_type: str = "light",
+        white_reference: str | None = None,
+        dark_reference: str | None = None,
+        fill_size: int = 200,
+    ) -> list:
+        """Compute one spectral index over an ENVI cube (.raw/.hdr pair; give
+        either path) and threshold it into a mask, returning the overlay on the
+        cube's pseudo-RGB plus diagnostics — NOT numbers. Use the session_id
+        with measure_spectral().
+
+        Cubes are usually integer counts: an index computed on counts wraps
+        around silently, so the cube is either CALIBRATED to reflectance from
+        white_reference + dark_reference (ENVI pairs; refused if white - dark is
+        not positive everywhere) or cast to float with the `uncalibrated_cube`
+        warning, meaning indices are relative, not reflectance. index is any
+        PlantCV spectral index (list_methods reports them); one the cube's
+        wavelength range cannot support is refused by name. object_type picks
+        the side of the threshold that is the plant.
+        """
+        result = _segment_hsi_impl(
+            envi_path,
+            index=index,
+            threshold=threshold,
+            object_type=object_type,
+            white_reference=white_reference,
+            dark_reference=dark_reference,
+            fill_size=fill_size,
+        )
+        png = result.pop("_png")
+        return [json.dumps(result), Image(data=png, format="png")]
+
+    @mcp.tool(title="Measure spectral indices and reflectance", annotations=READ_ONLY)
+    def measure_spectral(
+        session_id: str,
+        indices: list[str] | None = None,
+        include_spectrum: bool = False,
+        include_histograms: bool = False,
+    ) -> SpectralMeasureResult:
+        """Per requested index: mean, median, std, min, max over the session's
+        mask, computed on the calibrated (or float-cast) cube exactly as
+        segment_hyperspectral() prepared it. indices defaults to the index the
+        session was segmented with. include_spectrum adds the per-band mean/
+        max/min/std reflectance — hundreds of numbers per list, off by default;
+        band_count is always reported. Refuses RGB and thermal sessions.
+        """
+        return _measure_spectral_impl(
+            session_id,
+            indices=indices,
+            include_spectrum=include_spectrum,
+            include_histograms=include_histograms,
+        )
+
+    @mcp.tool(
+        title="Segment a thermal frame by temperature (returns the overlay)",
+        annotations=READ_ONLY,
+    )
+    def segment_thermal(
+        path: str,
+        min_c: float | None = None,
+        max_c: float | None = None,
+        fill_size: int = 200,
+    ) -> list:
+        """Read a FLIR radiometric .jpg (via flyr), a .csv, or a .npz of degrees
+        Celsius and select the pixels between min_c and max_c (give at least
+        one) as the plant. Returns the overlay on a grey rendering of the frame,
+        the frame's temperature range and diagnostics — NOT numbers; use the
+        session_id with measure_thermal(). A thermal frame is a different
+        sensor from the RGB camera, so a mask is never borrowed from an RGB
+        session. A band that selects nothing is refused.
+        """
+        result = _segment_thermal_impl(
+            path, min_c=min_c, max_c=max_c, fill_size=fill_size
+        )
+        png = result.pop("_png")
+        return [json.dumps(result), Image(data=png, format="png")]
+
+    @mcp.tool(title="Measure temperatures under a thermal mask", annotations=READ_ONLY)
+    def measure_thermal(
+        session_id: str, include_histograms: bool = False
+    ) -> ThermalMeasureResult:
+        """max, min, mean and median degrees Celsius over the session's mask,
+        via PlantCV's analyze.thermal, plus the pixel count and the frame's
+        range. include_histograms adds the 100-bin temperature histogram.
+        Refuses RGB and hyperspectral sessions.
+        """
+        return _measure_thermal_impl(session_id, include_histograms=include_histograms)
 
     return mcp
 
