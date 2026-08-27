@@ -40,6 +40,7 @@ from .imaging import (
     render_region_overlay,
 )
 from .measurement import ANALYSES, TraitValue
+from .paths import check_readable, configured_roots, set_roots
 from .refine import (
     REFINE_OPS,
     refinement_warnings,
@@ -183,6 +184,8 @@ class MethodsInfo(TypedDict):
     analyses: list[str]
     region_modes: list[str]
     refine_ops: dict[str, dict]
+    # The read-root policy in force: realpaths, or null when unrestricted.
+    read_roots: list[str] | None
     guidance: str
 
 
@@ -204,6 +207,7 @@ def list_methods_impl() -> MethodsInfo:
         "analyses": list(ANALYSES),
         "region_modes": list(REGION_MODES),
         "refine_ops": REFINE_OPS,
+        "read_roots": configured_roots(),
         "guidance": (
             "Pick a channel AND the object_type that goes with it. object_type "
             "says which side of the threshold is the plant: 'dark' selects "
@@ -233,7 +237,7 @@ def _segment_impl(
     # The digest is of the SAME bytes the mask is about to be drawn on. Hashing
     # the path afterwards left a window in which a same-shape replacement was
     # recorded as this mask's identity.
-    img, digest = load_image_with_digest(image_path)
+    img, digest = load_image_with_digest(check_readable(image_path))
     if color_correct:
         # Raises if no card is found. Silently measuring an uncorrected image after
         # being asked to correct it would be the same confident wrongness as an
@@ -524,7 +528,7 @@ def build_server() -> MCPServer:
         """Return colourspace and threshold contact sheets, plus what each
         object_type would yield on this image, so the channel/method/polarity
         choice is informed rather than blind. Call this before segment()."""
-        img = load_image(image_path)
+        img = load_image(check_readable(image_path))
         cs, cs_scale = downscale(colorspace_sheet(img))
         th, th_scale = downscale(threshold_sheet(img, channel))
         return [
@@ -724,7 +728,7 @@ def build_server() -> MCPServer:
         circular marker. Check the returned marker_length_px against what you
         expect: a wrong scale silently rescales every trait you measure afterwards.
         """
-        img = load_image(image_path)
+        img = load_image(check_readable(image_path))
         est = calibrate_scale(
             img,
             x,
@@ -772,6 +776,9 @@ def build_server() -> MCPServer:
         exactly what ran. An image that cannot be colour-corrected when asked is
         refused, not measured raw. Limit is 200 images per call.
         """
+        # Every path is checked BEFORE any is loaded: a batch with one stray
+        # path is refused whole, not partially run.
+        image_paths = [check_readable(p) for p in image_paths]
         return dispatch(
             "batch",
             image_paths,
@@ -807,7 +814,18 @@ def main() -> None:
             "runs analyses in-process."
         ),
     )
+    parser.add_argument(
+        "--root",
+        action="append",
+        metavar="DIR",
+        help=(
+            "only read images under DIR (repeatable; also PLANTCV_MCP_ROOTS, "
+            "os.pathsep-separated). Unset: read anything the host user can read."
+        ),
+    )
     args = parser.parse_args()
     if args.isolate is not None:
         set_isolation(args.isolate)
+    if args.root:
+        set_roots(args.root)
     build_server().run()

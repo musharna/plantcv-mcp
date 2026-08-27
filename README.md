@@ -350,6 +350,24 @@ cross a pipe), against a gate of 25 % that would have made it opt-in. The first
 analysis after start-up pays the worker's import (~1 s). Turn it off with
 `plantcv-mcp --no-isolate` or `PLANTCV_MCP_ISOLATE=0`.
 
+## Restricting what the server may read
+
+By default the server reads any image the host user can read (below). To confine
+it, name one or more directories:
+
+```bash
+plantcv-mcp --root /data/phenotyping --root /data/trials
+# or
+PLANTCV_MCP_ROOTS=/data/phenotyping:/data/trials plantcv-mcp
+```
+
+Every path argument — `segment`, `suggest_segmentation`,
+`calibrate_scale_from_marker`, every entry of `measure_images` — is resolved with
+symlinks and `..` followed **first**, then checked against the roots; a symlink
+inside a root pointing outside is refused, and a batch with one stray path is
+refused whole before anything is read. `list_methods()` reports the policy as
+`read_roots`.
+
 ## Security and trust boundary
 
 **This server reads image files anywhere on the host filesystem, and returns
