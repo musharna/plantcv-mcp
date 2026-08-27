@@ -36,3 +36,7 @@ env/
 
 .DS_Store
 Thumbs.db
+
+# Local agent scratch: Codex consult threads and Claude worktrees.
+.codex-consult/
+.claude/

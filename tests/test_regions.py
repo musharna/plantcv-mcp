@@ -248,3 +248,128 @@ def test_coord_of_the_wrong_length_is_refused(tmp_path):
     assert _as_xy([1, 2], "coord") == (1, 2)
     with pytest.raises(RegionSpecError, match="exactly"):
         _as_xy([1, 2, 3], "spacing")
+
+
+# --- geometry validation: malformed rect_grid input must be refused up front ---
+#
+# `pcv.roi.multi_rect` accepts any integers, and a rectangle that starts off the
+# image reached native OpenCV/PlantCV code inside `measure_regions` and killed
+# the whole process with SIGSEGV (exit 139) — measured on PlantCV 4.11.3 with the
+# exact values in test_rect_grid_refuses_cells_outside_the_image below. A crash
+# in a stdio server takes every session with it, so the wire schema's leniency
+# has to be closed here, before anything native is called.
+
+
+def _small_scene():
+    img = np.zeros((100, 100, 3), np.uint8)
+    mask = np.zeros((100, 100), np.uint8)
+    mask[20:40, 20:40] = 255
+    return img, mask
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"height": 0},
+        {"height": -5},
+        {"width": 0},
+        {"width": -50},
+    ],
+)
+def test_rect_grid_refuses_nonpositive_cell_dimensions(bad):
+    img, mask = _small_scene()
+    spec = {
+        "mode": "rect_grid",
+        "nrows": 1,
+        "ncols": 1,
+        "coord": (10, 10),
+        "height": 50,
+        "width": 50,
+        **bad,
+    }
+    with pytest.raises(RegionSpecError, match="positive"):
+        build_regions(img, mask, spacing=(50, 50), **spec)
+
+    # Positive control: the same spec with sane dimensions is accepted.
+    good = build_regions(
+        img,
+        mask,
+        mode="rect_grid",
+        nrows=1,
+        ncols=1,
+        coord=(10, 10),
+        height=50,
+        width=50,
+        spacing=(50, 50),
+    )
+    assert good.bboxes == [(10, 10, 50, 50)]
+
+
+def test_rect_grid_requires_spacing_even_for_a_single_cell():
+    """Pinned PlantCV rejects spacing=None outright, so allowing it for a 1x1
+    grid only moved the error somewhere with a worse message."""
+    img, mask = _small_scene()
+    with pytest.raises(RegionSpecError, match="spacing"):
+        build_regions(
+            img,
+            mask,
+            mode="rect_grid",
+            nrows=1,
+            ncols=1,
+            coord=(10, 10),
+            height=50,
+            width=50,
+            spacing=None,
+        )
+
+
+@pytest.mark.parametrize(
+    "coord, spacing, nrows, ncols",
+    [
+        ((-10, -10), (0, 0), 1, 1),  # the SIGSEGV case
+        ((500, 500), (50, 50), 1, 1),  # entirely off a 100px image
+        ((10, 10), (60, 60), 2, 2),  # second column runs past the right edge
+        ((10, 10), (-60, -60), 2, 2),  # negative spacing walks off the top-left
+    ],
+)
+def test_rect_grid_refuses_cells_outside_the_image(coord, spacing, nrows, ncols):
+    img, mask = _small_scene()
+    with pytest.raises(RegionSpecError, match="outside"):
+        build_regions(
+            img,
+            mask,
+            mode="rect_grid",
+            nrows=nrows,
+            ncols=ncols,
+            coord=coord,
+            height=50,
+            width=50,
+            spacing=spacing,
+        )
+
+
+def test_in_bounds_rect_grid_still_measures():
+    """Positive control for the bounds guard: a valid grid on the same scene
+    both builds and measures, so the refusals above are not rejecting
+    rect_grid wholesale."""
+    img, mask = _small_scene()
+    regions = build_regions(
+        img,
+        mask,
+        mode="rect_grid",
+        nrows=1,
+        ncols=1,
+        coord=(10, 10),
+        height=50,
+        width=50,
+        spacing=(50, 50),
+    )
+    out = measure_regions(img, mask, regions)
+    assert out[0]["measured"] is True
+    assert out[0]["traits"]["area"]["value"] == 400.0
+
+
+def test_auto_grid_refuses_nonpositive_radius():
+    img, mask = _tray()
+    with pytest.raises(RegionSpecError, match="radius"):
+        build_regions(img, mask, mode="auto_grid", nrows=2, ncols=2, radius=0)

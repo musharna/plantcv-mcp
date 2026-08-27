@@ -6,6 +6,82 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+Findings of an adversarial audit run against 0.4.1 (Codex consult, every item
+reproduced before it was fixed). Three were correctness defects in the shipped
+runtime, not backlog.
+
+### Fixed
+
+- **Concurrent measurements corrupted each other through `pcv.outputs`.** The
+  server's safety argument — synchronous tools run inline on the event loop, so
+  two analyses can never interleave — was true for mcp 1.28.1 and became false
+  when the dependency floor moved to `mcp>=2`: mcp 2.x runs synchronous tools on
+  worker threads (`func_metadata.py`: `anyio.to_thread.run_sync`) and dispatches
+  requests concurrently. Reproduced with two sessions and a widened window: one
+  thread's `pcv.outputs.clear()` erased the other's observations (`Expected
+observation group 'default_1' not found`), and one call returned the OTHER
+  session's area as its own. One process-wide lock (`measurement.PCV_OUTPUTS_LOCK`,
+  via `isolated_pcv_outputs`) now guards the snapshot → clear → analyze → read →
+  restore section in both `measure()` and `measure_regions()`; the regression test
+  drives a cross-path pair on two threads and fails without it.
+- **Malformed `rect_grid` geometry crashed the whole server.** `coord=[-10, -10]`
+  with a 50×50 cell on a 100×100 image passed `build_regions` and reached native
+  OpenCV/PlantCV inside `measure_regions`, which died with SIGSEGV (exit 139) —
+  taking every session with it, since this is a stdio server. `build_regions` now
+  refuses non-positive `height`/`width`, non-positive `radius`, a missing
+  `spacing` (required even for one cell: pinned PlantCV rejects it with a message
+  that blames the wrong argument), and any cell that lies partly outside the
+  image. An off-image cell previously reported "No plant material" — misleading,
+  since the cell was off the frame, not empty.
+- **Time-of-check/time-of-use hole in the stale-image guard, in both
+  directions.** `segment()` decoded the file, built the mask, and only then hashed
+  the path; `measure()` decoded and then hashed separately. A same-shape
+  replacement landing in either window bound the OLD mask to the NEW file's hash,
+  and the integrity check then passed. Both paths now read the bytes once, hash
+  those bytes, and decode those bytes (`imaging.load_image_with_digest`); the
+  regression swaps the file mid-segmentation and expects `measure()` to refuse.
+- **`SessionStore` was not thread-safe.** `get()` is check-then-act and
+  `create()` is insert-then-evict; under mcp 2.x worker threads an interleaving
+  raised a bare `KeyError` for a session present a moment earlier. The store now
+  carries its own lock (deliberately not the PlantCV analysis lock).
+- **`pcv.outputs` restore was incomplete.** `clear()` resets `measurements`,
+  `images`, `observations` and `metadata`; only `observations` was restored, so a
+  host application using PlantCV directly had three tables silently emptied.
+
+### Changed
+
+- **`measure_images` now takes the whole recipe: `ksize`, `offset` and
+  `color_correct`.** The tool tells users to settle a recipe with `segment()` and
+  apply it, but could not accept the kernel parameters of the `mean`/`gaussian`
+  methods or the colour-correction flag, so it silently ran a different threshold:
+  1900 px vs 4536 px on the same file. The returned `recipe` records all three.
+  An image that cannot be colour-corrected when asked is refused with the reason
+  (`ColorCardNotFoundError`), never measured raw.
+- **Every number-bearing result names its engine.** `engine: {name, version}`
+  was added to `measure()` in 0.4.0 and is now on `measure_regions` and
+  `measure_images` too; a stored trait table from any tool can say what produced
+  it.
+- **The server identifies its version at initialize.** `MCPServer` defaults
+  `version` to `""`, and that empty string is what clients saw in `serverInfo`.
+  Now `version=__version__`, checked through a real in-memory client handshake.
+- The `plantcv==4.11.3` pin is described as PlantCV-version stability rather
+  than determinism: `uvx plantcv-mcp` does not consume this repository's
+  `uv.lock`, so the rest of the dependency set may vary within bounds.
+
+### CI
+
+- The sdist "exactly what we intend" step asserts every file in the allow-list
+  (`CONTRIBUTING.md`, `SECURITY.md`, `CITATION.cff` were not checked).
+- The citation workflow also holds `CITATION.cff` `date-released` to the
+  CHANGELOG date for the pyproject version; its error message had instructed
+  updating both fields while checking one.
+- The installed-wheel smoke test now runs the `plantcv-mcp` console script as a
+  real stdio subprocess and completes an initialize handshake, instead of only
+  importing the package and listing tools in-process.
+- `tests/test_concurrency.py` (forced-interleave races), MCP-layer tests for
+  `calibrate_scale_from_marker` and invalid geometry (`ToolError`, not a crash),
+  and batch-parity tests through `call_tool`.
+
 ## [0.4.1] — 2026-08-02
 
 ### Added

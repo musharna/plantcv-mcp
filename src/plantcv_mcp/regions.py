@@ -43,6 +43,7 @@ from .measurement import (
     TraitValue,
     UnknownAnalysisError,
     convert_units,
+    isolated_pcv_outputs,
 )
 
 # Modes map one-to-one onto real PlantCV constructors. No mode is synthesised
@@ -140,6 +141,8 @@ def build_regions(
             f"{nrows}x{ncols} = {nrows * ncols} regions exceeds the {MAX_REGIONS} "
             "cap. Each region costs a full analysis pass; split the image instead."
         )
+    if radius is not None and radius <= 0:
+        raise RegionSpecError(f"radius must be positive, got {radius}.")
 
     warnings: list[Advisory] = []
 
@@ -169,10 +172,21 @@ def build_regions(
                 "Nothing is guessed here: a wrong cell origin silently measures "
                 "the neighbouring plant."
             )
-        if (nrows > 1 or ncols > 1) and spacing is None:
+        # `height`/`width`/`coord` are checked for None above, so the narrowing
+        # here is for the type checker; the values are real by this point.
+        assert height is not None and width is not None and coord is not None
+        if height <= 0 or width <= 0:
             raise RegionSpecError(
-                "mode='rect_grid' with more than one cell needs `spacing` "
-                "(x, y) between cell origins."
+                f"height and width must be positive, got {height}x{width}. A "
+                "zero-height cell measured a two-pixel sliver and called it a "
+                "plant; a negative one is a cell drawn backwards."
+            )
+        if spacing is None:
+            # Required even for one cell: pinned PlantCV rejects a grid without
+            # it, and its message blames the wrong argument.
+            raise RegionSpecError(
+                "mode='rect_grid' needs `spacing` [x, y] between cell origins, "
+                "even for a single cell (use [0, 0] there)."
             )
         rois = pcv.roi.multi_rect(
             img=img,
@@ -185,6 +199,23 @@ def build_regions(
         )
 
     bboxes = _bboxes_from(rois)
+
+    if mode == "rect_grid":
+        # Hand-entered geometry can put a cell partly or wholly off the frame.
+        # Such a rectangle does not measure nothing — it reached native
+        # OpenCV/PlantCV code inside measure_regions and killed the process
+        # with SIGSEGV (PlantCV 4.11.3: coord=(-10,-10), 50x50 on a 100x100
+        # image). Refuse it here, before anything native runs.
+        img_h, img_w = int(mask.shape[0]), int(mask.shape[1])
+        for i, (x, y, w, h) in enumerate(bboxes):
+            if x < 0 or y < 0 or x + w > img_w or y + h > img_h:
+                row, col = divmod(i, ncols)
+                raise RegionSpecError(
+                    f"Region row {row} col {col} at ({x}, {y}) size {w}x{h} lies "
+                    f"outside the {img_w}x{img_h} image. Every cell must fit "
+                    "entirely inside the frame; check coord, height, width and "
+                    "spacing."
+                )
     if len(bboxes) != nrows * ncols:
         # Not an error: auto_grid can return fewer if it cannot resolve the
         # layout. Say so rather than silently measuring a different grid.
@@ -250,9 +281,8 @@ def measure_regions(
             f"No analyses requested. Choose at least one of {list(ANALYSES)}."
         )
 
-    saved = dict(pcv.outputs.observations)
-    pcv.outputs.clear()
-    try:
+    # The SAME lock as measure_traits: both paths write and read the one global.
+    with isolated_pcv_outputs():
         labeled, n = pcv.create_labels(mask=mask, rois=regions.rois, roi_type="partial")
         # Labels actually carrying pixels. A region whose label is absent here is
         # empty -- this is the only reliable discriminator, since the analysis
@@ -330,6 +360,3 @@ def measure_regions(
                 )
             )
         return out
-    finally:
-        pcv.outputs.clear()
-        pcv.outputs.observations.update(saved)

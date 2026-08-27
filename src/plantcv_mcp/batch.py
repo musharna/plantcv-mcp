@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 
 from plantcv import plantcv as pcv
 
+from . import plantcv_version
+from .color import correct_color
 from .diagnostics import BLOCKING_CODES, Advisory, analyze_mask, segmentation_warnings
 from .imaging import load_image
 from .measurement import measure_traits
@@ -58,11 +60,19 @@ def measure_batch(
     analyses: tuple[str, ...] = ("size",),
     px_per_mm: float | None = None,
     include_histograms: bool = False,
+    color_correct: bool = False,
 ) -> dict:
     """Segment and measure many images with one fixed recipe.
 
+    The recipe is EVERYTHING segment() takes — channel, method, object_type,
+    fill_size, ksize, offset, color_correct — so a recipe settled interactively
+    reproduces here exactly. A batch that silently ran default ksize/offset for a
+    'mean' threshold, or skipped the colour correction, measured a different mask
+    than the one the user had looked at: 1900 px vs 4536 px on the same file.
+
     Returns a per-image entry and a summary. Images whose guards fire are reported
-    with `measured: false` and a reason, never with traits.
+    with `measured: false` and a reason, never with traits. An image that cannot
+    be colour-corrected when asked is refused the same way — never measured raw.
     """
     if not image_paths:
         raise ValueError("image_paths is empty; nothing to measure.")
@@ -76,6 +86,11 @@ def measure_batch(
     for path in image_paths:
         try:
             img = load_image(path)
+            if color_correct:
+                # Raises ColorCardNotFoundError without a card; caught below and
+                # reported per-image, so the run continues and the image is
+                # refused rather than measured uncorrected.
+                img = correct_color(img)
             pre_fill = threshold_mask(
                 img,
                 channel,
@@ -161,9 +176,15 @@ def measure_batch(
             "method": method,
             "object_type": object_type,
             "fill_size": fill_size,
+            "ksize": ksize,
+            "offset": offset,
+            "color_correct": color_correct,
             "analyses": list(analyses),
             "px_per_mm": px_per_mm,
         },
+        # Which PlantCV produced these numbers, travelling WITH them — the same
+        # provenance measure() carries, for the same reason.
+        "engine": {"name": "PlantCV", "version": plantcv_version()},
         "summary": {
             "submitted": len(image_paths),
             "measured": len(measured),

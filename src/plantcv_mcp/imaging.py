@@ -4,36 +4,66 @@ import hashlib
 
 import cv2
 import numpy as np
-from plantcv import plantcv as pcv
 
 OVERLAY_BGR = np.array([0, 0, 255], dtype=np.float64)  # red in BGR
 OVERLAY_ALPHA = 0.55
 
 
-def load_image(path: str) -> np.ndarray:
-    """Load an image as BGR.
+def read_image_bytes(path: str) -> bytes:
+    """Read the file ONCE. Everything derived from it — pixels and identity —
+    comes from these bytes, never from a second look at the path."""
+    try:
+        with open(path, "rb") as fh:
+            return fh.read()
+    except OSError as exc:
+        # Same message shape pcv.readimage used, so callers and tests that
+        # match on "Failed to open <path>" keep working.
+        raise RuntimeError(f"Failed to open {path}: {exc.strerror or exc}") from exc
 
-    pcv.readimage already raises RuntimeError("Failed to open <path>") for both
-    missing and non-image files, so we let it propagate with the path intact
-    rather than wrapping it into something vaguer.
+
+def decode_image(data: bytes, path: str) -> np.ndarray:
+    """Decode bytes the way pcv.readimage(mode="native") decodes a file.
+
+    Native mode is cv2.IMREAD_UNCHANGED, falling back to a 3-channel read when
+    the result carries an alpha channel. Reproduced here rather than delegated
+    because pcv.readimage only accepts a PATH, and re-reading the path is the
+    time-of-check/time-of-use hole this module exists to close.
     """
-    img, _, _ = pcv.readimage(path)
+    buf = np.frombuffer(data, dtype=np.uint8)
+    img = cv2.imdecode(buf, cv2.IMREAD_UNCHANGED)
+    if img is not None and img.ndim == 3 and img.shape[2] == 4:
+        img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+    if img is None:
+        raise RuntimeError(f"Failed to open {path}")
     return img
 
 
-def file_digest(path: str) -> str:
-    """SHA-256 of the file's bytes.
+def digest_bytes(data: bytes) -> str:
+    """SHA-256 of the bytes.
 
     The stale-image guard used to compare only the image's SHAPE, so swapping the
     file for a DIFFERENT image of identical dimensions passed the check and
     measured the old mask against new content. Shape is a weak proxy for
     identity; the bytes are the identity.
     """
-    h = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    return hashlib.sha256(data).hexdigest()
+
+
+def load_image_with_digest(path: str) -> tuple[np.ndarray, str]:
+    """Load an image and the SHA-256 of the exact bytes it was decoded from.
+
+    Hashing the PATH after decoding left a window: a same-shape replacement
+    landing between the decode and the hash bound the old pixels' mask to the
+    new file's identity, and the later integrity check then passed. One read,
+    one hash of that read, one decode of that read — there is no window.
+    """
+    data = read_image_bytes(path)
+    return decode_image(data, path), digest_bytes(data)
+
+
+def load_image(path: str) -> np.ndarray:
+    """Load an image as BGR (native mode; alpha dropped)."""
+    return load_image_with_digest(path)[0]
 
 
 def downscale(img: np.ndarray, max_edge: int = 1024) -> tuple[np.ndarray, float]:
