@@ -6,6 +6,43 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-08-27
+
+Sub-project B of the roadmap. Design: `docs/superpowers/specs/2026-08-27-morphology-design.md`.
+
+### Added
+
+- **`measure_morphology(session_id, prune_size=15, tangent_size=25, px_per_mm)` —
+  skeleton-based traits for one plant**, returning PlantCV's per-segment table
+  (path/euclidean length, curvature, angle, tangent and insertion angle), per-plant
+  stem height/length/angle, tip and branch-point counts, cycles and segment widths,
+  together with the **numbered-segment overlay**: a segment `id` is the number on
+  the picture. Runs entirely under `PCV_OUTPUTS_LOCK` — 15 of PlantCV's 19
+  morphology functions report only through `pcv.outputs`.
+  Every guard below was measured on PlantCV 4.11.3 against a synthetic plant of
+  known geometry (stem + three leaves at 30/45/60°, lengths 90/80/70 px):
+  - **A vertical stem yields `stem_angle = -14373°`** (PlantCV's slope-based
+    estimate blows up). Returned as `null` with `stem_angle_undefined` instead of
+    as a number.
+  - **`tangent_size` default 25 is measured, not guessed.** Insertion-angle bias
+    fell from 24.5° (10 px) to 5.9° (25) to 4.2° (30); PlantCV fits `size` pixels
+    from each end, so `2 × size` longer than a leaf collapses its angle to `0.0`
+    (`segment_tangent_angle.py:102`). `tangent_window_exceeds_segment` flags it.
+  - **`prune_size_sensitive`** when the segment count changes by >30% at twice
+    the prune size — then the table describes the parameter, not the plant.
+  - **PlantCV's own abort on a fragmented skeleton** ("Too many tips found per
+    segment, try pruning again") arrives as a refusal carrying the segment counts
+    at `prune_size` and `2×prune_size`, not as a stack trace.
+  - PlantCV's `segment_id` reuses a process-global cached colour palette
+    (`params.saved_color_scale`) and indexes past it when a later plant has more
+    segments; the cache is reset inside the lock.
+  - Leaf-less skeletons (a bare stem, a ring) are reported with an empty table and
+    `no_leaf_segments`, so cycles/tips/stem can still say why. Multi-plant masks
+    are refused naming `measure_regions()` and `refine(keep_largest)`.
+  - Known-geometry eval: leaves recovered in order, insertion angles within 12°,
+    lengths within 15%; `stem_height` is PlantCV's base→topmost-junction height.
+  - `'NA'` strings PlantCV emits for undefined traits become `null`.
+
 ## [0.6.0] — 2026-08-27
 
 First step of the post-0.5.0 roadmap

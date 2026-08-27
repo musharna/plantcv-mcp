@@ -1,6 +1,6 @@
 [project]
 name = "plantcv-mcp"
-version = "0.6.0"
+version = "0.7.0"
 description = "MCP server exposing PlantCV as a measurement instrument — traits plus the segmentation overlay they came from"
 readme = "README.md"
 license = "MIT"

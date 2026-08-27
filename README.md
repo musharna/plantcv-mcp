@@ -114,6 +114,7 @@ the methods, and the pinned PlantCV version.
 | `suggest_segmentation(image_path, channel, method)`                     | contact sheets, and what each `object_type` would yield |
 | `segment(image_path, channel, method, ...)`                             | overlay + diagnostics + warnings — **no traits**        |
 | `refine(session_id, ops)`                                               | a NEW session with a cleaned-up mask, plus its overlay  |
+| `measure_morphology(session_id, prune_size, tangent_size, ...)`         | leaf/stem skeleton traits + the numbered-segment overlay |
 | `measure(session_id, analyses, px_per_mm, ...)`                         | traits, or a raised error on a degenerate mask          |
 | `calibrate_scale_from_marker(image_path, x, y, w, h, marker_length_mm)` | `px_per_mm` from a marker of known real size            |
 | `measure_regions(session_id, nrows, ncols, ...)`                        | one row per plant in a tray, plus the numbered overlay  |
@@ -202,6 +203,33 @@ turned into a session that measures zeros.
 measurable, so a refinement you dislike is simply discarded. Trait tables from a
 refined session carry `lineage`, the ops that produced their mask, so two tables
 made differently can be told apart.
+
+## Morphology: leaves, stem, branch points
+
+`measure_morphology(session_id)` skeletonises the mask and returns PlantCV's
+skeleton traits for **one plant**: per segment, path length, euclidean length,
+curvature, angle, tangent angle and insertion angle; per plant, stem height, length
+and angle, tip and branch-point counts, cycles, and segment widths. It returns the
+**numbered-segment overlay** with the table — a segment `id` is the number drawn on
+the picture — because a per-segment number is unreadable without it.
+
+Three things here are guards, not pass-throughs, all measured on PlantCV 4.11.3
+against a synthetic plant of known geometry:
+
+- A perfectly vertical stem makes PlantCV report `stem_angle = -14373°`. That is not
+  an angle, so it is returned as `null` with `stem_angle_undefined`.
+- `tangent_size` (default 25 px, chosen from a bias sweep) is the window PlantCV fits
+  tangents on, from **each** end of a segment. A window longer than half a leaf
+  collapses that leaf's insertion angle to `0.0`; `tangent_window_exceeds_segment`
+  says so instead of letting the zero read as a measurement.
+- `prune_size` decides how many segments a skeleton has. When the count changes by
+  more than 30% at twice the value, `prune_size_sensitive` tells you the table
+  describes the parameter, not the plant. A skeleton PlantCV cannot analyse at all
+  is refused with those counts, not a stack trace.
+
+Multi-plant masks are refused by name — use `measure_regions()` for a tray or
+`refine(keep_largest)` to isolate one plant first. Lengths scale with `px_per_mm`;
+angles are always degrees.
 
 ## What it measures
 
@@ -337,8 +365,8 @@ so on a tray it merges every plant into one object. Use `measure_regions()` for
 multi-plant images — it measures each region separately and returns an overlay
 with the regions outlined and numbered.
 
-Morphology traits (leaf angles, stem, skeleton) are not implemented yet; mask
-refinement is (`refine()`, above).
+Morphology traits are single-plant (`measure_morphology()` refuses a tray); per-region
+morphology is not implemented yet.
 
 Sessions are in-memory and capped (8 by default, LRU-evicted). They do not
 survive a server restart.

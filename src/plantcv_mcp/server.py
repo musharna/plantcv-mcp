@@ -41,6 +41,7 @@ from .imaging import (
     render_region_overlay,
 )
 from .measurement import ANALYSES, TraitValue, measure_traits
+from .morphology import measure_morphology
 from .refine import (
     REFINE_OPS,
     apply_refinements,
@@ -389,6 +390,39 @@ def _refine_impl(session_id: str, ops: list[dict]) -> dict:
     }
 
 
+def _measure_morphology_impl(
+    session_id: str,
+    prune_size: int = 15,
+    tangent_size: int = 25,
+    px_per_mm: float | None = None,
+) -> dict:
+    session = _store.get(session_id)
+    img = _load_session_image(session)
+    res = measure_morphology(
+        img,
+        session.mask,
+        prune_size=prune_size,
+        tangent_size=tangent_size,
+        px_per_mm=px_per_mm,
+    )
+    small, scale = downscale(res.overlay)
+    png = encode_png(small)
+    return {
+        "session_id": session_id,
+        "lineage": [dict(op) for op in session.lineage],
+        "prune_size": res.prune_size,
+        "tangent_size": res.tangent_size,
+        "px_per_mm": px_per_mm,
+        "plant": res.plant,
+        "segments": res.segments,
+        "units": res.units,
+        "warnings": [{"code": w.code, "message": w.message} for w in res.warnings],
+        "overlay_scale": scale,
+        "engine": {"name": "PlantCV", "version": plantcv_version()},
+        "_png": png,
+    }
+
+
 def _as_xy(pair: list[int] | None, name: str) -> tuple[int, int] | None:
     """Coerce an [x, y] list from the wire into a checked 2-tuple.
 
@@ -646,6 +680,42 @@ def build_server() -> MCPServer:
             analyses=analyses,
             px_per_mm=px_per_mm,
             include_histograms=include_histograms,
+        )
+        png = result.pop("_png")
+        return [json.dumps(result), Image(data=png, format="png")]
+
+    @mcp.tool(
+        title="Measure morphology: leaves, stem, branch points (returns the overlay)",
+        annotations=READ_ONLY,
+    )
+    def measure_morphology(
+        session_id: str,
+        prune_size: int = 15,
+        tangent_size: int = 25,
+        px_per_mm: float | None = None,
+    ) -> list:
+        """Skeleton-based traits for ONE plant: per-segment path and euclidean
+        length, curvature, angle, tangent angle and insertion angle, plus stem
+        height/length/angle, tip and branch-point counts, cycles and widths.
+        Returns the numbered-segment overlay with the table — segment `id` is
+        the number drawn on the picture.
+
+        prune_size removes skeleton spurs shorter than itself; the response
+        warns (prune_size_sensitive) when the segment count changes by >30% at
+        twice this value, because then the table describes the parameter, not
+        the plant. tangent_size is the pixel window for tangent/insertion
+        angles (default 25, measured: smaller windows bias insertion angles
+        upward, a window longer than a leaf collapses its angle to 0 — flagged
+        as tangent_window_exceeds_segment). A vertical stem has no defined angle: stem_angle is null with
+        a warning rather than a nonsense number. Multi-plant masks are refused;
+        use measure_regions() or refine(keep_largest) first. px_per_mm scales
+        lengths only; angles stay in degrees.
+        """
+        result = _measure_morphology_impl(
+            session_id,
+            prune_size=prune_size,
+            tangent_size=tangent_size,
+            px_per_mm=px_per_mm,
         )
         png = result.pop("_png")
         return [json.dumps(result), Image(data=png, format="png")]
