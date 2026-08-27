@@ -1,14 +1,20 @@
 # Security Policy
 
+## Read scope
+
+The server reads image files from any path the host user can read unless
+`--root DIR` / `PLANTCV_MCP_ROOTS` confines it; see README "Restricting what the
+server may read". Report a path that escapes a configured root as a vulnerability.
+
 ## Supported versions
 
 `plantcv-mcp` ships fixes against the latest released version only. The current
-release is **v0.8.0**. Please reproduce any issue on the latest release
+release is **v0.9.0**. Please reproduce any issue on the latest release
 (`uvx plantcv-mcp` always pulls it) before reporting.
 
 | Version         | Supported          |
 | --------------- | ------------------ |
-| latest (0.8.x) | :white_check_mark: |
+| latest (0.9.x) | :white_check_mark: |
 | < latest        | :x:                |
 
 ## Reporting a vulnerability

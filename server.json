@@ -8,13 +8,13 @@
     "url": "https://github.com/musharna/plantcv-mcp",
     "source": "github"
   },
-  "version": "0.8.0",
+  "version": "0.9.0",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "plantcv-mcp",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
@@ -24,7 +24,7 @@
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
       "tool": "manual",
-      "version": "0.8.0"
+      "version": "0.9.0"
     }
   }
 }

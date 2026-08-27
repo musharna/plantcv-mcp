@@ -6,6 +6,22 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-08-27
+
+Sub-project D of the roadmap. Design: `docs/superpowers/specs/2026-08-27-read-roots-design.md`.
+
+### Added
+
+- **Read-root allow-list.** `plantcv-mcp --root DIR` (repeatable) or
+  `PLANTCV_MCP_ROOTS` (`os.pathsep`-separated) confines every path argument —
+  `segment`, `suggest_segmentation`, `calibrate_scale_from_marker`, and every
+  entry of `measure_images` — to the named directories. Paths are resolved with
+  `os.path.realpath` **before** the containment check, so `..` and symlinks are
+  followed first: a symlink inside a root that points outside is refused. A batch
+  with one stray path is refused whole, before any file is read. Unset, behaviour
+  is unchanged (the documented local trust boundary). `list_methods()` reports
+  the policy as `read_roots`; `SECURITY.md` names the scope.
+
 ## [0.8.0] — 2026-08-27
 
 Sub-project C of the roadmap. Design: `docs/superpowers/specs/2026-08-27-isolation-design.md`.
