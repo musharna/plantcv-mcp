@@ -7,7 +7,7 @@ disk on demand, keeping memory bounded when several sessions are live.
 import threading
 import uuid
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -32,6 +32,11 @@ class Session:
     # re-reads from disk, so it must re-apply the same transform or it would
     # measure different pixels than the ones the mask was drawn on.
     color_correct: bool = False
+    # How this mask was made, beyond the threshold: the refine() ops applied to
+    # reach it, in order, cumulative across chained refinements. Echoed on every
+    # trait table so a stored result can say what produced its mask.
+    lineage: list[dict] = field(default_factory=list)
+    parent_id: str | None = None
 
 
 class SessionStore:
@@ -55,6 +60,8 @@ class SessionStore:
         method: str,
         digest: str = "",
         color_correct: bool = False,
+        lineage: list[dict] | None = None,
+        parent_id: str | None = None,
     ) -> Session:
         session = Session(
             session_id=str(uuid.uuid4()),
@@ -65,6 +72,8 @@ class SessionStore:
             shape=(int(mask.shape[0]), int(mask.shape[1])),
             digest=digest,
             color_correct=color_correct,
+            lineage=[dict(op) for op in (lineage or [])],
+            parent_id=parent_id,
         )
         with self._lock:
             self._sessions[session.session_id] = session

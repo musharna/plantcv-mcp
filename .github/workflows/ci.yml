@@ -106,6 +106,7 @@ jobs:
                   "measure",
                   "measure_images",
                   "measure_regions",
+                  "refine",
                   "segment",
                   "suggest_segmentation",
               ]
