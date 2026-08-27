@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-08-27
+
 Findings of an adversarial audit run against 0.4.1 (Codex consult, every item
 reproduced before it was fixed). Three were correctness defects in the shipped
 runtime, not backlog.
