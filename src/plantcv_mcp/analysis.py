@@ -1,0 +1,120 @@
+"""The analysis entry points, in one place, with picklable arguments and results.
+
+Every function here is what a tool calls AFTER it has resolved its session and
+loaded its image, and BEFORE it renders anything: pure compute over numpy arrays
+and plain values. That boundary is what lets `workers.py` run the same function
+in a subprocess without the server changing shape — the tool layer calls
+`workers.dispatch("measure", ...)` and gets the same return value either way.
+
+Nothing in this module may depend on the session store or the MCP server.
+"""
+
+from typing import Any
+
+import numpy as np
+
+from .batch import measure_batch
+from .measurement import measure_traits
+from .morphology import MorphologyResult, measure_morphology
+from .refine import apply_refinements
+from .regions import build_regions, measure_regions
+
+
+def measure(
+    img: np.ndarray,
+    mask: np.ndarray,
+    analyses: tuple[str, ...],
+    px_per_mm: float | None,
+    include_histograms: bool,
+) -> dict:
+    return measure_traits(
+        img,
+        mask,
+        analyses=analyses,
+        px_per_mm=px_per_mm,
+        include_histograms=include_histograms,
+    )
+
+
+def regions(
+    img: np.ndarray,
+    mask: np.ndarray,
+    *,
+    mode: str,
+    nrows: int,
+    ncols: int,
+    coord: tuple[int, int] | None,
+    height: int | None,
+    width: int | None,
+    spacing: tuple[int, int] | None,
+    radius: int | None,
+    analyses: tuple[str, ...],
+    px_per_mm: float | None,
+    include_histograms: bool,
+) -> dict[str, Any]:
+    """build_regions + measure_regions, returning only picklable geometry.
+
+    RegionSet carries PlantCV's ROI objects, which the server never needs once
+    the bboxes are known; they stay on this side of the boundary.
+    """
+    region_set = build_regions(
+        img,
+        mask,
+        mode=mode,
+        nrows=nrows,
+        ncols=ncols,
+        coord=coord,
+        height=height,
+        width=width,
+        spacing=spacing,
+        radius=radius,
+    )
+    measurements = measure_regions(
+        img,
+        mask,
+        region_set,
+        analyses=analyses,
+        px_per_mm=px_per_mm,
+        include_histograms=include_histograms,
+    )
+    return {
+        "measurements": measurements,
+        "bboxes": list(region_set.bboxes),
+        "mode": region_set.mode,
+        "nrows": region_set.nrows,
+        "ncols": region_set.ncols,
+        "warnings": [(w.code, w.message) for w in region_set.warnings],
+    }
+
+
+def morphology(
+    img: np.ndarray,
+    mask: np.ndarray,
+    prune_size: int,
+    tangent_size: int,
+    px_per_mm: float | None,
+) -> MorphologyResult:
+    return measure_morphology(
+        img,
+        mask,
+        prune_size=prune_size,
+        tangent_size=tangent_size,
+        px_per_mm=px_per_mm,
+    )
+
+
+def batch(image_paths: list[str], **recipe: Any) -> dict:
+    return measure_batch(image_paths, **recipe)
+
+
+def refine(mask: np.ndarray, ops: list[dict]) -> np.ndarray:
+    return apply_refinements(mask, ops)
+
+
+REGISTRY: dict[str, Any] = {
+    "measure": measure,
+    "regions": regions,
+    "morphology": morphology,
+    "batch": batch,
+    "refine": refine,
+}
