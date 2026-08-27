@@ -211,6 +211,7 @@ async def test_server_registers_exactly_the_expected_tools():
         "segment",
         "refine",
         "measure",
+        "measure_morphology",
         "measure_regions",
         "calibrate_scale_from_marker",
         "measure_images",
@@ -595,3 +596,46 @@ def test_list_methods_publishes_the_refine_ops():
         "keep_largest",
     }
     assert info["refine_ops"]["erode"]["params"]["ksize"]["min"] == 2
+
+
+# --- morphology over the real MCP layer ---
+
+
+@pytest.mark.anyio
+async def test_measure_morphology_over_the_real_mcp_layer(tmp_path):
+    """Table + numbered overlay, engine and lineage; a vertical stem's angle is
+    null with the warning, not a nonsense number."""
+    import cv2
+
+    from plantcv_mcp import plantcv_version
+
+    img = np.full((400, 400, 3), 200, np.uint8)
+    cv2.line(img, (200, 380), (200, 120), (40, 150, 40), 9)
+    cv2.line(img, (200, 300), (260, 220), (40, 150, 40), 7)
+    cv2.line(img, (200, 220), (140, 150), (40, 150, 40), 7)
+    path = _write_png(tmp_path, "plant.png", img)
+
+    mcp = build_server()
+    seg = json.loads(
+        (
+            await mcp.call_tool(
+                "segment", {"image_path": path, "channel": "a", "method": "otsu"}
+            )
+        )
+        .content[0]
+        .text
+    )
+    result = await mcp.call_tool(
+        "measure_morphology", {"session_id": seg["session_id"], "px_per_mm": 10.0}
+    )
+    text_block, image_block = result.content
+    payload = json.loads(text_block.text)
+    assert image_block.type == "image"
+    assert payload["engine"] == {"name": "PlantCV", "version": plantcv_version()}
+    assert payload["lineage"] == []
+    assert payload["units"]["path_length"] == "mm"
+    assert payload["units"]["insertion_angle"] == "degrees"
+    assert payload["plant"]["leaf_count"] >= 2
+    assert payload["plant"]["stem_angle"] is None
+    assert "stem_angle_undefined" in [w["code"] for w in payload["warnings"]]
+    assert all(s["id"] == i for i, s in enumerate(payload["segments"]))

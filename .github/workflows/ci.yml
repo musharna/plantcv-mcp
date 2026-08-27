@@ -105,6 +105,7 @@ jobs:
                   "list_methods",
                   "measure",
                   "measure_images",
+                  "measure_morphology",
                   "measure_regions",
                   "refine",
                   "segment",

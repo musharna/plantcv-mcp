@@ -155,7 +155,7 @@ def test_server_publishes_instructions_that_state_the_discipline():
 
 def test_every_tool_publishes_annotations_and_a_title():
     tools = asyncio.run(build_server().list_tools())
-    assert len(tools) == 8
+    assert len(tools) == 9
     for t in tools:
         assert t.title, f"{t.name} has no title"
         assert t.annotations is not None, f"{t.name} has no annotations"
@@ -189,7 +189,13 @@ def test_every_structured_tool_publishes_an_output_schema():
     string in a text block and no schema, while the older tools returned structured
     content. Only the two tools that return IMAGE blocks are exempt.
     """
-    returns_images = {"segment", "suggest_segmentation", "measure_regions", "refine"}
+    returns_images = {
+        "segment",
+        "suggest_segmentation",
+        "measure_regions",
+        "refine",
+        "measure_morphology",
+    }
     # measure_regions joined this set when per-region measurement shipped: it
     # returns the labelled overlay alongside the rows, because per-region
     # numbers are unreadable without a picture saying which region is which.
