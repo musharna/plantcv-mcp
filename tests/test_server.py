@@ -209,6 +209,7 @@ async def test_server_registers_exactly_the_expected_tools():
         "list_methods",
         "suggest_segmentation",
         "segment",
+        "refine",
         "measure",
         "measure_regions",
         "calibrate_scale_from_marker",
@@ -495,3 +496,102 @@ async def test_off_image_region_geometry_is_a_tool_error_not_a_crash(tmp_path):
         },
     )
     assert json.loads(ok.content[0].text)["regions_measured"] == 1
+
+
+# --- refine: a session-to-session operation that returns the picture ---
+
+
+@pytest.mark.anyio
+async def test_refine_mints_a_new_session_with_overlay_and_lineage(tmp_path):
+    from plantcv_mcp.server import _refine_impl
+
+    path = _write_green_png(tmp_path)
+    mcp = build_server()
+    seg = json.loads(
+        (
+            await mcp.call_tool(
+                "segment", {"image_path": path, "channel": "a", "method": "otsu"}
+            )
+        )
+        .content[0]
+        .text
+    )
+    result = await mcp.call_tool(
+        "refine",
+        {"session_id": seg["session_id"], "ops": [{"op": "erode", "ksize": 3}]},
+    )
+    text_block, image_block = result.content
+    payload = json.loads(text_block.text)
+    assert image_block.type == "image"
+    assert payload["parent_session_id"] == seg["session_id"]
+    assert payload["session_id"] != seg["session_id"]
+    assert payload["lineage"] == [{"op": "erode", "ksize": 3, "iterations": 1}]
+    assert payload["after"]["mask_fraction"] < payload["before"]["mask_fraction"]
+    assert payload["engine"]["name"] == "PlantCV"
+    assert "traits" not in payload
+
+    # The original session is untouched and still measurable; the refined one
+    # measures a smaller plant and SAYS how its mask was made.
+    original = await mcp.call_tool("measure", {"session_id": seg["session_id"]})
+    refined = await mcp.call_tool("measure", {"session_id": payload["session_id"]})
+    assert original.structured_content["lineage"] == []
+    assert refined.structured_content["lineage"] == payload["lineage"]
+    assert (
+        refined.structured_content["traits"]["area"]["value"]
+        < original.structured_content["traits"]["area"]["value"]
+    )
+
+    # Chained refinements accumulate lineage.
+    again = _refine_impl(payload["session_id"], [{"op": "dilate", "ksize": 3}])
+    assert again["lineage"] == payload["lineage"] + [
+        {"op": "dilate", "ksize": 3, "iterations": 1}
+    ]
+
+
+@pytest.mark.anyio
+async def test_refine_that_erases_the_plant_is_a_tool_error_and_mints_nothing(tmp_path):
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    from plantcv_mcp.server import _store
+
+    path = _write_green_png(tmp_path)
+    mcp = build_server()
+    seg = json.loads(
+        (
+            await mcp.call_tool(
+                "segment", {"image_path": path, "channel": "a", "method": "otsu"}
+            )
+        )
+        .content[0]
+        .text
+    )
+    n_before = len(_store)
+    with pytest.raises(ToolError, match="before"):
+        await mcp.call_tool(
+            "refine",
+            {
+                "session_id": seg["session_id"],
+                "ops": [{"op": "erode", "ksize": 5, "iterations": 60}],
+            },
+        )
+    assert len(_store) == n_before
+    with pytest.raises(ToolError, match="op 0"):
+        await mcp.call_tool(
+            "refine",
+            {"session_id": seg["session_id"], "ops": [{"op": "fill", "size": -1}]},
+        )
+
+
+def test_list_methods_publishes_the_refine_ops():
+    info = list_methods_impl()
+    assert set(info["refine_ops"]) == {
+        "fill_holes",
+        "fill",
+        "erode",
+        "dilate",
+        "opening",
+        "closing",
+        "median_blur",
+        "keep_largest",
+    }
+    assert info["refine_ops"]["erode"]["params"]["ksize"]["min"] == 2

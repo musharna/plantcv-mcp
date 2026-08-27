@@ -113,6 +113,7 @@ the methods, and the pinned PlantCV version.
 | ----------------------------------------------------------------------- | ------------------------------------------------------- |
 | `suggest_segmentation(image_path, channel, method)`                     | contact sheets, and what each `object_type` would yield |
 | `segment(image_path, channel, method, ...)`                             | overlay + diagnostics + warnings — **no traits**        |
+| `refine(session_id, ops)`                                               | a NEW session with a cleaned-up mask, plus its overlay  |
 | `measure(session_id, analyses, px_per_mm, ...)`                         | traits, or a raised error on a degenerate mask          |
 | `calibrate_scale_from_marker(image_path, x, y, w, h, marker_length_mm)` | `px_per_mm` from a marker of known real size            |
 | `measure_regions(session_id, nrows, ncols, ...)`                        | one row per plant in a tray, plus the numbered overlay  |
@@ -178,6 +179,29 @@ fills the frame — they make the choice visible rather than making it for you.
 `fill_size` deletes any component smaller than itself, so a small specimen can vanish
 entirely. When that happens `segment` reports `fill_erased_mask` and names the size to drop
 below, rather than letting it look like a bad channel choice.
+
+## Refining a mask
+
+When the overlay is nearly right — a hole in a leaf, specks on the background, a
+pot rim segmented alongside the plant — `refine()` fixes the mask instead of sending
+you back to hunt for a threshold:
+
+```json
+{"session_id": "…", "ops": [{"op": "fill_holes"}, {"op": "keep_largest", "n": 1}]}
+```
+
+Ops run in the order given: `fill_holes`, `fill(size)`, `erode(ksize, iterations)`,
+`dilate(ksize, iterations)`, `opening(ksize)`, `closing(ksize)`, `median_blur(ksize)`,
+and `keep_largest(n)`; `list_methods()` documents each parameter's constraints.
+Every op is validated before any runs — PlantCV silently does nothing for
+`fill(size=-1)` or `erode(iterations=0)`, and a no-op recorded as a refinement is a
+lie — and a refinement that leaves no measurable plant is **refused** rather than
+turned into a session that measures zeros.
+
+`refine()` mints a **new** session and returns its overlay; the original stays
+measurable, so a refinement you dislike is simply discarded. Trait tables from a
+refined session carry `lineage`, the ops that produced their mask, so two tables
+made differently can be told apart.
 
 ## What it measures
 
@@ -313,8 +337,8 @@ so on a tray it merges every plant into one object. Use `measure_regions()` for
 multi-plant images — it measures each region separately and returns an overlay
 with the regions outlined and numbered.
 
-Morphology traits (leaf angles, stem, skeleton) and iterative mask refinement
-are still not implemented.
+Morphology traits (leaf angles, stem, skeleton) are not implemented yet; mask
+refinement is (`refine()`, above).
 
 Sessions are in-memory and capped (8 by default, LRU-evicted). They do not
 survive a server restart.

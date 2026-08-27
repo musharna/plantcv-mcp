@@ -6,6 +6,38 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-08-27
+
+First step of the post-0.5.0 roadmap
+(`docs/superpowers/specs/2026-08-27-backlog-integration-plan-of-attack.md`).
+
+### Added
+
+- **`refine(session_id, ops)` — mask refinement as a session→session operation.**
+  Applies an ordered list of morphological ops (`fill_holes`, `fill`, `erode`,
+  `dilate`, `opening`, `closing`, `median_blur`, and our own `keep_largest`) to a
+  session's mask and mints a NEW session, returning the refined overlay plus
+  before/after diagnostics and warnings — never traits. The original session is
+  untouched, so a refinement that looks wrong is discarded rather than undone.
+  - **Validation is all-or-nothing and stricter than PlantCV's.** PlantCV silently
+    no-ops on `fill(size=-1)`, `erode(i=0)` and an even `median_blur` kernel
+    (measured); a no-op recorded in the lineage as if it had run would be a lie,
+    so every op is checked — name, required params, ranges, unknown params —
+    before the first one touches the mask, and the error names the op index.
+  - **A refinement that leaves no measurable plant is refused, not minted**, with
+    before/after `mask_fraction`, `component_count` and `largest_area`.
+  - `refine_large_change` advisory when the mask changed by more than 25%.
+  - Known-value eval: a disc with a hole and salt noise measures wrong first
+    (positive control), then `[fill_holes, keep_largest(1)]` recovers the area
+    within 1%.
+- **`lineage` on every trait table.** `measure()` and `measure_regions()` results
+  carry the ops that produced their mask (`[]` for an unrefined session), so two
+  tables made differently can be told apart. `Session` gains `lineage` and
+  `parent_id`.
+- `list_methods()` publishes `refine_ops` with each op's parameter constraints;
+  the test suite applies every published op with its example so a documented op
+  can never be a dead one.
+
 ## [0.5.0] — 2026-08-27
 
 Findings of an adversarial audit run against 0.4.1 (Codex consult, every item

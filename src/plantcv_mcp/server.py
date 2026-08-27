@@ -41,6 +41,12 @@ from .imaging import (
     render_region_overlay,
 )
 from .measurement import ANALYSES, TraitValue, measure_traits
+from .refine import (
+    REFINE_OPS,
+    apply_refinements,
+    refinement_warnings,
+    validate_ops,
+)
 from .regions import REGION_MODES, RegionSpecError, build_regions
 from .regions import measure_regions as _measure_each_region
 from .scale import calibrate_scale
@@ -73,6 +79,13 @@ segmentation found nothing.
 Do not guess `channel` or `object_type`. suggest_segmentation reports what both
 polarities actually yield on the image in front of you.
 
+If the overlay is nearly right — a hole in the leaf, specks on the background, a
+second object that is not the plant — use refine() instead of hunting for a
+different threshold: [{"op": "fill_holes"}, {"op": "keep_largest", "n": 1}] is
+the usual cleanup. refine() returns a NEW session and its overlay; look at that
+overlay too, and measure the refined session. Trait tables carry `lineage`, the
+ops that produced their mask.
+
 Traits are in PIXELS unless you pass px_per_mm to measure(), and pixel sizes are
 not comparable between images taken at different distances or zoom levels.\
 """
@@ -85,6 +98,10 @@ class MeasureResult(TypedDict):
     analyses: list[str]
     px_per_mm: float | None
     traits: dict[str, TraitValue]
+    # The refine() ops that produced this session's mask, in order; [] when the
+    # mask came straight from segment(). A trait table that cannot say how its
+    # mask was made cannot be compared with one made differently.
+    lineage: list[dict]
     # Which PlantCV produced these numbers, travelling WITH them. The version
     # was already reachable via list_methods, but a stored or forwarded trait
     # table could not say what measured it, and two tables could not be told
@@ -167,6 +184,7 @@ class MethodsInfo(TypedDict):
     object_types: list[str]
     analyses: list[str]
     region_modes: list[str]
+    refine_ops: dict[str, dict]
     guidance: str
 
 
@@ -187,6 +205,7 @@ def list_methods_impl() -> MethodsInfo:
         "object_types": list(OBJECT_TYPES),
         "analyses": list(ANALYSES),
         "region_modes": list(REGION_MODES),
+        "refine_ops": REFINE_OPS,
         "guidance": (
             "Pick a channel AND the object_type that goes with it. object_type "
             "says which side of the threshold is the plant: 'dark' selects "
@@ -311,6 +330,7 @@ def _measure_impl(
         "session_id": session_id,
         "analyses": list(requested),
         "px_per_mm": px_per_mm,
+        "lineage": [dict(op) for op in session.lineage],
         "traits": measure_traits(
             img,
             session.mask,
@@ -319,6 +339,53 @@ def _measure_impl(
             include_histograms=include_histograms,
         ),
         "engine": {"name": "PlantCV", "version": plantcv_version()},
+    }
+
+
+def _refine_impl(session_id: str, ops: list[dict]) -> dict:
+    session = _store.get(session_id)
+    validated = validate_ops(ops)  # all-or-nothing, before anything runs
+    mask = apply_refinements(session.mask, validated)  # refuses a degenerate result
+    before = analyze_mask(session.mask)
+    after = analyze_mask(mask)
+    warnings = refinement_warnings(mask, before, after)
+
+    # Re-read through the same integrity guards measure() uses: refining a
+    # session whose file changed underneath would draw the overlay on pixels
+    # the mask was never made from.
+    img = _load_session_image(session)
+    child = _store.create(
+        session.image_path,
+        mask,
+        session.channel,
+        session.method,
+        digest=session.digest,
+        color_correct=session.color_correct,
+        lineage=[*session.lineage, *validated],
+        parent_id=session.session_id,
+    )
+    overlay, scale = downscale(render_overlay(img, mask))
+    png = encode_png(overlay)
+
+    def _summary(d) -> dict:
+        return {
+            "mask_fraction": d.mask_fraction,
+            "component_count": d.component_count,
+            "largest_area": d.largest_area,
+        }
+
+    return {
+        "session_id": child.session_id,
+        "parent_session_id": session.session_id,
+        "ops": validated,
+        "lineage": [dict(op) for op in child.lineage],
+        "before": _summary(before),
+        "after": _summary(after),
+        "overlay_scale": scale,
+        "overlay_png_bytes": len(png),
+        "warnings": [{"code": w.code, "message": w.message} for w in warnings],
+        "engine": {"name": "PlantCV", "version": plantcv_version()},
+        "_png": png,
     }
 
 
@@ -398,6 +465,7 @@ def _measure_regions_impl(
         "regions_empty": len(measurements) - len(measured),
         "analyses": list(requested),
         "px_per_mm": px_per_mm,
+        "lineage": [dict(op) for op in session.lineage],
         "regions": measurements,
         "warnings": [{"code": w.code, "message": w.message} for w in regions.warnings],
         "overlay_scale": scale,
@@ -487,6 +555,23 @@ def build_server() -> MCPServer:
             offset=offset,
             color_correct=color_correct,
         )
+        png = result.pop("_png")
+        return [json.dumps(result), Image(data=png, format="png")]
+
+    @mcp.tool(title="Refine a mask (returns the new overlay)", annotations=READ_ONLY)
+    def refine(session_id: str, ops: list[dict]) -> list:
+        """Apply morphological cleanup to a session's mask and get a NEW session.
+
+        ops is an ordered list like [{"op": "fill_holes"}, {"op": "keep_largest",
+        "n": 1}]; list_methods() documents every op and its parameters. The
+        original session is untouched and still measurable, so a refinement that
+        looks wrong is simply discarded. Returns the refined overlay — look at it
+        — plus before/after mask diagnostics and warnings; NOT traits. Every op
+        is validated before any runs, and a refinement that leaves no measurable
+        plant is refused rather than minted. measure() results carry `lineage`,
+        the ops that produced their mask.
+        """
+        result = _refine_impl(session_id, ops)
         png = result.pop("_png")
         return [json.dumps(result), Image(data=png, format="png")]
 
