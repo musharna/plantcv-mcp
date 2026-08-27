@@ -4,6 +4,7 @@ Sessions hold the mask (uint8 HxW) but NOT the RGB image — that is re-read fro
 disk on demand, keeping memory bounded when several sessions are live.
 """
 
+import threading
 import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -39,6 +40,12 @@ class SessionStore:
             raise ValueError(f"max_sessions must be >= 1, got {max_sessions}")
         self._max = max_sessions
         self._sessions: OrderedDict[str, Session] = OrderedDict()
+        # mcp 2.x runs tools on worker threads. get() is check-then-act and
+        # create() is insert-then-evict; interleaved, get() raised a bare
+        # KeyError for a session that was present a moment earlier. This lock
+        # is the store's own — it must not be the PlantCV analysis lock, which
+        # would serialise cheap bookkeeping behind slow measurement.
+        self._lock = threading.Lock()
 
     def create(
         self,
@@ -59,19 +66,23 @@ class SessionStore:
             digest=digest,
             color_correct=color_correct,
         )
-        self._sessions[session.session_id] = session
-        while len(self._sessions) > self._max:
-            self._sessions.popitem(last=False)  # evict least-recently-used
+        with self._lock:
+            self._sessions[session.session_id] = session
+            while len(self._sessions) > self._max:
+                self._sessions.popitem(last=False)  # evict least-recently-used
         return session
 
     def get(self, session_id: str) -> Session:
-        if session_id not in self._sessions:
-            raise UnknownSessionError(
-                f"Unknown session_id {session_id!r}. Sessions are in-memory and "
-                f"capped at {self._max}; the oldest are evicted. Re-run segment()."
-            )
-        self._sessions.move_to_end(session_id)  # refresh recency
-        return self._sessions[session_id]
+        with self._lock:
+            if session_id not in self._sessions:
+                raise UnknownSessionError(
+                    f"Unknown session_id {session_id!r}. Sessions are in-memory "
+                    f"and capped at {self._max}; the oldest are evicted. Re-run "
+                    "segment()."
+                )
+            self._sessions.move_to_end(session_id)  # refresh recency
+            return self._sessions[session_id]
 
     def __len__(self) -> int:
-        return len(self._sessions)
+        with self._lock:
+            return len(self._sessions)

@@ -234,3 +234,264 @@ async def test_segment_tool_carries_no_traits_through_the_real_mcp_layer(tmp_pat
     assert payload["session_id"]
     assert payload["largest_area"] == 10000
     assert image_block.type == "image"
+
+
+# --- the digest must describe the bytes the mask was drawn on ---
+
+
+def test_file_swapped_during_segmentation_is_refused_at_measure(tmp_path, monkeypatch):
+    """TOCTOU in the stale-image guard.
+
+    segment() used to decode the file, build the mask, and only THEN hash the
+    path. A same-shape replacement landing in that window bound the OLD mask to
+    the NEW file's hash, and measure() then passed the integrity check while
+    measuring pixels the mask was never drawn on. The hash has to be taken from
+    the bytes that were decoded, not from the path afterwards.
+    """
+    import cv2
+
+    from plantcv_mcp import server as srv
+    from plantcv_mcp.server import (
+        ImageChangedSinceSegmentationError,
+        _load_session_image,
+    )
+
+    path = _write_green_png(tmp_path)
+
+    # A different image of IDENTICAL shape: the blob moved.
+    other = np.full((200, 200, 3), 128, dtype=np.uint8)
+    other[100:190, 100:190] = (60, 180, 60)
+
+    real_threshold = srv.threshold_mask
+
+    def swap_file_then_threshold(*args, **kwargs):
+        cv2.imwrite(path, other)  # the file changes while segment() is mid-flight
+        return real_threshold(*args, **kwargs)
+
+    monkeypatch.setattr(srv, "threshold_mask", swap_file_then_threshold)
+    seg = _segment_impl(path, "a", "otsu")
+    monkeypatch.setattr(srv, "threshold_mask", real_threshold)
+
+    session = srv._store.get(seg["session_id"])
+    with pytest.raises(ImageChangedSinceSegmentationError, match="CONTENT"):
+        _load_session_image(session)
+
+    # Positive control: an undisturbed session on the (now settled) file loads.
+    settled = _segment_impl(path, "a", "otsu")
+    assert _load_session_image(srv._store.get(settled["session_id"])).shape == (
+        200,
+        200,
+        3,
+    )
+
+
+# --- batch recipe parity: what you settled interactively is what the batch runs ---
+
+
+def _write_png(tmp_path, name, img):
+    import cv2
+
+    p = tmp_path / name
+    cv2.imwrite(str(p), img)
+    return str(p)
+
+
+@pytest.mark.anyio
+async def test_measure_images_reproduces_an_interactive_mean_threshold_recipe(tmp_path):
+    """measure_images tells the user to settle a recipe with segment() and then
+    apply it. For the 'mean'/'gaussian' methods the recipe INCLUDES ksize and
+    offset; a batch that cannot take them silently runs a different threshold
+    and the two paths disagree on the same file."""
+    path = _write_green_png(tmp_path)
+    recipe = {"channel": "a", "method": "mean", "ksize": 31, "offset": 5}
+
+    seg = _segment_impl(path, **recipe)
+    interactive = _measure_impl(seg["session_id"])["traits"]["area"]["value"]
+
+    mcp = build_server()
+    result = await mcp.call_tool("measure_images", {"image_paths": [path], **recipe})
+    out = result.structured_content
+    entry = out["results"][0]
+    assert entry["measured"] is True, entry
+    assert entry["traits"]["area"]["value"] == interactive
+    assert out["recipe"]["ksize"] == 31
+    assert out["recipe"]["offset"] == 5
+    assert out["recipe"]["color_correct"] is False
+
+
+@pytest.mark.anyio
+async def test_measure_images_honours_color_correct_and_refuses_cardless_images(
+    tmp_path,
+):
+    from test_scale_color_batch import _color_card  # pytest puts tests/ on sys.path
+
+    card = _color_card()
+    card[380:500, 400:560] = (40, 150, 40)  # a plant below the chips
+    with_card = _write_png(tmp_path, "card.png", card)
+    no_card = _write_green_png(tmp_path)
+
+    seg = _segment_impl(with_card, "a", "otsu", color_correct=True)
+    interactive = _measure_impl(seg["session_id"], analyses=["size", "color"])["traits"]
+
+    mcp = build_server()
+    result = await mcp.call_tool(
+        "measure_images",
+        {
+            "image_paths": [with_card, no_card],
+            "channel": "a",
+            "method": "otsu",
+            "color_correct": True,
+            "analyses": ["size", "color"],
+        },
+    )
+    out = result.structured_content
+    by_path = {r["image_path"]: r for r in out["results"]}
+
+    corrected = by_path[with_card]
+    assert corrected["measured"] is True, corrected
+    assert corrected["traits"]["hue_circular_mean"] == interactive["hue_circular_mean"]
+    assert corrected["traits"]["area"] == interactive["area"]
+    assert out["recipe"]["color_correct"] is True
+
+    # Asked to correct, unable to: refused with the reason, never measured raw.
+    refused = by_path[no_card]
+    assert refused["measured"] is False
+    assert refused["traits"] is None
+    assert "ColorCardNotFoundError" in refused["refused_because"]
+
+
+# --- provenance: every number names the engine; the server names its version ---
+
+
+@pytest.mark.anyio
+async def test_every_number_bearing_result_names_the_plantcv_engine(tmp_path):
+    from plantcv_mcp import plantcv_version
+
+    path = _write_green_png(tmp_path)
+    mcp = build_server()
+    seg = json.loads(
+        (
+            await mcp.call_tool(
+                "segment", {"image_path": path, "channel": "a", "method": "otsu"}
+            )
+        )
+        .content[0]
+        .text
+    )
+    expected = {"name": "PlantCV", "version": plantcv_version()}
+
+    measured = await mcp.call_tool("measure", {"session_id": seg["session_id"]})
+    assert measured.structured_content["engine"] == expected
+
+    regions = await mcp.call_tool(
+        "measure_regions",
+        {
+            "session_id": seg["session_id"],
+            "mode": "rect_grid",  # auto_grid needs >= 2 plants to fit its mixture
+            "nrows": 1,
+            "ncols": 1,
+            "coord": [40, 40],
+            "height": 120,
+            "width": 120,
+            "spacing": [0, 0],
+        },
+    )
+    assert json.loads(regions.content[0].text)["engine"] == expected
+
+    batch = await mcp.call_tool(
+        "measure_images", {"image_paths": [path], "channel": "a", "method": "otsu"}
+    )
+    assert batch.structured_content["engine"] == expected
+
+
+@pytest.mark.anyio
+async def test_initialize_advertises_the_package_version():
+    """MCPServer defaults `version` to "", and that empty string is what a client
+    sees in the initialize handshake. Checked through a real client session,
+    not by reading the attribute back."""
+    from mcp.client import Client
+
+    from plantcv_mcp import __version__
+
+    async with Client(build_server()) as client:
+        info = client.server_info
+    assert info is not None, "server did not identify itself at initialize"
+    assert info.name == "plantcv-mcp"
+    assert info.version == __version__
+
+
+# --- the remaining tools, driven through the real MCP layer ---
+
+
+@pytest.mark.anyio
+async def test_calibrate_scale_from_marker_over_the_real_mcp_layer(tmp_path):
+    import cv2
+
+    img = np.full((300, 300, 3), 240, np.uint8)
+    cv2.circle(img, (150, 150), 40, (30, 30, 30), -1)  # an 80 px disc
+    path = _write_png(tmp_path, "marker.png", img)
+
+    mcp = build_server()
+    result = await mcp.call_tool(
+        "calibrate_scale_from_marker",
+        {
+            "image_path": path,
+            "x": 100,
+            "y": 100,
+            "w": 100,
+            "h": 100,
+            "marker_length_mm": 20.0,
+        },
+    )
+    out = result.structured_content
+    assert out["px_per_mm"] == pytest.approx(4.0, rel=0.03)
+    assert out["marker_length_px"] == pytest.approx(80, abs=2)
+    assert out["warnings"] == []
+
+
+@pytest.mark.anyio
+async def test_off_image_region_geometry_is_a_tool_error_not_a_crash(tmp_path):
+    """The wire schema accepts any integers. This exact geometry used to reach
+    native code and SIGSEGV the whole stdio server."""
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    path = _write_green_png(tmp_path)
+    mcp = build_server()
+    seg = json.loads(
+        (
+            await mcp.call_tool(
+                "segment", {"image_path": path, "channel": "a", "method": "otsu"}
+            )
+        )
+        .content[0]
+        .text
+    )
+    with pytest.raises(ToolError, match="outside"):
+        await mcp.call_tool(
+            "measure_regions",
+            {
+                "session_id": seg["session_id"],
+                "mode": "rect_grid",
+                "nrows": 1,
+                "ncols": 1,
+                "coord": [-10, -10],
+                "height": 50,
+                "width": 50,
+                "spacing": [0, 0],
+            },
+        )
+    # Positive control: a well-formed rect_grid on the same session measures.
+    ok = await mcp.call_tool(
+        "measure_regions",
+        {
+            "session_id": seg["session_id"],
+            "mode": "rect_grid",
+            "nrows": 1,
+            "ncols": 1,
+            "coord": [40, 40],
+            "height": 120,
+            "width": 120,
+            "spacing": [0, 0],
+        },
+    )
+    assert json.loads(ok.content[0].text)["regions_measured"] == 1

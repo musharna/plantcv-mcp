@@ -4,13 +4,14 @@ segment() mints a session and returns the overlay but NO traits; measure()
 requires that session. The split is deliberate: it forces the visual evidence
 into the model's context before a number can be obtained.
 
-Tool functions are deliberately SYNCHRONOUS. mcp 1.28.1 invokes sync tools inline
-on the event loop (fastmcp/utilities/func_metadata.py: `return fn(...)`, with no
-anyio.to_thread), which serialises them. That costs latency — a slow segmentation
-blocks the whole server — but it is what makes PlantCV's process-global
-`pcv.outputs` safe to use here. Making any tool `async`, or offloading to a
-thread, would allow two analyses to interleave on that global and must not be
-done without a lock around the measurement section.
+Tool functions are synchronous, and mcp 2.x runs synchronous tools on WORKER
+THREADS (mcp/server/mcpserver/utilities/func_metadata.py: anyio.to_thread
+.run_sync), so two tool calls can execute at the same time. An earlier version of
+this docstring argued the opposite from mcp 1.28.1, which ran them inline; the
+dependency floor moved to mcp>=2 and the argument silently stopped being true.
+Nothing here may rely on serialisation. PlantCV's process-global `pcv.outputs`
+is guarded by measurement.PCV_OUTPUTS_LOCK (via isolated_pcv_outputs), and the
+session store carries its own lock.
 """
 
 import json
@@ -27,15 +28,15 @@ from plantcv import plantcv as pcv
 # See measurement.py: typing.TypedDict breaks schema generation on 3.11.
 from typing_extensions import TypedDict
 
-from . import plantcv_version
+from . import __version__, plantcv_version
 from .batch import measure_batch
 from .color import correct_color
 from .diagnostics import analyze_mask, segmentation_warnings
 from .imaging import (
     downscale,
     encode_png,
-    file_digest,
     load_image,
+    load_image_with_digest,
     render_overlay,
     render_region_overlay,
 )
@@ -117,6 +118,12 @@ class BatchRecipe(TypedDict):
     method: str
     object_type: str
     fill_size: int
+    # The 'mean'/'gaussian' kernel parameters and the colour-correction flag are
+    # part of the recipe: without them the record cannot say what produced the
+    # numbers, and a batch could not reproduce a settled segment() call.
+    ksize: int
+    offset: int
+    color_correct: bool
     analyses: list[str]
     px_per_mm: float | None
 
@@ -148,6 +155,7 @@ class BatchResult(TypedDict):
     recipe: BatchRecipe
     summary: BatchSummary
     results: list[BatchImageResult]
+    engine: dict[str, str]
 
 
 class MethodsInfo(TypedDict):
@@ -205,7 +213,10 @@ def _segment_impl(
     offset: int = 2,
     color_correct: bool = False,
 ) -> dict:
-    img = load_image(image_path)
+    # The digest is of the SAME bytes the mask is about to be drawn on. Hashing
+    # the path afterwards left a window in which a same-shape replacement was
+    # recorded as this mask's identity.
+    img, digest = load_image_with_digest(image_path)
     if color_correct:
         # Raises if no card is found. Silently measuring an uncorrected image after
         # being asked to correct it would be the same confident wrongness as an
@@ -228,7 +239,7 @@ def _segment_impl(
         mask,
         channel,
         method,
-        digest=file_digest(image_path),
+        digest=digest,
         color_correct=color_correct,
     )
     overlay, scale = downscale(render_overlay(img, mask))
@@ -260,7 +271,9 @@ def _load_session_image(session) -> np.ndarray:
     stale-image check is measuring a mask against pixels it was never drawn on —
     silently, with plausible numbers.
     """
-    img = load_image(session.image_path)  # re-read; sessions do not hold RGB
+    # Re-read (sessions do not hold RGB), hashing the bytes that are decoded
+    # rather than the path afterwards — the same one-read rule as segment().
+    img, digest = load_image_with_digest(session.image_path)
     current_shape = (int(img.shape[0]), int(img.shape[1]))
     if current_shape != session.shape:
         raise ImageChangedSinceSegmentationError(
@@ -270,7 +283,7 @@ def _load_session_image(session) -> np.ndarray:
             "longer corresponds to its current content. Re-run segment() on "
             "the current file before measuring it."
         )
-    if session.digest and file_digest(session.image_path) != session.digest:
+    if session.digest and digest != session.digest:
         raise ImageChangedSinceSegmentationError(
             f"Image at {session.image_path!r} still has shape {current_shape}, "
             "but its CONTENT changed since segment() produced this session's "
@@ -388,12 +401,14 @@ def _measure_regions_impl(
         "regions": measurements,
         "warnings": [{"code": w.code, "message": w.message} for w in regions.warnings],
         "overlay_scale": scale,
+        "engine": {"name": "PlantCV", "version": plantcv_version()},
         "_png": png,
     }
 
 
 def build_server() -> MCPServer:
-    mcp = MCPServer("plantcv-mcp", instructions=INSTRUCTIONS)
+    # version= is what a client sees at initialize; MCPServer defaults it to "".
+    mcp = MCPServer("plantcv-mcp", instructions=INSTRUCTIONS, version=__version__)
 
     # Every tool here only reads from disk and computes. None mutates anything,
     # none reaches the network. Saying so lets a client decide what is safe to
@@ -598,6 +613,9 @@ def build_server() -> MCPServer:
         method: str,
         object_type: str = "dark",
         fill_size: int = 200,
+        ksize: int = 11,
+        offset: int = 2,
+        color_correct: bool = False,
         analyses: list[str] | None = None,
         px_per_mm: float | None = None,
     ) -> BatchResult:
@@ -609,8 +627,11 @@ def build_server() -> MCPServer:
         individually. A batch never returns a number the server could not validate.
 
         Settle the recipe on one representative image with suggest_segmentation()
-        and segment() first, looking at the overlay, then apply it here. Limit is
-        200 images per call.
+        and segment() first, looking at the overlay, then apply it here with the
+        SAME arguments — including ksize/offset for the 'mean' and 'gaussian'
+        methods and color_correct if you used it; the returned `recipe` records
+        exactly what ran. An image that cannot be colour-corrected when asked is
+        refused, not measured raw. Limit is 200 images per call.
         """
         return measure_batch(
             image_paths,
@@ -618,6 +639,9 @@ def build_server() -> MCPServer:
             method,
             object_type=object_type,
             fill_size=fill_size,
+            ksize=ksize,
+            offset=offset,
+            color_correct=color_correct,
             analyses=tuple(analyses) if analyses else ("size",),
             px_per_mm=px_per_mm,
         )

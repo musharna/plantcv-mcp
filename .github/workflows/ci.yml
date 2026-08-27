@@ -55,7 +55,11 @@ jobs:
           listing=$(tar tzf dist/*.tar.gz)
           echo "$listing"
 
-          for want in README.md CHANGELOG.md LICENSE NOTICE pyproject.toml; do
+          # Every file the sdist allow-list in pyproject.toml names, not a
+          # subset: a step called "exactly what we intend" that checked five of
+          # eight would pass a build that silently dropped the citation file.
+          for want in README.md CHANGELOG.md LICENSE NOTICE pyproject.toml \
+                      CONTRIBUTING.md SECURITY.md CITATION.cff; do
             echo "$listing" | grep -q "/$want$" \
               || { echo "::error::sdist is MISSING $want"; exit 1; }
           done
@@ -68,28 +72,49 @@ jobs:
           done
           echo "sdist contents OK"
 
-      - name: Wheel imports and registers the expected tool surface
+      # The installed CONSOLE SCRIPT is what `uvx plantcv-mcp` runs, and it is
+      # exercised here as a real stdio subprocess through an initialize
+      # handshake — not by importing the package in-process, which cannot
+      # notice a broken entry point, a wrong advertised version, or a server
+      # that never answers on stdout.
+      - name: Wheel's console script answers an MCP initialize over stdio
         run: |
           set -euo pipefail
           uv venv /tmp/wheelcheck
           uv pip install --python /tmp/wheelcheck/bin/python dist/*.whl
-          /tmp/wheelcheck/bin/python - <<'PY'
+          EXPECTED=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          /tmp/wheelcheck/bin/python - "$EXPECTED" <<'PY'
           import asyncio
-          from plantcv_mcp.server import build_server
+          import sys
 
-          server = build_server()
-          names = sorted(t.name for t in asyncio.run(server.list_tools()))
-          expected = [
-              "calibrate_scale_from_marker",
-              "list_methods",
-              "measure",
-              "measure_images",
-              "measure_regions",
-              "segment",
-              "suggest_segmentation",
-          ]
-          assert names == expected, f"tool surface changed: {names!r} != {expected!r}"
-          print("wheel OK, tools:", names)
+          from mcp.client.session import ClientSession
+          from mcp.client.stdio import StdioServerParameters, stdio_client
+
+          expected_version = sys.argv[1]
+
+          async def main():
+              params = StdioServerParameters(command="/tmp/wheelcheck/bin/plantcv-mcp")
+              async with stdio_client(params) as (read, write):
+                  async with ClientSession(read, write) as session:
+                      init = await session.initialize()
+                      tools = await session.list_tools()
+              info = getattr(init, "server_info", None) or getattr(init, "serverInfo")
+              names = sorted(t.name for t in tools.tools)
+              expected = [
+                  "calibrate_scale_from_marker",
+                  "list_methods",
+                  "measure",
+                  "measure_images",
+                  "measure_regions",
+                  "segment",
+                  "suggest_segmentation",
+              ]
+              assert info.name == "plantcv-mcp", info
+              assert info.version == expected_version, (info.version, expected_version)
+              assert names == expected, f"tool surface changed: {names!r} != {expected!r}"
+              print("wheel OK:", info.name, info.version, "tools:", names)
+
+          asyncio.run(main())
           PY
 
   no-absolute-paths:

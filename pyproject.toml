@@ -34,9 +34,12 @@ dependencies = [
     # import the server. mcp 2.x requires Python >=3.10, below our >=3.11 floor.
     "mcp>=2,<3",
     # Hard pin, deliberately. Trait values can shift between PlantCV releases, and
-    # determinism is a tested design goal (tests/test_determinism.py) surfaced to
-    # callers by list_methods(). Loosening this would weaken a guarantee the server
-    # advertises. Re-pin explicitly when validating a new PlantCV release.
+    # PlantCV-version stability is a tested design goal (tests/test_determinism.py)
+    # surfaced to callers by list_methods() and by the `engine` field on every
+    # result. It is version stability, not bit-for-bit reproducibility: `uvx
+    # plantcv-mcp` does not consume this repository's uv.lock, so OpenCV, NumPy
+    # and mcp may still vary within their bounds. Re-pin explicitly when
+    # validating a new PlantCV release.
     "plantcv==4.11.3",
     # No upper bound here on purpose: plantcv already caps opencv-python at <=4.12,
     # and duplicating that ceiling would silently drift when plantcv raises it.

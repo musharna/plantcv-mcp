@@ -1,6 +1,9 @@
 """Trait extraction, gated on mask validity."""
 
 import math
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import numpy as np
@@ -48,6 +51,49 @@ HISTOGRAM_TRAITS: frozenset[str] = frozenset(
 
 class UnknownAnalysisError(Exception):
     """Raised for an analysis outside ANALYSES."""
+
+
+# ONE lock for every code path that touches `pcv.outputs`. It is process-global
+# state, and mcp 2.x runs synchronous tools on worker threads
+# (mcp/server/mcpserver/utilities/func_metadata.py: anyio.to_thread.run_sync),
+# so two measurements CAN interleave: one thread's clear() erased the other's
+# observations, and — worse — one thread read the other's `default_1` group and
+# returned its numbers as its own. Both measured in tests/test_concurrency.py.
+#
+# A lock per module would not do: measure() and measure_regions() share the same
+# global, so regions.py imports THIS object rather than minting its own.
+PCV_OUTPUTS_LOCK = threading.Lock()
+
+
+@contextmanager
+def isolated_pcv_outputs() -> Iterator[None]:
+    """Hold the lock, start from an empty `pcv.outputs`, restore the host's on exit.
+
+    Clearing outright destroyed the observations of any host application that
+    also uses PlantCV directly, so the whole table is snapshotted and put back.
+    `pcv.outputs.clear()` resets four attributes — measurements, images,
+    observations, metadata — and all four are restored; restoring only
+    observations left the host with three tables silently emptied.
+
+    The lock is held from snapshot through restore, so the section is atomic
+    with respect to every other user of this context manager in the process.
+    """
+    with PCV_OUTPUTS_LOCK:
+        saved_measurements = pcv.outputs.measurements
+        saved_images = pcv.outputs.images
+        saved_observations = pcv.outputs.observations
+        saved_metadata = pcv.outputs.metadata
+        pcv.outputs.clear()
+        try:
+            yield
+        finally:
+            # Restore unconditionally — an exception mid-analysis must not leave
+            # the host's state destroyed. clear() rebinds fresh containers, so
+            # the originals are handed back untouched.
+            pcv.outputs.measurements = saved_measurements
+            pcv.outputs.images = saved_images
+            pcv.outputs.observations = saved_observations
+            pcv.outputs.metadata = saved_metadata
 
 
 def convert_units(
@@ -127,13 +173,9 @@ def measure_traits(
 
     assert_not_degenerate(analyze_mask(mask))
 
-    # pcv.outputs is PROCESS-GLOBAL. Clearing it outright destroyed the
-    # observations of any host application that also uses PlantCV directly, so
-    # snapshot and restore instead. We still start from an empty table so our own
-    # keyed lookup cannot pick up a foreign group.
-    saved = dict(pcv.outputs.observations)
-    pcv.outputs.clear()
-    try:
+    # pcv.outputs is PROCESS-GLOBAL and shared with every other measurement in
+    # this process; see isolated_pcv_outputs for the lock and the restore.
+    with isolated_pcv_outputs():
         roi = pcv.roi.rectangle(img=img, x=0, y=0, h=img.shape[0], w=img.shape[1])
         labeled, n = pcv.create_labels(mask=mask, rois=roi, roi_type="partial")
 
@@ -148,11 +190,6 @@ def measure_traits(
             name: {"value": obs.get("value"), "unit": obs.get("label")}
             for name, obs in _read_group().items()
         }
-    finally:
-        # Restore unconditionally — an exception mid-analysis must not leave the
-        # host's observations destroyed.
-        pcv.outputs.clear()
-        pcv.outputs.observations.update(saved)
 
     if not include_histograms:
         traits = {k: v for k, v in traits.items() if k not in HISTOGRAM_TRAITS}
