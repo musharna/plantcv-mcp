@@ -40,6 +40,8 @@ Round-trip overhead on the 3000×3000 fixture (`_write_huge_green_png`) for
 `measure()`; if the isolated path costs > 25% more wall time than in-process, ship
 **opt-in** (default off) and record the number; else default on.
 
+**Measured 2026-08-27:** in-process 1841 ms, isolated 1983 ms → **+7.7 %** → default ON.
+
 ## Tests
 
 - `os.abort()` injected in the worker via a test-only registry entry → the tool call

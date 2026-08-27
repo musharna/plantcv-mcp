@@ -29,7 +29,6 @@ from plantcv import plantcv as pcv
 from typing_extensions import TypedDict
 
 from . import __version__, plantcv_version
-from .batch import measure_batch
 from .color import correct_color
 from .diagnostics import analyze_mask, segmentation_warnings
 from .imaging import (
@@ -40,20 +39,18 @@ from .imaging import (
     render_overlay,
     render_region_overlay,
 )
-from .measurement import ANALYSES, TraitValue, measure_traits
-from .morphology import measure_morphology
+from .measurement import ANALYSES, TraitValue
 from .refine import (
     REFINE_OPS,
-    apply_refinements,
     refinement_warnings,
     validate_ops,
 )
-from .regions import REGION_MODES, RegionSpecError, build_regions
-from .regions import measure_regions as _measure_each_region
+from .regions import REGION_MODES, RegionSpecError
 from .scale import calibrate_scale
 from .segmentation import CHANNELS, METHODS, OBJECT_TYPES, threshold_mask
 from .session import SessionStore
 from .suggest import colorspace_sheet, polarity_report, threshold_sheet
+from .workers import dispatch, set_isolation
 
 _store = SessionStore()
 
@@ -332,12 +329,8 @@ def _measure_impl(
         "analyses": list(requested),
         "px_per_mm": px_per_mm,
         "lineage": [dict(op) for op in session.lineage],
-        "traits": measure_traits(
-            img,
-            session.mask,
-            analyses=requested,
-            px_per_mm=px_per_mm,
-            include_histograms=include_histograms,
+        "traits": dispatch(
+            "measure", img, session.mask, requested, px_per_mm, include_histograms
         ),
         "engine": {"name": "PlantCV", "version": plantcv_version()},
     }
@@ -346,7 +339,7 @@ def _measure_impl(
 def _refine_impl(session_id: str, ops: list[dict]) -> dict:
     session = _store.get(session_id)
     validated = validate_ops(ops)  # all-or-nothing, before anything runs
-    mask = apply_refinements(session.mask, validated)  # refuses a degenerate result
+    mask = dispatch("refine", session.mask, validated)  # refuses a degenerate result
     before = analyze_mask(session.mask)
     after = analyze_mask(mask)
     warnings = refinement_warnings(mask, before, after)
@@ -398,13 +391,7 @@ def _measure_morphology_impl(
 ) -> dict:
     session = _store.get(session_id)
     img = _load_session_image(session)
-    res = measure_morphology(
-        img,
-        session.mask,
-        prune_size=prune_size,
-        tangent_size=tangent_size,
-        px_per_mm=px_per_mm,
-    )
+    res = dispatch("morphology", img, session.mask, prune_size, tangent_size, px_per_mm)
     small, scale = downscale(res.overlay)
     png = encode_png(small)
     return {
@@ -458,7 +445,8 @@ def _measure_regions_impl(
     session = _store.get(session_id)
     img = _load_session_image(session)
 
-    regions = build_regions(
+    regions = dispatch(
+        "regions",
         img,
         session.mask,
         mode=mode,
@@ -469,20 +457,16 @@ def _measure_regions_impl(
         width=width,
         spacing=_as_xy(spacing, "spacing"),
         radius=radius,
-    )
-    measurements = _measure_each_region(
-        img,
-        session.mask,
-        regions,
         analyses=requested,
         px_per_mm=px_per_mm,
         include_histograms=include_histograms,
     )
+    measurements = regions["measurements"]
 
     overlay = render_region_overlay(
         img,
         session.mask,
-        regions.bboxes,
+        regions["bboxes"],
         [bool(m["measured"]) for m in measurements],
     )
     small, scale = downscale(overlay)
@@ -491,9 +475,9 @@ def _measure_regions_impl(
     measured = [m for m in measurements if m["measured"]]
     return {
         "session_id": session_id,
-        "mode": regions.mode,
-        "nrows": regions.nrows,
-        "ncols": regions.ncols,
+        "mode": regions["mode"],
+        "nrows": regions["nrows"],
+        "ncols": regions["ncols"],
         "regions_total": len(measurements),
         "regions_measured": len(measured),
         "regions_empty": len(measurements) - len(measured),
@@ -501,7 +485,7 @@ def _measure_regions_impl(
         "px_per_mm": px_per_mm,
         "lineage": [dict(op) for op in session.lineage],
         "regions": measurements,
-        "warnings": [{"code": w.code, "message": w.message} for w in regions.warnings],
+        "warnings": [{"code": c, "message": m} for c, m in regions["warnings"]],
         "overlay_scale": scale,
         "engine": {"name": "PlantCV", "version": plantcv_version()},
         "_png": png,
@@ -788,10 +772,11 @@ def build_server() -> MCPServer:
         exactly what ran. An image that cannot be colour-corrected when asked is
         refused, not measured raw. Limit is 200 images per call.
         """
-        return measure_batch(
+        return dispatch(
+            "batch",
             image_paths,
-            channel,
-            method,
+            channel=channel,
+            method=method,
             object_type=object_type,
             fill_size=fill_size,
             ksize=ksize,
@@ -805,4 +790,24 @@ def build_server() -> MCPServer:
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="plantcv-mcp",
+        description="PlantCV as an MCP measurement instrument (stdio).",
+    )
+    parser.add_argument(
+        "--isolate",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "run every PlantCV analysis in a worker subprocess so a native crash "
+            "becomes a tool error instead of killing the server. ON by default "
+            "(measured +7.7%% wall time); --no-isolate or PLANTCV_MCP_ISOLATE=0 "
+            "runs analyses in-process."
+        ),
+    )
+    args = parser.parse_args()
+    if args.isolate is not None:
+        set_isolation(args.isolate)
     build_server().run()

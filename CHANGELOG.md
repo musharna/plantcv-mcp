@@ -6,6 +6,41 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-08-27
+
+Sub-project C of the roadmap. Design: `docs/superpowers/specs/2026-08-27-isolation-design.md`.
+
+### Added
+
+- **Every PlantCV analysis runs in a worker subprocess, by default.** `measure`,
+  `measure_regions`, `measure_morphology`, `measure_images` and `refine` dispatch
+  through `workers.dispatch()` to one warm `spawn`-context worker (never `fork`:
+  the server runs anyio worker threads). A native crash inside PlantCV/OpenCV —
+  the class 0.5.0 closed one instance of by validating geometry — is now a
+  `WorkerCrashedError`/tool error naming the signal, and the next call starts a
+  fresh worker; the server never executes native analysis code. Exceptions raised
+  inside the worker come back as the same type, so a `MorphologyRefusedError` still
+  reads as one at the tool layer. The worker is recycled after 200 calls.
+- **Default on, on evidence.** The plan's gate was "opt-in if > 25 % overhead on
+  the 3000×3000 fixture"; measured: in-process 1841 ms, isolated 1983 ms, **+7.7 %**.
+  `plantcv-mcp --no-isolate` or `PLANTCV_MCP_ISOLATE=0` runs analyses in-process;
+  the console script now parses arguments (`--isolate/--no-isolate`).
+- `analysis.py` — the five analysis entry points with picklable arguments and
+  results, used identically by both modes; `RegionSet`'s PlantCV ROI objects stay
+  on the worker side, only bboxes cross.
+- Tests: an `os.abort()` in the worker is a tool error the server survives (and
+  a mutation that swallows the crash fails both tests); isolated and in-process
+  results are equal for `measure`/`measure_regions`/`measure_morphology`;
+  refusals keep their type; two threads through one worker each get their own
+  numbers; the fresh-process tool-layer driver passes with isolation on.
+
+### Changed
+
+- "Drop `pcv.outputs` reliance" from the audit backlog is closed by isolation
+  rather than removal: 15 of PlantCV's 19 morphology functions report only
+  through `pcv.outputs`, so it cannot be dropped — but a worker's globals are
+  nobody else's. The in-process lock stays for `--no-isolate`.
+
 ## [0.7.0] — 2026-08-27
 
 Sub-project B of the roadmap. Design: `docs/superpowers/specs/2026-08-27-morphology-design.md`.

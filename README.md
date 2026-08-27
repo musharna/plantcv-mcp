@@ -334,6 +334,22 @@ looking at the overlay, then apply it here. A batch never returns a number the s
 validate — which is weaker than a human looking at a mask, and is stated plainly rather than
 implied.
 
+## Crash containment: the analysis worker
+
+Every PlantCV analysis (`measure`, `measure_regions`, `measure_morphology`,
+`measure_images`, `refine`) runs in a **worker subprocess** by default. Two things
+follow. A native crash inside PlantCV/OpenCV — the class 0.5.0 closed one instance
+of by validating `rect_grid` geometry — becomes a tool error (*"the analysis worker
+died during 'measure' (signal 11) … the server is still running"*) and the next call
+starts a fresh worker; the server itself never executes native analysis code. And
+PlantCV's process-global state (`pcv.outputs`, its cached colour palette, its
+sample label) lives in the worker, not in the server.
+
+Measured cost on a 3000×3000 image: **+7.7 %** wall time per `measure()` (the arrays
+cross a pipe), against a gate of 25 % that would have made it opt-in. The first
+analysis after start-up pays the worker's import (~1 s). Turn it off with
+`plantcv-mcp --no-isolate` or `PLANTCV_MCP_ISOLATE=0`.
+
 ## Security and trust boundary
 
 **This server reads image files anywhere on the host filesystem, and returns
