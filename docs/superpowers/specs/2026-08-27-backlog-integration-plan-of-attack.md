@@ -1,6 +1,6 @@
 # Plan of attack: integrating the post-0.5.0 backlog
 
-**Date:** 2026-08-27 · **Baseline:** v0.5.0 (`c64c6b5`), 7 tools, 140 tests · **Status:** ordering APPROVED by the owner 2026-08-27; sub-project specs follow one at a time
+**Date:** 2026-08-27 · **Baseline:** v0.5.0 (`c64c6b5`), 7 tools, 140 tests · **Status:** COMPLETE 2026-08-27 — all five sub-projects shipped the same day: 0.6.0 refine (bba4cd8), 0.7.0 morphology (b5f0e85), 0.8.0 worker isolation, default ON at +7.7% measured (ddb7e74), 0.9.0 read roots (6692a6c), 1.0.0 hyperspectral+thermal. Per-sub-project designs sit beside this file; deltas from plan are recorded in each
 
 This is the ordering-and-scoping document for the five remaining backlog items. Each
 numbered sub-project below gets its own spec → implementation plan → release cycle;

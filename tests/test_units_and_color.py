@@ -155,7 +155,7 @@ def test_server_publishes_instructions_that_state_the_discipline():
 
 def test_every_tool_publishes_annotations_and_a_title():
     tools = asyncio.run(build_server().list_tools())
-    assert len(tools) == 9
+    assert len(tools) == 13
     for t in tools:
         assert t.title, f"{t.name} has no title"
         assert t.annotations is not None, f"{t.name} has no annotations"
@@ -195,6 +195,8 @@ def test_every_structured_tool_publishes_an_output_schema():
         "measure_regions",
         "refine",
         "measure_morphology",
+        "segment_hyperspectral",
+        "segment_thermal",
     }
     # measure_regions joined this set when per-region measurement shipped: it
     # returns the labelled overlay alongside the rows, because per-region

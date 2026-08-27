@@ -6,6 +6,44 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-08-27
+
+Sub-project E — the last of the post-0.5.0 roadmap
+(`docs/superpowers/specs/2026-08-27-backlog-integration-plan-of-attack.md`): the
+tool surface this server set out to cover is complete, hence 1.0. Design:
+`docs/superpowers/specs/2026-08-27-hyperspectral-thermal-design.md`.
+
+### Added
+
+- **Typed sessions.** `Session.kind ∈ {rgb, hsi, thermal}`; every measurer
+  refuses the wrong kind naming the right tool.
+- **`segment_hyperspectral` / `measure_spectral`.** ENVI cubes (`.raw` + `.hdr`;
+  either path accepted — PlantCV derives the header by stripping the raw file's
+  extension, and handed the `.hdr` itself it reads the header as pixels) segment
+  by any of PlantCV's 31 spectral indices and measure index statistics, with the
+  full per-band spectrum opt-in. Guards, all measured on 4.11.3:
+  - **An index computed on integer counts wraps around** (uint16 NDVI read 65.3
+    on a [-1, 1] index). Cubes are calibrated to reflectance from white + dark
+    references, or cast to float with `uncalibrated_cube` (indices are relative).
+  - **A degenerate reference pair is refused** (`white − dark` not positive
+    everywhere): PlantCV's own `calibrate()` silently clips that case to 1.0.
+  - An index the wavelength range cannot support is refused by name.
+  - Both ENVI files are hashed into the session digest (a changed header refuses
+    at measure time exactly like a changed image).
+- **`segment_thermal` / `measure_thermal`.** FLIR radiometric `.jpg` (flyr),
+  `.csv`, and `.npz` frames segment by a °C band and measure max/min/mean/median
+  temperature; a band selecting nothing is refused; masks are never borrowed
+  from RGB sessions.
+- **Real-data evals** on PlantCV's own MPL-2.0 test data, vendored with a NOTICE
+  (`tests/fixtures/plantcv/`): the corn-kernel cube (31×43 px, 580 bands)
+  segments and measures with thresholds taken from its measured NDVI
+  distribution; `measure_thermal` reproduces PlantCV's own mean (33.509482) on
+  its 480×640 frame + mask to 1e-6; a real FLIR JPEG (19–24 °C) segments by
+  temperature. Synthetic known-value evals: a cube whose NDVI is 0.6/−0.2 by
+  construction (recovered to ±0.01, calibrated and uncalibrated), a °C frame
+  with a known warm disc.
+- Both new analyses run in the isolation worker like every other analysis.
+
 ## [0.9.0] — 2026-08-27
 
 Sub-project D of the roadmap. Design: `docs/superpowers/specs/2026-08-27-read-roots-design.md`.
