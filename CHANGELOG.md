@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-08-28
+
 Second live dogfood, against the released 1.2.0 server: all six 1.2.0 fixes
 verified over the wire; one new defect.
 
