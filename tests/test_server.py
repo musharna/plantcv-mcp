@@ -126,9 +126,9 @@ def test_segment_warnings_fire_for_real_failures_and_not_for_a_clean_plant(tmp_p
 
 def test_segment_reports_real_overlay_scale(tmp_path):
     """overlay_scale must reflect the actual downscale() call, not a stub 1.0."""
-    small_path = _write_green_png(tmp_path)  # 200x200, under max_edge=1024
+    small_path = _write_green_png(tmp_path)  # 200x200, under min_edge=256
     seg_small = _segment_impl(small_path, channel="a", method="otsu")
-    assert seg_small["overlay_scale"] == 1.0
+    assert seg_small["overlay_scale"] == 2.0  # upscaled so it can be looked at
 
     large_path = _write_large_green_png(tmp_path)  # 2000x2000
     seg_large = _segment_impl(large_path, channel="a", method="otsu")
@@ -669,3 +669,13 @@ def test_measure_recomputes_and_carries_mask_level_warnings(tmp_path):
     cv2.imwrite(p2, img2)
     res2 = _measure_impl(_segment_impl(p2, "a", "otsu")["session_id"])
     assert res2["warnings"] == []
+
+
+def test_list_methods_names_the_server_itself():
+    """The engine version alone cannot say WHICH plantcv-mcp answered — found
+    live: a stale 1.0.0 server was indistinguishable from current over the
+    tool surface."""
+    from plantcv_mcp import __version__
+    from plantcv_mcp.server import list_methods_impl
+
+    assert list_methods_impl()["server_version"] == __version__

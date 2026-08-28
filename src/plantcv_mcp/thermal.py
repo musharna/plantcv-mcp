@@ -127,7 +127,17 @@ def segment_thermal(
     mask = np.where(mask > 0, 255, 0).astype(np.uint8)
     diag = analyze_mask(mask)
     assert_not_degenerate(diag)
-    warnings = segmentation_warnings(mask, diag, analyze_mask(pre_fill), fill_size)
+    warnings = segmentation_warnings(
+        mask,
+        diag,
+        analyze_mask(pre_fill),
+        fill_size,
+        # The default remedy names object_type, which this tool does not have.
+        coverage_remedy=(
+            "Narrow the temperature band (min_c / max_c) to the plant's own "
+            "temperatures and re-run segment_thermal()."
+        ),
+    )
     n_bad = int(c.size - np.isfinite(c).sum())
     if n_bad:
         warnings.append(

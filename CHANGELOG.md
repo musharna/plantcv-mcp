@@ -6,6 +6,50 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-08-28
+
+Findings from dogfooding the released server end-to-end over a live MCP
+connection (all three modalities, real fixtures) — led by one critical defect
+no code review had caught, because only a real client could see it.
+
+### Fixed
+
+- **Refusal messages reach the client again on mcp ≥ 2.1.** mcp 2.1 masks any
+  exception that is not a `ToolError` to a bare `Error executing tool <name>` —
+  the right contract for a network service, and exactly the wrong one for a
+  local instrument whose refusal messages are the product. Verified live: the
+  "this is a thermal session, use measure_thermal()" guidance reached the
+  client as nothing at all, and so did every other guard. Every tool now
+  converts exceptions to `ToolError` at the boundary, keeping the class name;
+  the lockfile moves to mcp 2.1.1 so the tests exercise the real masking
+  semantics.
+- **Read roots travel with every worker request.** They were snapshotted at
+  worker spawn, so a warm worker kept enforcing a policy the parent had since
+  changed. Roots are request state, not process state.
+- **The morphology overlay now carries PlantCV's segment id digits.** The docs
+  promised "the number drawn on the picture"; the labeled image PlantCV draws
+  the digits on was being discarded in favour of its unlabeled twin.
+- **The thermal `implausible_coverage` advisory gives thermal advice.** It told
+  users to flip `object_type`, a parameter `segment_thermal()` does not have;
+  it now says to narrow the temperature band.
+
+### Added
+
+- **Tiny frames are upscaled so their overlays can be looked at.** A 31×43
+  hyperspectral cube's overlay was an unreadable 1:1 thumbnail — for a product
+  whose core discipline is "look at the overlay". Frames under 256 px on their
+  longest edge are upscaled by an integer factor (nearest neighbour, crisp
+  pixels), and `overlay_scale` reports it, as ever.
+- **`list_methods()` reports `server_version`.** The engine version alone could
+  not say which plantcv-mcp answered; a stale cached server was
+  indistinguishable from current over the tool surface (found live: a 1.0.0
+  uvx cache).
+- **`implausible_longest_path` advisory.** PlantCV can report a longest_path of
+  7 px for a 343 px tall object on a fragmented mask (observed live on the
+  regions path) — an artefact that reads exactly like a measurement. Both
+  measure() and measure_regions() now flag a longest_path shorter than a tenth
+  of the bounding box's long side.
+
 ## [1.1.0] — 2026-08-28
 
 Every confirmed finding from the second multi-judge panel audit (of 1.0.1,

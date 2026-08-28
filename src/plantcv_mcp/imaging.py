@@ -75,21 +75,34 @@ def load_image(path: str) -> np.ndarray:
     return load_image_with_digest(path)[0]
 
 
-def downscale(img: np.ndarray, max_edge: int = 1024) -> tuple[np.ndarray, float]:
-    """Shrink so the longest edge is <= max_edge. Returns (image, scale).
+def downscale(
+    img: np.ndarray, max_edge: int = 1024, min_edge: int = 256
+) -> tuple[np.ndarray, float]:
+    """Rescale so the longest edge is <= max_edge AND >= min_edge.
 
-    Scale is always returned so downsampling is never silent.
+    Returns (image, scale); scale is always returned so rescaling is never
+    silent. Small frames are UPSCALED by an integer factor (nearest neighbour,
+    so mask pixels stay crisp): a 31x43 hyperspectral overlay at 1:1 is an
+    unreadable thumbnail, and looking at the overlay is the point.
     """
     longest = max(img.shape[:2])
-    if longest <= max_edge:
-        return img, 1.0
-    scale = max_edge / longest
-    resized = cv2.resize(
-        img,
-        (int(img.shape[1] * scale), int(img.shape[0] * scale)),
-        interpolation=cv2.INTER_AREA,
-    )
-    return resized, scale
+    if longest > max_edge:
+        scale = max_edge / longest
+        resized = cv2.resize(
+            img,
+            (int(img.shape[1] * scale), int(img.shape[0] * scale)),
+            interpolation=cv2.INTER_AREA,
+        )
+        return resized, scale
+    if longest < min_edge:
+        k = -(-min_edge // longest)  # ceil: smallest integer factor that reaches
+        resized = cv2.resize(
+            img,
+            (img.shape[1] * k, img.shape[0] * k),
+            interpolation=cv2.INTER_NEAREST,
+        )
+        return resized, float(k)
+    return img, 1.0
 
 
 def render_overlay(img: np.ndarray, mask: np.ndarray) -> np.ndarray:

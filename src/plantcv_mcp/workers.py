@@ -60,15 +60,10 @@ def set_isolation(enabled: bool | None) -> None:
     _isolate = enabled
 
 
-def _serve(conn: Connection, roots: list[str] | None) -> None:  # in the worker
+def _serve(conn: Connection) -> None:  # runs in the worker process
     from .analysis import REGISTRY
     from .paths import configured_roots, set_roots
 
-    # `spawn` re-imports modules, so roots configured with set_roots() (the
-    # `--root` CLI flag) would silently NOT exist here; only the env var would.
-    # The parent passes its effective roots and they are installed before any
-    # request is served.
-    set_roots(roots)
     registry = dict(REGISTRY)
     registry["_abort"] = _abort_for_tests
     registry["_raise_unpicklable"] = _raise_unpicklable_for_tests
@@ -80,7 +75,13 @@ def _serve(conn: Connection, roots: list[str] | None) -> None:  # in the worker
             return
         if request is None:
             return
-        name, args, kwargs = request
+        # Roots travel with EVERY request, not with the spawn: `spawn`
+        # re-imports modules, so `--root` (set_roots) would silently not exist
+        # here — and a warm worker outlives later set_roots() changes in the
+        # parent, so a spawn-time snapshot goes stale. Request state, not
+        # process state.
+        name, args, kwargs, roots = request
+        set_roots(roots)
         try:
             conn.send(("ok", registry[name](*args, **kwargs)))
         except BaseException as exc:  # noqa: BLE001 — forwarded, not swallowed
@@ -123,15 +124,10 @@ class _Worker:
         self._tasks = 0
 
     def _start(self) -> None:
-        from .paths import configured_roots
-
         ctx = mp.get_context("spawn")
         parent, child = ctx.Pipe()
         proc = ctx.Process(
-            target=_serve,
-            args=(child, configured_roots()),
-            daemon=True,
-            name="plantcv-mcp-worker",
+            target=_serve, args=(child,), daemon=True, name="plantcv-mcp-worker"
         )
         proc.start()
         child.close()
@@ -169,8 +165,10 @@ class _Worker:
                 self._stop()
                 self._start()
             assert self._conn is not None and self._proc is not None
+            from .paths import configured_roots
+
             try:
-                self._conn.send((name, args, kwargs))
+                self._conn.send((name, args, kwargs, configured_roots()))
                 status, payload = self._conn.recv()
             except (EOFError, OSError, BrokenPipeError) as exc:
                 self._proc.join(timeout=5)

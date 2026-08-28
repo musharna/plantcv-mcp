@@ -188,3 +188,28 @@ def test_tangent_window_longer_than_a_leaf_is_flagged_not_reported_as_zero():
     # Positive control: the default window is shorter than every leaf.
     ok = measure_morphology(img, mask)
     assert "tangent_window_exceeds_segment" not in [w.code for w in ok.warnings]
+
+
+def test_the_overlay_carries_plantcvs_segment_id_text(monkeypatch):
+    """The docs promise 'segment id is the number drawn on the picture', but
+    segment_id() returns (colored, labeled) and the labeled one — the one with
+    the digits — was discarded. Spy on the real call and assert its text pixels
+    reach the returned overlay verbatim."""
+    from plantcv import plantcv as pcv
+
+    captured = {}
+    real = pcv.morphology.segment_id
+
+    def spy(skel_img, objects, mask=None):
+        seg, labeled = real(skel_img=skel_img, objects=objects, mask=mask)
+        captured["seg"], captured["labeled"] = seg.copy(), labeled.copy()
+        return seg, labeled
+
+    monkeypatch.setattr(pcv.morphology, "segment_id", spy)
+    img, mask = _plant()
+    res = measure_morphology(img, mask)
+    text_only = captured["labeled"].any(axis=2) & ~captured["seg"].any(axis=2)
+    assert text_only.sum() > 0, "PlantCV drew no id text at all (fixture issue)"
+    assert (res.overlay[text_only] == captured["labeled"][text_only]).all(), (
+        "the id digits PlantCV drew must appear in the overlay"
+    )

@@ -78,8 +78,18 @@ class Advisory:
     message: str
 
 
+# The default remedy sentence is written for segment(); tools without an
+# object_type (thermal) pass their own, or the advice misdirects.
+RGB_COVERAGE_REMEDY = (
+    "Re-run segment() with the opposite object_type ('light' instead of "
+    "'dark', or vice versa)."
+)
+
+
 def implausible_coverage_warning(
-    diag: MaskDiagnostics, max_fraction: float = 0.5
+    diag: MaskDiagnostics,
+    max_fraction: float = 0.5,
+    remedy: str = RGB_COVERAGE_REMEDY,
 ) -> "Advisory | None":
     """Warn when the mask covers implausibly much of the frame.
 
@@ -106,10 +116,8 @@ def implausible_coverage_warning(
             f"The mask covers {diag.mask_fraction:.1%} of the frame. If you "
             "expected a plant against a background, this mask is probably "
             "INVERTED — it is the background, and every trait would describe "
-            "that instead of the plant. Re-run segment() with the opposite "
-            "object_type ('light' instead of 'dark', or vice versa). Ignore "
-            "this if the subject genuinely fills the frame, such as a macro "
-            "shot of a single leaf."
+            f"that instead of the plant. {remedy} Ignore this if the subject "
+            "genuinely fills the frame, such as a macro shot of a single leaf."
         ),
     )
 
@@ -165,7 +173,11 @@ BLOCKING_CODES: frozenset[str] = frozenset(
 )
 
 
-def mask_warnings(mask: np.ndarray, diag: MaskDiagnostics) -> list["Advisory"]:
+def mask_warnings(
+    mask: np.ndarray,
+    diag: MaskDiagnostics,
+    coverage_remedy: str = RGB_COVERAGE_REMEDY,
+) -> list["Advisory"]:
     """Advisories derivable from the mask alone, with no segmentation history.
 
     Shared by segment-time reporting AND measure-time re-reporting: the trait
@@ -174,7 +186,7 @@ def mask_warnings(mask: np.ndarray, diag: MaskDiagnostics) -> list["Advisory"]:
     """
     warnings: list[Advisory] = []
 
-    coverage = implausible_coverage_warning(diag)
+    coverage = implausible_coverage_warning(diag, remedy=coverage_remedy)
     if coverage:
         warnings.append(coverage)
 
@@ -198,6 +210,7 @@ def segmentation_warnings(
     diag: MaskDiagnostics,
     pre_fill_diag: MaskDiagnostics,
     fill_size: int,
+    coverage_remedy: str = RGB_COVERAGE_REMEDY,
 ) -> list["Advisory"]:
     """Every advisory a segmented mask earns, in one place.
 
@@ -226,8 +239,39 @@ def segmentation_warnings(
         if empty:
             warnings.append(empty)
 
-    warnings.extend(mask_warnings(mask, diag))
+    warnings.extend(mask_warnings(mask, diag, coverage_remedy=coverage_remedy))
     return warnings
+
+
+def implausible_longest_path_warning(traits: dict) -> "Advisory | None":
+    """Flag PlantCV's longest_path when it cannot be a path through the object.
+
+    Observed live: 7 px against a 343 px tall region (a fragmented mask on the
+    regions path) — an artefact that reads exactly like a measurement. A path
+    through an object shorter than a tenth of its bounding box's long side is
+    not a plausible skeleton path.
+    """
+    lp = (traits.get("longest_path") or {}).get("value")
+    w = (traits.get("width") or {}).get("value")
+    h = (traits.get("height") or {}).get("value")
+    if (
+        not isinstance(lp, int | float)
+        or not isinstance(w, int | float)
+        or not isinstance(h, int | float)
+    ):
+        return None
+    extent = max(float(w), float(h))
+    if extent <= 0 or lp >= 0.1 * extent:
+        return None
+    return Advisory(
+        code="implausible_longest_path",
+        message=(
+            f"PlantCV reports longest_path={float(lp):.1f} against a "
+            f"{w}x{h} bounding box. A path through the object cannot be that "
+            "short; this happens on fragmented masks and is an artefact, not a "
+            "measurement — ignore this trait for this object."
+        ),
+    )
 
 
 def frame_clipping_warning(mask: np.ndarray) -> "Advisory | None":

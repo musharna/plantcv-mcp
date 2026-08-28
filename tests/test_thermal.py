@@ -153,3 +153,15 @@ def test_a_multi_array_npz_is_refused_naming_its_arrays(tmp_path):
         load_thermal(str(p))
     # Positive control: a single-array archive still loads.
     assert load_thermal(_write_npz(tmp_path, frame)).source == "npz"
+
+
+def test_thermal_implausible_coverage_advises_the_band_not_object_type(tmp_path):
+    """The advisory used to give RGB advice ('opposite object_type') on a tool
+    that has no object_type; a thermal whole-frame mask needs a narrower band."""
+    frame, _ = _scene()
+    p = _write_csv(tmp_path, frame)
+    seg = segment_thermal(p, min_c=-100.0, max_c=500.0)
+    msgs = {w.code: w.message for w in seg.warnings}
+    assert "implausible_coverage" in msgs
+    assert "min_c" in msgs["implausible_coverage"]
+    assert "object_type" not in msgs["implausible_coverage"]
