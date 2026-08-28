@@ -707,3 +707,88 @@ async def test_grayscale_image_is_refused_by_name_everywhere(tmp_path):
     assert entry["measured"] is False
     assert "1 channel" in entry["refused_because"]
     assert "cvtColor" not in entry["refused_because"]
+
+
+@pytest.mark.anyio
+async def test_marker_calibration_round_trip_yields_millimetres_from_a_real_frame():
+    """The one path a user actually walks with calibrate_scale_from_marker, on a
+    CHECKED-IN frame that holds both a plant and a marker (the earlier positive
+    control used a temp disc alone): calibrate -> segment -> measure(px_per_mm)
+    must land on the plant's known physical size, and the marker must not be
+    counted as plant. Geometry is in tests/fixtures/make_plant_with_marker.py:
+    a 200x100 px green rectangle and a 100 px black disc that is 20 mm, so
+    5 px/mm and the plant is 40 x 20 mm, 800 mm2."""
+    import importlib.util
+    from pathlib import Path
+
+    fixtures = Path(__file__).parent / "fixtures"
+    spec = importlib.util.spec_from_file_location(
+        "make_plant_with_marker", fixtures / "make_plant_with_marker.py"
+    )
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    path = str(fixtures / "plant_with_marker.png")
+    x, y, w, h = gen.MARKER_CROP
+    mcp = build_server()
+
+    cal = (
+        await mcp.call_tool(
+            "calibrate_scale_from_marker",
+            {
+                "image_path": path,
+                "x": x,
+                "y": y,
+                "w": w,
+                "h": h,
+                "marker_length_mm": gen.MARKER_LENGTH_MM,
+            },
+        )
+    ).structured_content
+    assert cal["marker_length_px"] == 100
+    assert cal["px_per_mm"] == pytest.approx(5.0, rel=1e-3)
+    assert cal["warnings"] == []
+
+    # Negative control inside the same test: the wrong polarity on the same crop
+    # selects the background and is flagged, so a passing calibration above is
+    # evidence and not a harness that accepts anything.
+    bad = (
+        await mcp.call_tool(
+            "calibrate_scale_from_marker",
+            {
+                "image_path": path,
+                "x": x,
+                "y": y,
+                "w": w,
+                "h": h,
+                "marker_length_mm": gen.MARKER_LENGTH_MM,
+                "object_type": "light",
+            },
+        )
+    ).structured_content
+    assert "marker_touches_crop_edge" in [a["code"] for a in bad["warnings"]]
+
+    seg = json.loads(
+        (
+            await mcp.call_tool(
+                "segment",
+                {"image_path": path, "channel": "a", "method": "otsu"},
+            )
+        )
+        .content[0]
+        .text
+    )
+    # Exactly the rectangle: the black marker in the same frame is not plant.
+    assert seg["component_count"] == 1
+    assert seg["largest_area"] == 200 * 100
+    assert seg["warnings"] == []
+
+    mm = (
+        await mcp.call_tool(
+            "measure", {"session_id": seg["session_id"], "px_per_mm": cal["px_per_mm"]}
+        )
+    ).structured_content
+    t = mm["traits"]
+    assert t["area"]["unit"] == "mm2"
+    assert t["area"]["value"] == pytest.approx(800.0, rel=1e-3)
+    assert t["width"]["value"] == pytest.approx(40.0, rel=1e-3)
+    assert t["height"]["value"] == pytest.approx(20.0, rel=1e-3)
