@@ -245,3 +245,46 @@ def test_tool_layer_sequence_runs_isolated():
         env={**os.environ, "PLANTCV_MCP_ISOLATE": "1"},
     )
     assert "SEQUENCE_OK" in proc.stdout, proc.stderr[-3000:]
+
+
+def test_cli_configured_roots_reach_the_worker(isolated, tmp_path):
+    """`--root` configures roots via set_roots(), which spawn does NOT inherit
+    (only the env var would survive). The worker must be told explicitly, or a
+    future worker-side file read would be unrestricted under CLI roots."""
+    import os
+
+    from plantcv_mcp import paths
+
+    paths.set_roots([str(tmp_path)])
+    try:
+        workers.shutdown_worker()  # a fresh worker must pick up the live roots
+        assert run_isolated("_configured_roots") == [os.path.realpath(str(tmp_path))]
+    finally:
+        paths.set_roots(None)
+        workers.shutdown_worker()
+
+
+def test_a_worker_that_survives_sigkill_is_reported_not_ignored():
+    """A process in uninterruptible kernel sleep (state D) can survive SIGKILL.
+    Silently starting a fresh worker on top would stack zombies holding memory
+    and file handles; the survivor must be named loudly."""
+    from plantcv_mcp.workers import _Worker
+
+    class Immortal:
+        pid = 4242
+
+        def join(self, timeout=None):
+            pass
+
+        def is_alive(self):
+            return True
+
+        def kill(self):
+            pass
+
+    w = _Worker()
+    w._proc = Immortal()
+    w._conn = None
+    with pytest.raises(RuntimeError, match="4242"):
+        w._stop()
+    assert w._proc is None  # the dead handle is dropped either way

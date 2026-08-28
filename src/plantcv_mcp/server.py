@@ -31,7 +31,7 @@ from typing_extensions import TypedDict
 
 from . import __version__, plantcv_version
 from .color import correct_color
-from .diagnostics import analyze_mask, segmentation_warnings
+from .diagnostics import analyze_mask, mask_warnings, segmentation_warnings
 from .hyperspectral import load_cube
 from .imaging import (
     downscale,
@@ -116,6 +116,11 @@ class MeasureResult(TypedDict):
     # apart. Trait definitions shift between PlantCV releases, so a measurement
     # that cannot name its version is not reproducible.
     engine: dict[str, str]
+    # Mask-level advisories (frame_clipping, multi_specimen, ...), re-derived
+    # from the session mask at measure time. They were reported at segment()
+    # time and then dropped, so the trait table — the artifact people keep —
+    # could not say its own area was a lower bound.
+    warnings: list[dict]
 
 
 class WarningItem(TypedDict):
@@ -341,7 +346,7 @@ def _load_session_image(session) -> np.ndarray:
             "longer corresponds to its current content. Re-run segment() on "
             "the current file before measuring it."
         )
-    if session.digest and digest != session.digest:
+    if digest != session.digest:
         raise ImageChangedSinceSegmentationError(
             f"Image at {session.image_path!r} still has shape {current_shape}, "
             "but its CONTENT changed since segment() produced this session's "
@@ -374,6 +379,10 @@ def _measure_impl(
             "measure", img, session.mask, requested, px_per_mm, include_histograms
         ),
         "engine": {"name": "PlantCV", "version": plantcv_version()},
+        "warnings": [
+            {"code": w.code, "message": w.message}
+            for w in mask_warnings(session.mask, analyze_mask(session.mask))
+        ],
     }
 
 
@@ -476,7 +485,7 @@ def _session_of(session_id: str, kind: str):
 
 def _load_session_cube(session):
     load = load_cube(session.image_path)
-    if session.digest and load.digest != session.digest:
+    if load.digest != session.digest:
         raise ImageChangedSinceSegmentationError(
             f"The ENVI cube at {session.image_path!r} (or its .hdr) changed since "
             "segment_hyperspectral() produced this session's mask (SHA-256 "
@@ -487,7 +496,7 @@ def _load_session_cube(session):
 
 def _load_session_thermal(session):
     load = load_thermal(session.image_path)
-    if session.digest and load.digest != session.digest:
+    if load.digest != session.digest:
         raise ImageChangedSinceSegmentationError(
             f"The thermal file at {session.image_path!r} changed since "
             "segment_thermal() produced this session's mask (SHA-256 mismatch). "
@@ -519,11 +528,12 @@ def _segment_hsi_impl(
     dark_reference: str | None = None,
     fill_size: int = 200,
 ) -> dict:
-    check_readable(envi_path)
-    for ref in (white_reference, dark_reference):
-        if ref is not None:
-            check_readable(ref)
+    # Containment is enforced by read_image_bytes() at the read itself (the
+    # derived ENVI sibling included); these loads happen HERE, in the parent,
+    # so the worker never touches the filesystem.
     load = load_cube(envi_path)
+    white_load = load_cube(white_reference) if white_reference is not None else None
+    dark_load = load_cube(dark_reference) if dark_reference is not None else None
     seg = dispatch(
         "hsi_segment",
         load,
@@ -532,6 +542,8 @@ def _segment_hsi_impl(
         object_type=object_type,
         white_reference=white_reference,
         dark_reference=dark_reference,
+        white_load=white_load,
+        dark_load=dark_load,
         fill_size=fill_size,
     )
     session = _store.create(
@@ -579,12 +591,18 @@ def _measure_spectral_impl(
 ) -> SpectralMeasureResult:
     session = _session_of(session_id, "hsi")
     load = _load_session_cube(session)
+    cal = session.extra.get("calibration_args") or {}
+    # Refs are re-read in the parent (contained reads); measure_spectral checks
+    # them against the digests pinned at segmentation before calibrating.
+    wref, dref = cal.get("white_reference"), cal.get("dark_reference")
     res = dispatch(
         "hsi_measure",
         load,
         session.mask,
         indices=tuple(indices) if indices else (session.extra.get("index", "ndvi"),),
-        calibration=session.extra.get("calibration_args"),
+        calibration=cal,
+        white_load=load_cube(wref) if wref is not None else None,
+        dark_load=load_cube(dref) if dref is not None else None,
         include_spectrum=include_spectrum,
         include_histograms=include_histograms,
     )

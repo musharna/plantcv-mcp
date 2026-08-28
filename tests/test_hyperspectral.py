@@ -316,3 +316,94 @@ async def test_hyperspectral_tools_over_the_real_mcp_layer(tmp_path):
     # Typed sessions: an RGB tool refuses an HSI session by name, and vice versa.
     with pytest.raises(ToolError, match="measure_spectral"):
         await mcp.call_tool("measure", {"session_id": seg["session_id"]})
+
+
+def test_a_symlinked_raw_sibling_cannot_escape_the_read_roots(tmp_path):
+    """_resolve_pair derives the .raw sibling of a .hdr the caller named; the
+    sibling's bytes must pass containment too, or a symlink smuggles them out."""
+    from plantcv_mcp import paths
+    from plantcv_mcp.paths import PathOutsideRootsError
+
+    allowed = tmp_path / "allowed"
+    other = tmp_path / "other"
+    allowed.mkdir()
+    other.mkdir()
+    out_raw = _write_cube(other, "cube", _known_cube())
+    in_raw = _write_cube(allowed, "cube", _known_cube())
+    # The .hdr the caller names is inside the root; the raw bytes are not.
+    os.remove(in_raw)
+    os.symlink(out_raw, in_raw)
+    paths.set_roots([str(allowed)])
+    try:
+        with pytest.raises(PathOutsideRootsError):
+            load_cube(str(allowed / "cube.hdr"))
+        # Positive control: a fully in-root pair loads under the same roots.
+        legit = _write_cube(allowed, "legit", _known_cube())
+        assert load_cube(legit).cube.array_data.shape == (H, W, 5)
+    finally:
+        paths.set_roots(None)
+
+
+def test_a_swapped_calibration_reference_is_refused_at_measure(tmp_path):
+    """The refs are part of the measurement's identity: every calibrated number
+    depends on their bytes. They are digest-pinned at segmentation like the cube
+    itself, so a swap between segment and measure is a refusal, not a silently
+    different measurement."""
+    from plantcv_mcp.hyperspectral import CalibrationReferencesChangedError
+
+    path = _write_cube(tmp_path, "counts", _known_cube(np.uint16, scale=1000))
+    white, dark = _refs(tmp_path)
+    seg = segment_hyperspectral(
+        path, index="ndvi", threshold=0.2, white_reference=white, dark_reference=dark
+    )
+    # Positive control: with the refs untouched, measurement runs.
+    res = measure_spectral(
+        path, seg.mask, indices=["ndvi"], calibration=seg.calibration_args
+    )
+    assert res.indices["ndvi"]["mean"] == pytest.approx(0.6, abs=0.01)
+    # Swap the white reference for a plausible but different file.
+    _write_cube(tmp_path, "white", np.full((1, W, len(WL)), 900, np.uint16))
+    with pytest.raises(CalibrationReferencesChangedError, match="white"):
+        measure_spectral(
+            path, seg.mask, indices=["ndvi"], calibration=seg.calibration_args
+        )
+
+
+def test_the_server_pins_calibration_refs_in_the_session(tmp_path):
+    """Same property through the server layer: the session must carry the ref
+    digests, and measure_spectral() must check them."""
+    from plantcv_mcp.hyperspectral import CalibrationReferencesChangedError
+    from plantcv_mcp.server import _measure_spectral_impl, _segment_hsi_impl
+
+    path = _write_cube(tmp_path, "counts", _known_cube(np.uint16, scale=1000))
+    white, dark = _refs(tmp_path)
+    seg = _segment_hsi_impl(path, white_reference=white, dark_reference=dark)
+    assert seg["calibration"] == "white/dark"
+    # Positive control first.
+    res = _measure_spectral_impl(seg["session_id"], indices=["ndvi"])
+    assert res["indices"]["ndvi"]["mean"] == pytest.approx(0.6, abs=0.01)
+    _write_cube(tmp_path, "dark", np.full((1, W, len(WL)), 7, np.uint16))
+    with pytest.raises(CalibrationReferencesChangedError, match="dark"):
+        _measure_spectral_impl(seg["session_id"], indices=["ndvi"])
+
+
+def test_nonfinite_index_values_are_reported_not_silently_dropped(tmp_path):
+    """min/max already skip NaN pixels quietly while pixel_count claims the
+    whole mask. The dropped evidence must be named: a nan_pixels advisory and a
+    finite_pixel_count per index."""
+    cube = _known_cube()
+    cube[28:32, 38:42, 1] = np.nan  # 16 in-disc pixels lose the 670 nm band
+    path = _write_cube(tmp_path, "nan_cube", cube)
+    mask = np.where(_disc(), 255, 0).astype(np.uint8)
+
+    res = measure_spectral(path, mask, indices=["ndvi"])
+    assert "nan_pixels" in [w.code for w in res.warnings]
+    assert res.pixel_count == int(_disc().sum())
+    assert res.indices["ndvi"]["finite_pixel_count"] == int(_disc().sum()) - 16
+
+    # Positive control: a clean cube reports full finite evidence, no advisory.
+    clean = measure_spectral(
+        _write_cube(tmp_path, "clean_cube", _known_cube()), mask, indices=["ndvi"]
+    )
+    assert "nan_pixels" not in [w.code for w in clean.warnings]
+    assert clean.indices["ndvi"]["finite_pixel_count"] == clean.pixel_count

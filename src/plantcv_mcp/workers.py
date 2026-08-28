@@ -60,12 +60,19 @@ def set_isolation(enabled: bool | None) -> None:
     _isolate = enabled
 
 
-def _serve(conn: Connection) -> None:  # runs in the worker process
+def _serve(conn: Connection, roots: list[str] | None) -> None:  # in the worker
     from .analysis import REGISTRY
+    from .paths import configured_roots, set_roots
 
+    # `spawn` re-imports modules, so roots configured with set_roots() (the
+    # `--root` CLI flag) would silently NOT exist here; only the env var would.
+    # The parent passes its effective roots and they are installed before any
+    # request is served.
+    set_roots(roots)
     registry = dict(REGISTRY)
     registry["_abort"] = _abort_for_tests
     registry["_raise_unpicklable"] = _raise_unpicklable_for_tests
+    registry["_configured_roots"] = configured_roots
     while True:
         try:
             request = conn.recv()
@@ -116,10 +123,15 @@ class _Worker:
         self._tasks = 0
 
     def _start(self) -> None:
+        from .paths import configured_roots
+
         ctx = mp.get_context("spawn")
         parent, child = ctx.Pipe()
         proc = ctx.Process(
-            target=_serve, args=(child,), daemon=True, name="plantcv-mcp-worker"
+            target=_serve,
+            args=(child, configured_roots()),
+            daemon=True,
+            name="plantcv-mcp-worker",
         )
         proc.start()
         child.close()
@@ -137,6 +149,18 @@ class _Worker:
             if self._proc.is_alive():
                 self._proc.kill()
                 self._proc.join(timeout=5)
+                if self._proc.is_alive():
+                    # SIGKILL cannot reach a process in uninterruptible kernel
+                    # sleep (state D). Starting a fresh worker on top of it
+                    # silently would stack zombies holding memory and handles.
+                    pid = self._proc.pid
+                    self._proc, self._conn = None, None
+                    raise RuntimeError(
+                        f"Analysis worker (pid {pid}) survived SIGKILL — it is "
+                        "likely stuck in an uninterruptible native call (disk/"
+                        "NFS?). Its memory and file handles are still held; "
+                        "check the host before retrying."
+                    )
         self._proc, self._conn = None, None
 
     def call(self, name: str, *args: Any, **kwargs: Any) -> Any:

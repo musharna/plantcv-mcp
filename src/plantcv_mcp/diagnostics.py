@@ -165,6 +165,34 @@ BLOCKING_CODES: frozenset[str] = frozenset(
 )
 
 
+def mask_warnings(mask: np.ndarray, diag: MaskDiagnostics) -> list["Advisory"]:
+    """Advisories derivable from the mask alone, with no segmentation history.
+
+    Shared by segment-time reporting AND measure-time re-reporting: the trait
+    table is the artifact people keep, so it must carry the same caveats the
+    overlay did — computed by the same code, or the two would drift.
+    """
+    warnings: list[Advisory] = []
+
+    coverage = implausible_coverage_warning(diag)
+    if coverage:
+        warnings.append(coverage)
+
+    multi = multi_specimen_warning(diag)
+    if multi:
+        warnings.append(multi)
+
+    # frame_clipping asserts that size traits are a LOWER BOUND, which presumes the
+    # mask IS the plant. On an implausibly large (probably inverted) mask that claim
+    # actively misleads, so it is withheld rather than stacked on top.
+    if not coverage:
+        clipping = frame_clipping_warning(mask)
+        if clipping:
+            warnings.append(clipping)
+
+    return warnings
+
+
 def segmentation_warnings(
     mask: np.ndarray,
     diag: MaskDiagnostics,
@@ -198,22 +226,7 @@ def segmentation_warnings(
         if empty:
             warnings.append(empty)
 
-    coverage = implausible_coverage_warning(diag)
-    if coverage:
-        warnings.append(coverage)
-
-    multi = multi_specimen_warning(diag)
-    if multi:
-        warnings.append(multi)
-
-    # frame_clipping asserts that size traits are a LOWER BOUND, which presumes the
-    # mask IS the plant. On an implausibly large (probably inverted) mask that claim
-    # actively misleads, so it is withheld rather than stacked on top.
-    if not coverage:
-        clipping = frame_clipping_warning(mask)
-        if clipping:
-            warnings.append(clipping)
-
+    warnings.extend(mask_warnings(mask, diag))
     return warnings
 
 

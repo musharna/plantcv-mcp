@@ -110,8 +110,11 @@ def convert_units(
     Positions (`center_of_mass`, `ellipse_center`) are left in pixels: without a
     defined origin, a millimetre coordinate is meaningless.
     """
-    if px_per_mm <= 0:
-        raise ValueError(f"px_per_mm must be > 0, got {px_per_mm}")
+    # NaN fails every comparison, so `<= 0` alone lets it through — and every
+    # converted trait would come back NaN-but-labelled-mm. This is the shared
+    # conversion layer, so the check holds for every caller (regions included).
+    if px_per_mm <= 0 or not math.isfinite(float(px_per_mm)):
+        raise ValueError(f"px_per_mm must be a positive finite number, got {px_per_mm}")
 
     out: dict[str, TraitValue] = {}
     for name, trait in traits.items():

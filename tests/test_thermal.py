@@ -141,3 +141,15 @@ async def test_thermal_tools_over_the_real_mcp_layer(tmp_path):
         await mcp.call_tool("measure", {"session_id": seg["session_id"]})
     with pytest.raises(ToolError, match="Unknown session"):
         await mcp.call_tool("measure_thermal", {"session_id": "nope"})
+
+
+def test_a_multi_array_npz_is_refused_naming_its_arrays(tmp_path):
+    """An .npz with several arrays used to yield whichever numpy listed first —
+    a silent choice between candidate frames. Refuse and name them instead."""
+    frame, _ = _scene()
+    p = tmp_path / "two.npz"
+    np.savez(p, celsius=frame, kelvin=frame + 273.15)
+    with pytest.raises(ValueError, match="celsius"):
+        load_thermal(str(p))
+    # Positive control: a single-array archive still loads.
+    assert load_thermal(_write_npz(tmp_path, frame)).source == "npz"

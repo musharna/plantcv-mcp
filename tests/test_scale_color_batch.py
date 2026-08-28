@@ -226,3 +226,41 @@ def test_batch_passes_scale_and_analyses_through():
     assert traits["area"]["unit"] == "mm2"
     assert "hue_circular_mean" in traits
     assert out["recipe"]["px_per_mm"] == 10.0
+
+
+def test_a_rotated_square_marker_is_measured_by_its_side_not_its_bbox():
+    """A 45deg-rotated square's axis-aligned bbox is sqrt(2)x the side (~41%
+    overstated scale). The marker's length must come from rotation-invariant
+    geometry, not the bbox."""
+    import cv2
+
+    canvas = np.full((300, 300, 3), 240, np.uint8)
+    corners = cv2.boxPoints(((150.0, 150.0), (100.0, 100.0), 45.0)).astype(np.int32)
+    cv2.fillPoly(canvas, [corners], (30, 30, 30))
+    est = calibrate_scale(canvas, 40, 40, 220, 220, marker_length_mm=20.0)
+    assert est.marker_length_px == pytest.approx(100, abs=3)
+    assert est.px_per_mm == pytest.approx(5.0, rel=0.04)
+
+
+def test_an_elongated_rotated_marker_still_trips_marker_not_round():
+    """A 120x20 bar rotated 45deg has a nearly SQUARE axis-aligned bbox, so a
+    bbox-ratio roundness check cannot see it. The rotated rect can."""
+    import cv2
+
+    canvas = np.full((300, 300, 3), 240, np.uint8)
+    corners = cv2.boxPoints(((150.0, 150.0), (120.0, 20.0), 45.0)).astype(np.int32)
+    cv2.fillPoly(canvas, [corners], (30, 30, 30))
+    est = calibrate_scale(canvas, 30, 30, 240, 240, marker_length_mm=20.0)
+    assert "marker_not_round" in [w.code for w in est.warnings]
+    assert est.marker_length_px == pytest.approx(120, abs=4)
+
+
+def test_a_partially_out_of_frame_crop_is_refused_not_silently_clamped():
+    """A crop hanging over the edge used to be clamped quietly; a marker cut by
+    the clamped edge then produced a plausible but wrong scale. Refuse instead."""
+    img = _disc_image()  # 300x300
+    for box in [(250, 100, 100, 100), (-20, 100, 100, 100), (100, 260, 100, 100)]:
+        with pytest.raises(ValueError, match="300x300"):
+            calibrate_scale(img, *box, marker_length_mm=20.0)
+    # Positive control: the same-size crop fully inside still calibrates.
+    assert calibrate_scale(img, 100, 100, 100, 100, 20.0).px_per_mm > 0

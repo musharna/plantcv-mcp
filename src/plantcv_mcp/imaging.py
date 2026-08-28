@@ -5,15 +5,24 @@ import hashlib
 import cv2
 import numpy as np
 
+from .paths import check_readable
+
 OVERLAY_BGR = np.array([0, 0, 255], dtype=np.float64)  # red in BGR
 OVERLAY_ALPHA = 0.55
 
 
 def read_image_bytes(path: str) -> bytes:
     """Read the file ONCE. Everything derived from it — pixels and identity —
-    comes from these bytes, never from a second look at the path."""
+    comes from these bytes, never from a second look at the path.
+
+    The read-root check runs HERE, at the one place bytes leave the disk, so a
+    path no tool layer validated — an ENVI sibling derived from a .hdr, a future
+    reader — is still contained. The open() uses the realpath the check
+    returned: the path that was checked is the path that is read.
+    """
+    real = check_readable(path)
     try:
-        with open(path, "rb") as fh:
+        with open(real, "rb") as fh:
             return fh.read()
     except OSError as exc:
         # Same message shape pcv.readimage used, so callers and tests that

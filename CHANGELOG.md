@@ -6,6 +6,71 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-08-28
+
+Every confirmed finding from the second multi-judge panel audit (of 1.0.1,
+2026-08-27): eight defects and four hardening items, each re-verified against
+source before acceptance; ~10 other findings were rejected with evidence.
+
+### Security
+
+- **Read-root containment now lives at the read boundary itself.**
+  `read_image_bytes()` — the one place bytes leave the disk — resolves and
+  checks every path, and opens the resolved path it checked. Previously the
+  check ran only at the tool layer, and the ENVI loader's derived sibling
+  (`.hdr` ↔ `.raw`) was never checked at all: a symlinked `.raw` beside an
+  in-root `.hdr` read bytes from outside the configured roots. The
+  hyperspectral and thermal tool paths also discarded `check_readable`'s
+  resolved path and re-read the original. Both mechanisms are gone.
+- **CLI-configured read roots (`--root`) now reach the analysis worker.**
+  `spawn` re-imports modules, so roots set via `set_roots()` did not exist in
+  the worker process; the parent now passes its effective roots at worker
+  start.
+
+### Fixed
+
+- **Calibration references are digest-pinned.** White/dark reference files are
+  hashed at `segment_hyperspectral()` time and verified at `measure_spectral()`
+  time; a reference that changed in between is refused
+  (`CalibrationReferencesChangedError`) instead of silently changing every
+  calibrated number. Reference files are also loaded in the server process now,
+  never inside the worker.
+- **A rotated marker no longer overstates the scale.** Marker length comes from
+  the minimum-area rotated rectangle, not the axis-aligned bounding box: a
+  square marker photographed at 45° previously calibrated `px_per_mm` ~41%
+  high, and `marker_not_round` could not catch it (a rotated square's bbox is
+  square). The roundness check now uses the rotated rect's own sides.
+- **A calibration crop that hangs over the frame edge is refused.** It was
+  silently clamped to fit; a marker cut by the clamped edge produced a
+  plausible but wrong scale, and the edge-contact warning then blamed polarity.
+- **Regions are held to the same degeneracy floor as whole-frame measure().**
+  A few stray pixels in a grid cell previously came back as a full trait row
+  indistinguishable from a real seedling; such cells are now refused by name
+  (`measured=false` with the reason).
+- **A non-finite `px_per_mm` is refused on every path.** The check moved into
+  `convert_units()` itself; `measure_regions()` previously let `NaN` through
+  (`NaN <= 0` is false) and returned NaN traits labelled `mm`.
+- **A thermal `.npz` holding several arrays is refused naming them.** The
+  loader silently used whichever array numpy listed first.
+
+### Added
+
+- **`nan_pixels` advisory and per-index `finite_pixel_count` on
+  `measure_spectral()`.** min/max already skipped non-finite index values
+  silently while `pixel_count` claimed the whole mask; the dropped evidence is
+  now counted and named.
+- **`warnings` on `measure()` results.** Mask-level advisories
+  (`frame_clipping`, `multi_specimen`, `implausible_coverage`) are re-derived
+  at measure time by the same code segment() uses, so the trait table — the
+  artifact people keep — carries its own caveats.
+- **Sessions require a digest, and hand out read-only masks.** The digest
+  default (`""`) silently disabled the stale-image guard for any future caller
+  that forgot it; the guards are now unconditional. The stored mask refuses
+  in-place writes rather than trusting every future call site.
+- **A worker that survives SIGKILL is reported, not ignored.** After the
+  kill-and-join, a still-alive worker (uninterruptible kernel sleep) raises
+  naming the pid instead of silently stacking a fresh worker on the zombie.
+
 ## [1.0.1] — 2026-08-27
 
 The four findings confirmed by the 2026-08-27 multi-judge panel audit of 1.0.0

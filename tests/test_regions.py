@@ -373,3 +373,36 @@ def test_auto_grid_refuses_nonpositive_radius():
     img, mask = _tray()
     with pytest.raises(RegionSpecError, match="radius"):
         build_regions(img, mask, mode="auto_grid", nrows=2, ncols=2, radius=0)
+
+
+def test_a_few_stray_pixels_in_a_cell_are_refused_not_measured():
+    """A 2x2 speck in a cell produced a full, plausible trait row (area 4,
+    convex hull, ...) indistinguishable from a germinating seedling. Each cell
+    is held to the same degeneracy floor measure() applies to a whole frame."""
+    img, mask = _tray()
+    mask2, img2 = mask.copy(), img.copy()
+    mask2[300:302, 100:102] = 255  # 4 px inside the otherwise-empty cell 2
+    img2[300:302, 100:102] = (40, 200, 40)
+    results = measure_regions(img2, mask2, _rect_grid(img2, mask2))
+
+    speck = results[2]
+    assert speck["measured"] is False, "4 stray px must not be a measured plant"
+    assert speck["traits"] is None
+    assert "below" in speck["reason"], "the reason must name the floor"
+
+    # Positive control: the three real plants still measure.
+    for i in (0, 1, 3):
+        assert results[i]["measured"] is True
+        assert results[i]["traits"]["area"]["value"] > 0
+
+
+def test_nan_px_per_mm_is_refused_on_the_regions_path_too():
+    """measure() refuses a non-finite px_per_mm; the regions path used to let
+    NaN through (NaN <= 0 is False) and every converted trait came back NaN."""
+    img, mask = _tray()
+    for bad in (float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="finite"):
+            measure_regions(img, mask, _rect_grid(img, mask), px_per_mm=bad)
+    # Positive control: a finite scale converts to mm2.
+    res = measure_regions(img, mask, _rect_grid(img, mask), px_per_mm=2.0)
+    assert res[0]["traits"]["area"]["unit"] == "mm2"

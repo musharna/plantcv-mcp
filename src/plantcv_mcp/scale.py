@@ -62,11 +62,16 @@ def calibrate_scale(
         raise ValueError(f"crop must have positive size, got w={w} h={h}")
 
     frame_h, frame_w = img.shape[:2]
-    x0, y0 = max(0, int(x)), max(0, int(y))
-    x1, y1 = min(frame_w, x0 + int(w)), min(frame_h, y0 + int(h))
-    if x1 <= x0 or y1 <= y0:
+    x0, y0 = int(x), int(y)
+    x1, y1 = x0 + int(w), y0 + int(h)
+    if x0 < 0 or y0 < 0 or x1 > frame_w or y1 > frame_h:
+        # No clamping: a crop quietly shrunk to fit can cut the marker at the
+        # frame edge and yield a plausible but wrong scale, and the edge-contact
+        # warning below would then point at the wrong culprit (polarity).
         raise ValueError(
-            f"crop ({x}, {y}, {w}, {h}) lies outside the {frame_w}x{frame_h} image"
+            f"crop ({x}, {y}, {w}, {h}) does not lie inside the "
+            f"{frame_w}x{frame_h} image. Move or shrink the region so the whole "
+            "marker box is in frame."
         )
 
     crop = img[y0:y1, x0:x1]
@@ -75,7 +80,7 @@ def calibrate_scale(
     import cv2
 
     binary = (mask > 0).astype(np.uint8)
-    count, _, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
     if count <= 1:
         raise MarkerNotFoundError(
             f"No object found inside the marker region ({x}, {y}, {w}, {h}) using "
@@ -90,7 +95,18 @@ def calibrate_scale(
     idx = int(np.argmax(areas)) + 1
     bw = int(stats[idx, cv2.CC_STAT_WIDTH])
     bh = int(stats[idx, cv2.CC_STAT_HEIGHT])
-    marker_length_px = max(bw, bh)
+    # The marker's length comes from the MINIMUM-AREA rotated rectangle, not
+    # the axis-aligned bbox: a square marker photographed at 45 degrees has a
+    # bbox sqrt(2)x its side, which would overstate px_per_mm by ~41% — and its
+    # bbox is square, so no roundness check on bbox sides can catch it. The +1
+    # converts the extent of pixel CENTRES to the pixel footprint (an
+    # axis-aligned run of n pixels spans n-1 centre-to-centre).
+    ys, xs = np.nonzero(labels == idx)
+    rect_points = np.column_stack([xs, ys]).astype(np.float32)
+    (_, _), (rect_w, rect_h), _ = cv2.minAreaRect(rect_points)
+    side_long = float(max(rect_w, rect_h)) + 1.0
+    side_short = float(min(rect_w, rect_h)) + 1.0
+    marker_length_px = round(side_long)
     marker_area_px = int(stats[idx, cv2.CC_STAT_AREA])
     crop_fraction = float(marker_area_px) / float(binary.size)
 
@@ -132,14 +148,15 @@ def calibrate_scale(
                 ),
             )
         )
-    if bw and bh and (max(bw, bh) / min(bw, bh)) > 1.5:
+    if side_short > 0 and (side_long / side_short) > 1.5:
         warnings.append(
             Advisory(
                 code="marker_not_round",
                 message=(
-                    f"The detected object measures {bw}x{bh} px, which is far from "
-                    "square. If your marker is circular this is probably not it, and "
-                    "the resulting scale would be wrong."
+                    f"The detected object measures {side_long:.0f}x{side_short:.0f} "
+                    "px in its own orientation, which is far from square. If your "
+                    "marker is circular or square this is probably not it, and the "
+                    "resulting scale would be wrong."
                 ),
             )
         )
@@ -148,7 +165,7 @@ def calibrate_scale(
         raise MarkerNotFoundError("Detected marker has zero length in pixels.")
 
     return ScaleEstimate(
-        px_per_mm=marker_length_px / float(marker_length_mm),
+        px_per_mm=side_long / float(marker_length_mm),
         marker_length_px=marker_length_px,
         marker_length_mm=float(marker_length_mm),
         marker_area_px=marker_area_px,

@@ -35,7 +35,7 @@ body:
     attributes:
       label: Version
       description: Output of `pip show plantcv-mcp` (or the version `uvx` pulled).
-      placeholder: "1.0.1"
+      placeholder: "1.1.0"
     validations:
       required: true
   - type: input
