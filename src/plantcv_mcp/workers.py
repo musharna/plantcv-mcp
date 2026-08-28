@@ -65,6 +65,7 @@ def _serve(conn: Connection) -> None:  # runs in the worker process
 
     registry = dict(REGISTRY)
     registry["_abort"] = _abort_for_tests
+    registry["_raise_unpicklable"] = _raise_unpicklable_for_tests
     while True:
         try:
             request = conn.recv()
@@ -76,12 +77,35 @@ def _serve(conn: Connection) -> None:  # runs in the worker process
         try:
             conn.send(("ok", registry[name](*args, **kwargs)))
         except BaseException as exc:  # noqa: BLE001 — forwarded, not swallowed
-            conn.send(("err", exc))
+            # The err-send itself can raise: an exception that cannot pickle
+            # would kill the worker and launder the original error into a
+            # generic WorkerCrashedError. Fall back to its text.
+            try:
+                conn.send(("err", exc))
+            except Exception:  # noqa: BLE001 — any pickle failure gets the fallback
+                conn.send(
+                    (
+                        "err",
+                        RuntimeError(
+                            f"{type(exc).__name__} from {name!r} could not cross "
+                            f"the process boundary (unpicklable); original error: "
+                            f"{exc}"
+                        ),
+                    )
+                )
 
 
 def _abort_for_tests() -> None:
     """Die the way native code dies. Registered only inside the worker."""
     os.abort()
+
+
+def _raise_unpicklable_for_tests(message: str) -> None:
+    """Raise an exception that cannot cross the pipe. Registered only inside
+    the worker."""
+    exc = RuntimeError(message)
+    exc.unpicklable = threading.Lock()  # type: ignore[attr-defined]
+    raise exc
 
 
 class _Worker:

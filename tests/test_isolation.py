@@ -136,6 +136,42 @@ def test_refusals_keep_their_type_across_the_boundary(isolated):
         dispatch("morphology", img, mask, 15, 25, None)
 
 
+def test_an_unpicklable_exception_still_reports_the_original_error(isolated):
+    """An exception that cannot pickle must not be laundered into a generic
+    crash: the parent gets the original error's text and the worker survives."""
+    with pytest.raises(RuntimeError, match="boom"):
+        run_isolated("_raise_unpicklable", "boom")
+    # Positive control: the worker answers the next call.
+    img = np.full((100, 100, 3), 200, np.uint8)
+    mask = np.zeros((100, 100), np.uint8)
+    mask[20:60, 20:60] = 255
+    out = dispatch("measure", img, mask, ("size",), None, False)
+    assert out["area"]["value"] == 1600.0
+
+
+def test_recycle_boundary_and_a_crash_on_it(isolated, monkeypatch):
+    """The worker recycles after WORKER_MAX_TASKS calls, and a crash landing
+    exactly on the recycle boundary still leaves a working server."""
+    monkeypatch.setattr(workers, "WORKER_MAX_TASKS", 2)
+    img = np.full((100, 100, 3), 200, np.uint8)
+    mask = np.zeros((100, 100), np.uint8)
+    mask[20:60, 20:60] = 255
+    args = ("measure", img, mask, ("size",), None, False)
+
+    assert dispatch(*args)["area"]["value"] == 1600.0
+    pid_first = workers._worker._proc.pid
+    assert dispatch(*args)["area"]["value"] == 1600.0  # hits the boundary
+    assert workers._worker._proc is None, "recycled after WORKER_MAX_TASKS"
+    assert dispatch(*args)["area"]["value"] == 1600.0  # fresh worker
+    assert workers._worker._proc.pid != pid_first
+
+    # A crash on the boundary call: recycle bookkeeping must not double-stop
+    # or wedge the restart.
+    with pytest.raises(WorkerCrashedError, match="signal"):
+        run_isolated("_abort")
+    assert dispatch(*args)["area"]["value"] == 1600.0
+
+
 def test_isolation_flag_comes_from_the_environment(monkeypatch):
     workers.set_isolation(None)
     monkeypatch.delenv("PLANTCV_MCP_ISOLATE", raising=False)

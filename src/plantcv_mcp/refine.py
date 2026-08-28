@@ -49,7 +49,7 @@ REFINE_OPS: dict[str, dict[str, Any]] = {
     },
     "fill": {
         "doc": "Remove connected components smaller than `size` pixels.",
-        "params": {"size": {"type": "int", "min": 0, "example": 50}},
+        "params": {"size": {"type": "int", "min": 1, "example": 50}},
     },
     "erode": {
         "doc": "Shrink the mask by a `ksize` x `ksize` kernel, `iterations` times.",

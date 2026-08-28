@@ -9,7 +9,7 @@ server may read". Report a path that escapes a configured root as a vulnerabilit
 ## Supported versions
 
 `plantcv-mcp` ships fixes against the latest released version only. The current
-release is **v1.0.0**. Please reproduce any issue on the latest release
+release is **v1.0.1**. Please reproduce any issue on the latest release
 (`uvx plantcv-mcp` always pulls it) before reporting.
 
 | Version         | Supported          |

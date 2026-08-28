@@ -120,6 +120,19 @@ def segment_thermal(
     diag = analyze_mask(mask)
     assert_not_degenerate(diag)
     warnings = segmentation_warnings(mask, diag, analyze_mask(pre_fill), fill_size)
+    n_bad = int(c.size - np.isfinite(c).sum())
+    if n_bad:
+        warnings.append(
+            Advisory(
+                code="nan_pixels",
+                message=(
+                    f"{n_bad} of {c.size} pixels are not finite (NaN/Inf) and "
+                    "could never be selected by the temperature band. If they "
+                    "cluster on the plant, the mask has a hole the diagnostics "
+                    "cannot see; check the sensor export."
+                ),
+            )
+        )
     return ThermalSegmentation(
         mask=mask,
         overlay=render_overlay(_grey(c), mask),

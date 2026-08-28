@@ -6,6 +6,39 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-08-27
+
+The four findings confirmed by the 2026-08-27 multi-judge panel audit of 1.0.0
+(every finding re-verified against source before acceptance; 12+ others were
+rejected with evidence).
+
+### Fixed
+
+- **An unpicklable exception no longer kills the worker and loses the original
+  error.** `_serve`'s error-send was outside any `try`: an exception whose
+  pickle fails crashed the worker, and the parent reported a generic
+  `WorkerCrashedError` instead of the real error. The err-send now falls back
+  to a `RuntimeError` carrying the original exception's type and text, and the
+  worker survives the call.
+- **`refine(fill, size=0)` is refused.** PlantCV's `fill` no-ops on `size=0`,
+  so the op would have been recorded in the session's lineage as if it had run
+  — exactly the silent no-op this module's validation exists to prevent.
+  `size` now requires `>= 1`.
+- **The calibration-degenerate refusal names non-finite references.** A NaN in
+  a white/dark reference correctly refused calibration, but the message said
+  the span was "not positive"; it now says the reference contains invalid
+  (NaN/Inf) pixels and where the count lies.
+
+### Added
+
+- **`nan_pixels` advisory on `segment_thermal`.** Non-finite pixels were
+  excluded from the temperature band correctly but silently; the segmentation
+  now reports how many pixels the band could never select.
+- Regression tests pinning behavior the panel questioned: a worker crash
+  landing on the `WORKER_MAX_TASKS` recycle boundary, and a proof that the
+  calibration span check is exactly PlantCV's own `calibrate()` denominator
+  (per column × band mean — a dead column refuses, a dead pixel does not).
+
 ## [1.0.0] — 2026-08-27
 
 Sub-project E — the last of the post-0.5.0 roadmap

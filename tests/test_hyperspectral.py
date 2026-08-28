@@ -207,6 +207,51 @@ def test_degenerate_references_are_refused_not_clipped(tmp_path):
     )
 
 
+def test_nan_references_are_refused_naming_nan(tmp_path):
+    """A NaN in a reference correctly trips the span check (NaN > 0 is False),
+    but the message must say the reference is not finite, not just 'not
+    positive' — the user's fix is different."""
+    white = np.full((1, W, len(WL)), 1000.0, np.float64)
+    white[0, 3, 2] = np.nan
+    dark = np.zeros((1, W, len(WL)), np.float64)
+    wp = _write_cube(tmp_path, "white_nan", white)
+    dp = _write_cube(tmp_path, "dark_zero", dark)
+    path = _write_cube(tmp_path, "counts", _known_cube(np.uint16, scale=1000))
+    with pytest.raises(CalibrationDegenerateError, match="not finite"):
+        segment_hyperspectral(path, white_reference=wp, dark_reference=dp)
+
+
+def test_span_check_is_plantcvs_own_denominator_per_column(tmp_path):
+    """The check must match what PlantCV's calibrate() actually divides by:
+    mean(white, axis=0) - mean(dark, axis=0), per column x band — NOT per
+    pixel. A dead detector column refuses; a single dead pixel whose column
+    mean stays positive does not."""
+    dark = np.zeros((4, W, len(WL)), np.float64)
+    dp = _write_cube(tmp_path, "dark4", dark)
+    path = _write_cube(tmp_path, "counts", _known_cube(np.uint16, scale=1000))
+
+    white = np.full((4, W, len(WL)), 1000.0, np.float64)
+    white[:, 7, :] = 0.0  # dead column: its mean equals dark's
+    with pytest.raises(CalibrationDegenerateError, match="not positive"):
+        segment_hyperspectral(
+            path,
+            white_reference=_write_cube(tmp_path, "white_deadcol", white),
+            dark_reference=dp,
+        )
+
+    # Positive control, and the discriminator: one dead PIXEL leaves the
+    # column mean at 750 > 0, so PlantCV's denominator is fine and a
+    # per-pixel check would be wrong to refuse.
+    white = np.full((4, W, len(WL)), 1000.0, np.float64)
+    white[0, 5, 1] = 0.0
+    seg = segment_hyperspectral(
+        path,
+        white_reference=_write_cube(tmp_path, "white_deadpx", white),
+        dark_reference=dp,
+    )
+    assert seg.calibration == "white/dark"
+
+
 # --- index availability ---
 
 
