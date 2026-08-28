@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-08-28
+
 Findings from the first dogfood on REAL photographs (PlantCV tutorial images:
 trays, colour cards, side views, seeds) after three rounds on synthetic
 renders had run dry.
