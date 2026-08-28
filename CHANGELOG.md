@@ -6,6 +6,38 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+Findings from the first dogfood on REAL photographs (PlantCV tutorial images:
+trays, colour cards, side views, seeds) after three rounds on synthetic
+renders had run dry.
+
+### Added
+
+- **`measure_regions` says when a cell's object is not inside the cell.**
+  PlantCV's `create_labels(roi_type="partial")` hands any object overlapping a
+  cell to that cell WHOLE, and reports the cell it also overlapped as empty. On
+  an X-Rite tray photo a misaligned `auto_grid` therefore returned objects
+  620–785 px wide inside 369-px cells — two plants per row — with
+  `regions_measured: 17` and no warning. Each region now carries
+  `object_exceeds_region` when its object's bounding box is ≥1.25× the cell
+  (measured: leaf-tip overhang on a tight clean-tray grid reaches 1.02×, merged
+  neighbours 1.68–2.13×), and a cell whose material was assigned to a neighbour
+  is reported as `object_claimed_by_neighbour` naming that region instead of
+  "no plant material". Under `auto_grid`, both together raise a set-level
+  `grid_misaligned` advisory pointing at `rect_grid`.
+- **Overlays outline the mask in cyan** on its own boundary pixels (thickness
+  scaled to the frame so it survives the client downscale), in addition to the
+  red tint. A red tint on a red subject (beans, red colour-card
+  chips) was invisible, so "look at the overlay" could not show what was
+  selected. Unmasked pixels are still never touched.
+
+### Changed
+
+- **Morphology refusal stops recommending `prune_size` when it cannot help.**
+  On a real sorghum photo the refusal said "raise prune_size" at 15, 30, 100
+  and 200 while the segment count sat at 126; only `refine()` got the plant
+  analysed. When doubling `prune_size` keeps ≥80% of the segments the message
+  now says raising it does not help and points only at `refine()`.
+
 ## [1.2.1] — 2026-08-28
 
 Second live dogfood, against the released 1.2.0 server: all six 1.2.0 fixes

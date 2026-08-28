@@ -74,7 +74,7 @@ PlantCV as a measurement instrument for plant images.
 Work in this order: suggest_segmentation -> segment -> LOOK AT THE OVERLAY -> measure.
 
 segment() deliberately returns no traits. It returns an overlay image with the
-measured pixels tinted red, plus diagnostics. Look at that image before you trust
+measured pixels tinted red and outlined in cyan, plus diagnostics. Look at that image before you trust
 any number that follows: a segmentation that selected the background instead of
 the plant still produces seventeen traits with correct units and believable
 magnitudes. The overlay is the only thing that distinguishes the two.

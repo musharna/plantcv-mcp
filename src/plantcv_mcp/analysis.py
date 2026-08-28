@@ -24,7 +24,7 @@ from .hyperspectral import (
 from .measurement import measure_traits
 from .morphology import MorphologyResult, measure_morphology
 from .refine import apply_refinements
-from .regions import build_regions, measure_regions
+from .regions import build_regions, grid_misalignment_warning, measure_regions
 from .thermal import (
     ThermalLoad,
     ThermalResult,
@@ -91,13 +91,17 @@ def regions(
         px_per_mm=px_per_mm,
         include_histograms=include_histograms,
     )
+    set_warnings = list(region_set.warnings)
+    misaligned = grid_misalignment_warning(region_set.mode, measurements)
+    if misaligned:
+        set_warnings.append(misaligned)
     return {
         "measurements": measurements,
         "bboxes": list(region_set.bboxes),
         "mode": region_set.mode,
         "nrows": region_set.nrows,
         "ncols": region_set.ncols,
-        "warnings": [(w.code, w.message) for w in region_set.warnings],
+        "warnings": [(w.code, w.message) for w in set_warnings],
     }
 
 

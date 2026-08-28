@@ -213,3 +213,22 @@ def test_the_overlay_carries_plantcvs_segment_id_text(monkeypatch):
     assert (res.overlay[text_only] == captured["labeled"][text_only]).all(), (
         "the id digits PlantCV drew must appear in the overlay"
     )
+
+
+def test_refusal_stops_recommending_prune_size_when_doubling_it_does_not_help(
+    monkeypatch,
+):
+    """On a real sorghum photo the refusal said 'raise prune_size' at 15, 30,
+    100 and 200 while the segment count sat at 126; only refine() got the
+    plant analysed. When doubling prune_size keeps >=80% of the segments,
+    raising it is not the remedy and the message must not offer it."""
+    from plantcv_mcp import morphology as m
+
+    img, mask = _plant()
+    monkeypatch.setattr(m, "_segment_count", lambda *a, **k: 10**6)
+    with pytest.raises(MorphologyRefusedError) as exc:
+        measure_morphology(img, _hairy(mask, 6), prune_size=8)
+    msg = str(exc.value)
+    assert "refine()" in msg
+    assert "raise prune_size" not in msg
+    assert "does not" in msg or "will not" in msg

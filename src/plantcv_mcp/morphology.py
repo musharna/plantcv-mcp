@@ -37,6 +37,9 @@ from .measurement import isolated_pcv_outputs
 
 LABEL = "morphology"
 SENSITIVITY_FRACTION = 0.30
+# Doubling prune_size and keeping this share of the segments means pruning is
+# not the lever (real sorghum photo: 126 segments at 100 AND at 200).
+PRUNE_STALL_FRACTION = 0.80
 
 # Traits that scale with ONE spatial dimension (px_per_mm applies); everything
 # angular is in degrees and is never scaled; curvature is a ratio.
@@ -241,12 +244,26 @@ def measure_morphology(
         # PlantCV's fatal_error() on a skeleton it cannot analyse ("Too many
         # tips found per segment, try pruning again"). Refuse with the
         # sensitivity numbers, which are exactly what the user needs to act.
+        counts = (
+            f"prune_size={prune_size} leaves {n_here} segments and prune_size="
+            f"{max(2 * prune_size, 1)} leaves {n_double}"
+        )
+        if n_here and n_double >= PRUNE_STALL_FRACTION * n_here:
+            # Doubling the prune barely moves the count: the spurs are wider
+            # than any prune reaches (a jagged mask edge on a real photo), and
+            # "raise prune_size" sends the user up a ladder that never ends.
+            remedy = (
+                "; raising prune_size does not help here. refine() the mask "
+                "(median_blur, opening) so the skeleton has fewer spurs, then "
+                "re-measure."
+            )
+        else:
+            remedy = (
+                "; raise prune_size, or refine() the mask (opening, median_blur) "
+                "so the skeleton has fewer spurs, then re-measure."
+            )
         raise MorphologyRefusedError(
-            f"PlantCV could not analyse this skeleton: {exc}. prune_size="
-            f"{prune_size} leaves {n_here} segments and prune_size="
-            f"{max(2 * prune_size, 1)} leaves {n_double}; raise prune_size, or "
-            "refine() the mask (opening, median_blur) so the skeleton has fewer "
-            "spurs, then re-measure."
+            f"PlantCV could not analyse this skeleton: {exc}. {counts}{remedy}"
         ) from exc
 
     if n_here and abs(n_double - n_here) / n_here > SENSITIVITY_FRACTION:

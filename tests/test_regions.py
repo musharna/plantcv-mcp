@@ -426,3 +426,64 @@ def test_implausible_longest_path_is_flagged_per_region():
     assert "implausible_longest_path" not in [
         w["code"] for w in res["regions"][1]["warnings"]
     ]
+
+
+def test_an_object_spilling_out_of_its_cell_is_flagged_and_a_contained_one_is_not():
+    """Found on a real X-Rite tray photo: create_labels(roi_type="partial")
+    measures any object that OVERLAPS a cell whole, so a misaligned grid
+    reported objects 785 px wide inside 369 px cells -- two plants per row --
+    with `regions_measured: 17` and no warning. The cell must say when the
+    object it reports is not inside it."""
+    img = np.full((SIZE, SIZE, 3), 30, np.uint8)
+    mask = np.zeros((SIZE, SIZE), np.uint8)
+    yy, xx = np.ogrid[:SIZE, :SIZE]
+    # Two plants merged into one 281 px object spanning cells 0 and 1 (each
+    # 180 px wide: 1.56x the cell), and one plant well inside cell 2. Leaf-tip
+    # overhang on a tight cell measures up to 1.02x on real trays and must NOT
+    # fire, so the object here is unambiguously larger than a cell.
+    sel = ((xx - 200) / 140.0) ** 2 + ((yy - 100) / 40.0) ** 2 <= 1.0
+    mask[sel] = 255
+    img[sel] = (40, 200, 40)
+    sel = (xx - 100) ** 2 + (yy - 300) ** 2 <= 40**2
+    mask[sel] = 255
+    img[sel] = (40, 200, 40)
+    results = measure_regions(img, mask, _rect_grid(img, mask))
+
+    codes = [[w["code"] for w in r["warnings"]] for r in results]
+    # PlantCV hands the straddling disc WHOLE to one cell (here cell 1) and
+    # reports the other as empty. Both halves of that must be named.
+    assert "object_exceeds_region" in codes[1]
+    msg = next(
+        w["message"]
+        for w in results[1]["warnings"]
+        if w["code"] == "object_exceeds_region"
+    )
+    assert "1.6x" in msg and "outside" in msg
+    assert results[0]["measured"] is False
+    assert "object_claimed_by_neighbour" in codes[0]
+    assert "region 1" in results[0]["reason"]
+    # Positive control: the contained plant carries no such warning.
+    assert results[2]["measured"] is True
+    assert "object_exceeds_region" not in codes[2]
+
+
+def test_auto_grid_with_empty_cells_and_spilling_objects_is_called_misaligned():
+    """The set-level signal for the same photo: a whole column of empty cells
+    next to cells whose objects spill out means the inferred grid does not sit
+    on the tray. rect_grid geometry is the user's, so it is not second-guessed."""
+    from plantcv_mcp.regions import grid_misalignment_warning
+
+    spill = {
+        "measured": True,
+        "warnings": [{"code": "object_exceeds_region", "message": ""}],
+    }
+    empty = {"measured": False, "warnings": []}
+    fine = {"measured": True, "warnings": []}
+    assert (
+        grid_misalignment_warning("auto_grid", [spill, empty, fine]).code
+        == "grid_misaligned"
+    )
+    # Positive controls: neither ingredient alone, and never for rect_grid.
+    assert grid_misalignment_warning("auto_grid", [spill, fine, fine]) is None
+    assert grid_misalignment_warning("auto_grid", [empty, fine, fine]) is None
+    assert grid_misalignment_warning("rect_grid", [spill, empty, fine]) is None
