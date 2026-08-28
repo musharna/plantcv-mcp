@@ -163,3 +163,26 @@ def test_main_accepts_root_flags(monkeypatch, tmp_path):
     finally:
         paths.set_roots(None)
         workers.set_isolation(None)
+
+
+def test_the_read_boundary_itself_is_contained(roots):
+    """Containment lives at read_image_bytes, not only at the tool layer.
+
+    Derived paths (ENVI siblings) and any future reader go through this one
+    function, so a path no tool ever validated still cannot leave the roots.
+    """
+    from plantcv_mcp.imaging import read_image_bytes
+
+    allowed, other = roots
+    outside = other / "secret.bin"
+    outside.write_bytes(b"outside-bytes")
+    link = allowed / "sneaky.bin"
+    link.symlink_to(outside)
+    with pytest.raises(PathOutsideRootsError):
+        read_image_bytes(str(link))
+    # Positive control: an in-root file reads, through an in-root symlink too.
+    target = allowed / "data.bin"
+    target.write_bytes(b"inside-bytes")
+    via = allowed / "via.bin"
+    via.symlink_to(target)
+    assert read_image_bytes(str(via)) == b"inside-bytes"

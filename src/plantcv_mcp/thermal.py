@@ -60,6 +60,14 @@ def load_thermal(path: str) -> ThermalLoad:
         with np.load(io.BytesIO(data)) as z:
             if not z.files:
                 raise ValueError(f"{path!r} holds no arrays")
+            if len(z.files) > 1:
+                # Picking one silently would be a guess between candidate
+                # frames; the wrong one still measures beautifully.
+                raise ValueError(
+                    f"{path!r} holds {len(z.files)} arrays ({sorted(z.files)}); "
+                    "a thermal .npz must hold exactly one 2-D Celsius array. "
+                    "Re-save just the temperature frame."
+                )
             celsius = np.asarray(z[z.files[0]], dtype=np.float64)
         source = "npz"
     else:

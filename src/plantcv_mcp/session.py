@@ -26,8 +26,9 @@ class Session:
     shape: tuple[int, int]
     # SHA-256 of the source file at segmentation time. Shape alone cannot detect
     # a same-dimension content swap, which would silently measure a stale mask
-    # against new pixels.
-    digest: str = ""
+    # against new pixels. REQUIRED and non-empty: the guards compare it
+    # unconditionally, so a session without one cannot exist.
+    digest: str
     # Whether the image was colour-corrected before segmentation. measure()
     # re-reads from disk, so it must re-apply the same transform or it would
     # measure different pixels than the ones the mask was drawn on.
@@ -64,17 +65,28 @@ class SessionStore:
         mask: np.ndarray,
         channel: str,
         method: str,
-        digest: str = "",
+        *,
+        digest: str,
         color_correct: bool = False,
         lineage: list[dict] | None = None,
         parent_id: str | None = None,
         kind: str = "rgb",
         extra: dict | None = None,
     ) -> Session:
+        if not digest:
+            raise ValueError(
+                "A session requires the source file's digest: without it the "
+                "stale-image guard would be silently skipped."
+            )
+        stored_mask = np.array(mask, copy=True)
+        # get() hands out this very array; a caller's in-place write would
+        # corrupt every later measurement of the session. Refuse writes at the
+        # array itself instead of trusting every future call site.
+        stored_mask.setflags(write=False)
         session = Session(
             session_id=str(uuid.uuid4()),
             image_path=image_path,
-            mask=np.array(mask, copy=True),
+            mask=stored_mask,
             channel=channel,
             method=method,
             shape=(int(mask.shape[0]), int(mask.shape[1])),

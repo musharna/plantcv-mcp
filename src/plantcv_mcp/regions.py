@@ -34,7 +34,9 @@ from typing_extensions import TypedDict
 
 from .diagnostics import (
     Advisory,
+    DegenerateMaskError,
     analyze_mask,
+    assert_not_degenerate,
     implausible_coverage_warning,
 )
 from .measurement import (
@@ -328,6 +330,31 @@ def measure_regions(
                 )
                 continue
 
+            # Each cell is held to the same degeneracy floor measure() applies
+            # to a whole frame: a 2x2 speck of threshold noise otherwise comes
+            # back as a full trait row indistinguishable from a real seedling.
+            cell_diag = analyze_mask((cell == label).astype(np.uint8) * 255)
+            try:
+                assert_not_degenerate(cell_diag)
+            except DegenerateMaskError as exc:
+                out.append(
+                    RegionMeasurement(
+                        index=i,
+                        row=row,
+                        col=col,
+                        bbox=list(bbox),
+                        measured=False,
+                        reason=(
+                            "Too little plant material in this region to "
+                            f"measure (of the cell, not the frame): {exc}"
+                        ),
+                        region_coverage=coverage,
+                        traits=None,
+                        warnings=[],
+                    )
+                )
+                continue
+
             traits: dict[str, TraitValue] = {
                 name: TraitValue(value=obs.get("value"), unit=obs.get("label"))
                 for name, obs in _read_group(label).items()
@@ -338,9 +365,7 @@ def measure_regions(
                 traits = convert_units(traits, float(px_per_mm))
 
             region_warnings: list[Advisory] = []
-            cover = implausible_coverage_warning(
-                analyze_mask((cell == label).astype(np.uint8) * 255)
-            )
+            cover = implausible_coverage_warning(cell_diag)
             if cover:
                 region_warnings.append(cover)
 

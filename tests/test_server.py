@@ -643,3 +643,29 @@ async def test_measure_morphology_over_the_real_mcp_layer(tmp_path):
     assert payload["plant"]["stem_angle"] is None
     assert "stem_angle_undefined" in [w["code"] for w in payload["warnings"]]
     assert all(s["id"] == i for i, s in enumerate(payload["segments"]))
+
+
+def test_measure_recomputes_and_carries_mask_level_warnings(tmp_path):
+    """frame_clipping was reported at segment() time and then dropped: the
+    trait table — the artifact people actually keep — could not say its own
+    area was a lower bound. measure() re-derives mask-level advisories."""
+    import cv2
+
+    from plantcv_mcp.server import _measure_impl, _segment_impl
+
+    img = np.full((200, 200, 3), 128, np.uint8)
+    img[0:100, 50:150] = (60, 180, 60)  # plant cut by the top frame edge
+    p = str(tmp_path / "clipped.png")
+    cv2.imwrite(p, img)
+    seg = _segment_impl(p, "a", "otsu")
+    assert "frame_clipping" in [w["code"] for w in seg["warnings"]]
+    res = _measure_impl(seg["session_id"])
+    assert "frame_clipping" in [w["code"] for w in res["warnings"]]
+
+    # Positive control: a fully in-frame plant measures with no warnings.
+    img2 = np.full((200, 200, 3), 128, np.uint8)
+    img2[50:150, 50:150] = (60, 180, 60)
+    p2 = str(tmp_path / "clean.png")
+    cv2.imwrite(p2, img2)
+    res2 = _measure_impl(_segment_impl(p2, "a", "otsu")["session_id"])
+    assert res2["warnings"] == []

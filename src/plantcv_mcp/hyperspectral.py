@@ -49,6 +49,10 @@ class CalibrationDegenerateError(Exception):
     """white - dark is not positive somewhere: reflectance would be undefined."""
 
 
+class CalibrationReferencesChangedError(Exception):
+    """A calibration reference changed between segmentation and measurement."""
+
+
 class IndexUnavailableError(Exception):
     """The index is unknown, or the cube's wavelengths cannot support it."""
 
@@ -141,17 +145,21 @@ def _as_float(cube: Any) -> Any:
 
 
 def prepare_cube(
-    cube: Any, white_reference: str | None, dark_reference: str | None
+    cube: Any, white_load: "CubeLoad | None", dark_load: "CubeLoad | None"
 ) -> tuple[Any, str, list[Advisory]]:
-    """Return (float cube, calibration label, advisories). Never integer data."""
-    if (white_reference is None) != (dark_reference is None):
+    """Return (float cube, calibration label, advisories). Never integer data.
+
+    Takes LOADED references, not paths: the caller decides where the bytes come
+    from (and pins their digests), so this function never touches the disk.
+    """
+    if (white_load is None) != (dark_load is None):
         raise ValueError(
             "white_reference and dark_reference must be given together; a "
             "single reference cannot calibrate."
         )
-    if white_reference is not None and dark_reference is not None:
-        white = load_cube(white_reference).cube
-        dark = load_cube(dark_reference).cube
+    if white_load is not None and dark_load is not None:
+        white = white_load.cube
+        dark = dark_load.cube
         span = np.mean(white.array_data, axis=0, keepdims=True).astype(
             np.float64
         ) - np.mean(dark.array_data, axis=0, keepdims=True).astype(np.float64)
@@ -225,7 +233,7 @@ class HsiSegmentation:
     diagnostics: MaskDiagnostics
     warnings: list[Advisory]
     calibration: str
-    calibration_args: dict[str, str | None]
+    calibration_args: dict[str, str | None]  # ref paths AND their pinned digests
     index: str
     threshold: float
     object_type: str
@@ -243,13 +251,19 @@ def segment_hyperspectral(
     dark_reference: str | None = None,
     fill_size: int = 200,
     cube_load: CubeLoad | None = None,
+    white_load: CubeLoad | None = None,
+    dark_load: CubeLoad | None = None,
 ) -> HsiSegmentation:
     if object_type not in ("light", "dark"):
         raise ValueError(f"object_type must be 'light' or 'dark', got {object_type!r}")
     load = cube_load or load_cube(path)
-    prepared, calibration, warnings = prepare_cube(
-        load.cube, white_reference, dark_reference
+    white_load = white_load or (
+        load_cube(white_reference) if white_reference is not None else None
     )
+    dark_load = dark_load or (
+        load_cube(dark_reference) if dark_reference is not None else None
+    )
+    prepared, calibration, warnings = prepare_cube(load.cube, white_load, dark_load)
     idx = compute_index(prepared, index)
     values = idx.array_data.astype(np.float64)
     lo, hi = float(np.nanmin(values)), float(np.nanmax(values))
@@ -273,8 +287,13 @@ def segment_hyperspectral(
         warnings=warnings,
         calibration=calibration,
         calibration_args={
-            "white_reference": white_reference,
-            "dark_reference": dark_reference,
+            "white_reference": white_reference
+            or (white_load.raw_path if white_load else None),
+            "dark_reference": dark_reference
+            or (dark_load.raw_path if dark_load else None),
+            # Pinned identities: measure_spectral refuses if the files change.
+            "white_digest": white_load.digest if white_load else None,
+            "dark_digest": dark_load.digest if dark_load else None,
         },
         index=index,
         threshold=float(threshold),
@@ -327,6 +346,8 @@ def measure_spectral(
     include_spectrum: bool = False,
     include_histograms: bool = False,
     cube_load: CubeLoad | None = None,
+    white_load: CubeLoad | None = None,
+    dark_load: CubeLoad | None = None,
 ) -> SpectralResult:
     if not indices:
         raise IndexUnavailableError(
@@ -336,9 +357,25 @@ def measure_spectral(
     assert_not_degenerate(diag)
     load = cube_load or load_cube(path)
     calibration = calibration or {}
-    prepared, label, warnings = prepare_cube(
-        load.cube, calibration.get("white_reference"), calibration.get("dark_reference")
-    )
+    wref = calibration.get("white_reference")
+    dref = calibration.get("dark_reference")
+    white_load = white_load or (load_cube(wref) if wref is not None else None)
+    dark_load = dark_load or (load_cube(dref) if dref is not None else None)
+    # Every calibrated number depends on the reference bytes, so the refs are
+    # held to the same identity rule as the cube: the digest pinned at
+    # segmentation must match the file measured against now.
+    for role, ref_load, pinned in (
+        ("white_reference", white_load, calibration.get("white_digest")),
+        ("dark_reference", dark_load, calibration.get("dark_digest")),
+    ):
+        if ref_load is not None and pinned and ref_load.digest != pinned:
+            raise CalibrationReferencesChangedError(
+                f"The {role} file changed since segment_hyperspectral() pinned "
+                "it (SHA-256 mismatch). The calibrated values would silently "
+                "differ from the segmentation's; re-run segment_hyperspectral() "
+                "with the current reference files."
+            )
+    prepared, label, warnings = prepare_cube(load.cube, white_load, dark_load)
     if prepared.array_data.shape[:2] != mask.shape:
         raise ValueError(
             f"mask {mask.shape} does not match the cube's frame "
@@ -350,8 +387,24 @@ def measure_spectral(
     histograms: dict[str, Any] = {}
     for name in indices:
         idx = compute_index(prepared, name)
-        values = idx.array_data.astype(np.float64)[selected]
-        values = values[np.isfinite(values)]
+        raw = idx.array_data.astype(np.float64)[selected]
+        values = raw[np.isfinite(raw)]
+        n_bad = int(raw.size - values.size)
+        if n_bad:
+            # min/max below skip these pixels; saying so is mandatory, or
+            # pixel_count silently overstates the evidence behind the numbers.
+            warnings.append(
+                Advisory(
+                    code="nan_pixels",
+                    message=(
+                        f"{n_bad} of {raw.size} masked pixels have a non-finite "
+                        f"{name} value (NaN/Inf) and are excluded from min/max; "
+                        "PlantCV's mean/median/std may also be affected. "
+                        "pixel_count counts the full mask; finite_pixel_count "
+                        "counts the pixels the statistics rest on."
+                    ),
+                )
+            )
         with isolated_pcv_outputs():
             pcv.analyze.spectral_index(
                 index_img=idx,
@@ -369,6 +422,7 @@ def measure_spectral(
             "std": float(_value(obs, f"std_index_{name}")),
             "min": float(values.min()) if values.size else None,
             "max": float(values.max()) if values.size else None,
+            "finite_pixel_count": int(values.size),
         }
         if include_histograms:
             freq = _value(obs, f"index_frequencies_index_{name}")

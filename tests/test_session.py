@@ -11,7 +11,9 @@ from plantcv_mcp.session import SessionStore, UnknownSessionError
 def _store_with(n, max_sessions=8):
     store = SessionStore(max_sessions=max_sessions)
     ids = [
-        store.create("/img.png", np.zeros((4, 4), np.uint8), "a", "otsu").session_id
+        store.create(
+            "/img.png", np.zeros((4, 4), np.uint8), "a", "otsu", digest="d"
+        ).session_id
         for _ in range(n)
     ]
     return store, ids
@@ -40,7 +42,7 @@ def test_lru_evicts_oldest_beyond_max():
 def test_get_refreshes_recency_so_used_sessions_survive():
     store, ids = _store_with(8, max_sessions=8)
     store.get(ids[0])  # touch the oldest
-    store.create("/img.png", np.zeros((4, 4), np.uint8), "a", "otsu")
+    store.create("/img.png", np.zeros((4, 4), np.uint8), "a", "otsu", digest="d")
     assert store.get(ids[0])  # survived because touched
     with pytest.raises(UnknownSessionError):
         store.get(ids[1])  # the new oldest went instead
@@ -49,7 +51,7 @@ def test_get_refreshes_recency_so_used_sessions_survive():
 def test_mask_is_copied_isolated_from_caller_mutations():
     store = SessionStore(max_sessions=8)
     mask = np.zeros((4, 4), np.uint8)
-    sess = store.create("/img.png", mask, "a", "otsu")
+    sess = store.create("/img.png", mask, "a", "otsu", digest="d")
 
     # Mutate the caller's array after create()
     mask[0, 0] = 255
@@ -97,7 +99,7 @@ def test_concurrent_create_and_get_never_raise_keyerror():
     def worker():
         mask = np.zeros((4, 4), np.uint8)
         for _ in range(50):
-            sid = store.create("/img.png", mask, "a", "otsu").session_id
+            sid = store.create("/img.png", mask, "a", "otsu", digest="d").session_id
             try:
                 store.get(sid)
             except UnknownSessionError:
@@ -114,5 +116,44 @@ def test_concurrent_create_and_get_never_raise_keyerror():
     assert not unexpected, f"store raised {unexpected[0]!r} under concurrency"
     # Positive control: the store is intact and still bounded afterwards.
     assert len(store) == 2
-    newest = store.create("/img.png", np.zeros((4, 4), np.uint8), "a", "otsu")
+    newest = store.create(
+        "/img.png", np.zeros((4, 4), np.uint8), "a", "otsu", digest="d"
+    )
     assert store.get(newest.session_id) is newest
+
+
+def test_a_session_requires_a_digest():
+    """digest defaulted to "" and every guard read `if session.digest and ...`:
+    one future create() call that forgot the digest would silently disable the
+    stale-image check. Identity is not optional."""
+    import numpy as np
+    import pytest
+
+    from plantcv_mcp.session import SessionStore
+
+    store = SessionStore()
+    mask = np.zeros((4, 4), np.uint8)
+    with pytest.raises((TypeError, ValueError)):
+        store.create("/img.png", mask, "a", "otsu")  # no digest at all
+    with pytest.raises(ValueError, match="digest"):
+        store.create("/img.png", mask, "a", "otsu", digest="")
+    # Positive control: with a digest, creation works.
+    assert store.create("/img.png", mask, "a", "otsu", digest="d").digest == "d"
+
+
+def test_the_stored_mask_is_read_only():
+    """get() hands out the stored Session; an in-place `mask[:] = 0` anywhere
+    would corrupt every later measurement of that session. The stored array
+    refuses writes instead of trusting every future caller."""
+    import numpy as np
+    import pytest
+
+    from plantcv_mcp.session import SessionStore
+
+    store = SessionStore()
+    mask = np.zeros((4, 4), np.uint8)
+    s = store.create("/img.png", mask, "a", "otsu", digest="d")
+    with pytest.raises(ValueError, match="read-only"):
+        store.get(s.session_id).mask[0, 0] = 255
+    # The caller's own array was copied, not captured: it stays writable.
+    mask[0, 0] = 1
