@@ -83,3 +83,19 @@ def test_load_image_names_undecodable_file(tmp_path):
     p.write_text("# not an image\n")
     with pytest.raises(RuntimeError, match="not a decodable image"):
         load_image(str(p))
+
+
+def test_overlay_outlines_the_mask_in_cyan_so_red_subjects_stay_legible():
+    """Found on a real photo of red beans: a red tint on a red subject is
+    invisible, so 'look at the overlay' could not show what was selected. The
+    boundary of the mask is drawn in cyan, INSIDE the mask, so unmasked pixels
+    are still untouched (the existing tint test) and the outline is always a
+    different colour from the fill."""
+    img = np.zeros((40, 40, 3), dtype=np.uint8)
+    img[:, :] = (0, 0, 220)  # a red subject, BGR
+    mask = np.zeros((40, 40), dtype=np.uint8)
+    mask[10:30, 10:30] = 255
+    out = render_overlay(img, mask)
+    assert tuple(out[10, 20]) == (255, 255, 0)  # boundary pixel: cyan
+    assert tuple(out[20, 20]) != (255, 255, 0)  # interior: tinted, not outlined
+    assert tuple(out[5, 5]) == (0, 0, 220)  # unmasked: untouched

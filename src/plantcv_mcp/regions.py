@@ -260,6 +260,88 @@ def _read_group(index: int) -> dict[str, dict]:
     return pcv.outputs.observations[key]
 
 
+EXCEEDS_CELL_RATIO = 1.25
+"""Object bbox / cell bbox above which the object is not this cell's plant.
+
+Measured on real trays: a clean auto_grid draws tight cells around centroids,
+so leaf tips overhang (ratios up to 1.02, half a plant's pixels outside the
+cell) while the traits are still that one plant's, because partial labelling
+measures the whole object. A misaligned grid that merges two plants gives
+1.68-2.13. Pixel counts outside the cell cannot tell those apart; the bbox
+ratio can.
+"""
+
+
+def object_exceeds_region_warning(
+    labeled: np.ndarray, label: int, bbox: tuple[int, int, int, int]
+) -> Advisory | None:
+    """Warn when the object a cell reports is much larger than the cell.
+
+    create_labels(roi_type="partial") labels any object that OVERLAPS a cell
+    whole, so the traits describe the whole object, cell boundary or not. On a
+    real X-Rite tray photo a misaligned auto_grid reported objects 785 px wide
+    inside 369 px cells -- two plants per row -- with no signal at all.
+    """
+    x, y, w, h = bbox
+    obj = labeled == label
+    ys, xs = np.nonzero(obj)
+    if xs.size == 0 or not (w and h):
+        return None
+    ox, oy = int(xs.min()), int(ys.min())
+    ow, oh = int(xs.max() - ox + 1), int(ys.max() - oy + 1)
+    ratio = max(ow / w, oh / h)
+    if ratio < EXCEEDS_CELL_RATIO:
+        return None
+    total = int(obj.sum())
+    outside = total - int(obj[y : y + h, x : x + w].sum())
+    return Advisory(
+        code="object_exceeds_region",
+        message=(
+            f"The object this region reports is {ratio:.1f}x the size of its cell "
+            f"(object {ow}x{oh} px at ({ox}, {oy}) vs cell {w}x{h}; {outside} of "
+            f"{total} px lie outside). Its traits describe the WHOLE object, which "
+            "is almost certainly a neighbouring plant merged with this one. Look "
+            "at the overlay, then give rect_grid geometry that puts one plant per "
+            "cell."
+        ),
+    )
+
+
+def grid_misalignment_warning(mode: str, measurements: list) -> Advisory | None:
+    """Set-level signal: an inferred grid that does not sit on the tray.
+
+    auto_grid infers cells from the mask's centroids. When it lands between the
+    pots, the result looks healthy -- most cells measured -- while some cells
+    are empty and others report objects spilling out of them. Both together,
+    under auto_grid only: rect_grid geometry is the user's own and is not
+    second-guessed.
+    """
+    if mode != "auto_grid":
+        return None
+    empty = sum(1 for m in measurements if not m["measured"])
+    spill = sum(
+        1
+        for m in measurements
+        if any(
+            w["code"] in ("object_exceeds_region", "object_claimed_by_neighbour")
+            for w in m["warnings"]
+        )
+    )
+    if not (empty and spill):
+        return None
+    return Advisory(
+        code="grid_misaligned",
+        message=(
+            f"auto_grid inferred a grid in which {empty} cell(s) hold nothing and "
+            f"{spill} cell(s) report objects extending outside them. That is the "
+            "signature of a grid that does not line up with the tray: neighbouring "
+            "plants are being merged into one cell while another cell is empty. "
+            "Check the numbered overlay, then re-run with mode='rect_grid' and "
+            "explicit coord/width/height/spacing so each cell holds one plant."
+        ),
+    )
+
+
 def measure_regions(
     img: np.ndarray,
     mask: np.ndarray,
@@ -311,6 +393,35 @@ def measure_regions(
             )
 
             if label not in present:
+                # "Empty" per the labels is not "empty" per the mask: with
+                # roi_type="partial" an object straddling two cells is handed
+                # WHOLE to one of them, and the other reads as nothing. Say so,
+                # naming the region that took it, instead of calling it empty.
+                claimed = {int(v) for v in np.unique(cell)} - {0}
+                in_cell = int((mask[y : y + h, x : x + w] > 0).sum()) if w and h else 0
+                if claimed and in_cell:
+                    takers = ", ".join(f"region {c - 1}" for c in sorted(claimed))
+                    reason = (
+                        f"Not empty: {in_cell} px of plant material lie in this cell "
+                        f"but PlantCV assigned the whole object to {takers} because "
+                        "it overlaps both. The neighbour's traits include this "
+                        "material. Look at the overlay; if these are two plants, "
+                        "give rect_grid geometry that puts one plant per cell."
+                    )
+                    cell_warnings = [
+                        {
+                            "code": "object_claimed_by_neighbour",
+                            "message": reason,
+                        }
+                    ]
+                else:
+                    reason = (
+                        "No plant material in this region. PlantCV reports a "
+                        "complete trait set of zeros for an empty region, which "
+                        "is indistinguishable from a real zero-area plant, so "
+                        "no traits are returned for it."
+                    )
+                    cell_warnings = []
                 out.append(
                     RegionMeasurement(
                         index=i,
@@ -318,15 +429,10 @@ def measure_regions(
                         col=col,
                         bbox=list(bbox),
                         measured=False,
-                        reason=(
-                            "No plant material in this region. PlantCV reports a "
-                            "complete trait set of zeros for an empty region, which "
-                            "is indistinguishable from a real zero-area plant, so "
-                            "no traits are returned for it."
-                        ),
+                        reason=reason,
                         region_coverage=0.0,
                         traits=None,
-                        warnings=[],
+                        warnings=cell_warnings,
                     )
                 )
                 continue
@@ -373,6 +479,9 @@ def measure_regions(
                 region_warnings.append(cover)
             if lp_warning:
                 region_warnings.append(lp_warning)
+            spill = object_exceeds_region_warning(labeled, label, bbox)
+            if spill:
+                region_warnings.append(spill)
 
             out.append(
                 RegionMeasurement(

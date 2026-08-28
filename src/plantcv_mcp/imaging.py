@@ -14,6 +14,7 @@ class NotColorImageError(Exception):
 
 OVERLAY_BGR = np.array([0, 0, 255], dtype=np.float64)  # red in BGR
 OVERLAY_ALPHA = 0.55
+OUTLINE_BGR = (255, 255, 0)  # cyan: the fill's complement, visible on red subjects
 
 
 def read_image_bytes(path: str) -> bytes:
@@ -126,12 +127,26 @@ def downscale(
 
 
 def render_overlay(img: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    """Tint masked pixels so a viewer can see what was measured."""
+    """Tint masked pixels red and outline the mask in cyan.
+
+    The outline exists because a red tint on a red subject is invisible (found
+    on a photo of red beans: nothing in the overlay showed what was selected).
+    It is drawn on the mask's own boundary pixels -- inside the mask -- so no
+    unmasked pixel is ever touched and the fill and the outline can never be
+    the same colour.
+    """
     out = img.copy()
     sel = mask > 0
     out[sel] = ((1 - OVERLAY_ALPHA) * out[sel] + OVERLAY_ALPHA * OVERLAY_BGR).astype(
         np.uint8
     )
+    # Thickness scales with the frame: overlays are downscaled to ~1024 px for
+    # the client, and a 1 px outline on a 4000 px photo disappears at that
+    # scale (measured on the beans photo that motivated the outline).
+    t = max(1, round(max(img.shape[:2]) / 1024))
+    k = np.ones((2 * t + 1, 2 * t + 1), np.uint8)
+    eroded = cv2.erode(sel.astype(np.uint8), k).astype(bool)
+    out[sel & ~eroded] = OUTLINE_BGR
     return out
 
 
