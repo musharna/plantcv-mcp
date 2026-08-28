@@ -6,6 +6,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+Second live dogfood, against the released 1.2.0 server: all six 1.2.0 fixes
+verified over the wire; one new defect.
+
+### Fixed
+
+- **Non-colour images are refused by name at the load boundary.** A 1-channel
+  PNG used to fail three different ways — a raw OpenCV `cvtColor … 'scn' is 1`
+  traceback from `segment()` and from the batch's `refused_because`, and
+  PlantCV's bare `Input image is not RGB!` from `suggest_segmentation()`.
+  `imaging.decode_image` now raises `NotColorImageError` naming the file, its
+  channel count, and `segment_thermal()` as the likely intent, so every RGB
+  tool refuses the same way. An undecodable file's `Failed to open` message now
+  says it is not a decodable image and points cubes and thermal files to their
+  own segmenters.
+
 ## [1.2.0] — 2026-08-28
 
 Findings from dogfooding the released server end-to-end over a live MCP
