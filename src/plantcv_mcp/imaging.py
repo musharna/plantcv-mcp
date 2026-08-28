@@ -7,6 +7,11 @@ import numpy as np
 
 from .paths import check_readable
 
+
+class NotColorImageError(Exception):
+    """The file decoded, but not to the 3-channel colour image the RGB tools need."""
+
+
 OVERLAY_BGR = np.array([0, 0, 255], dtype=np.float64)  # red in BGR
 OVERLAY_ALPHA = 0.55
 
@@ -43,7 +48,22 @@ def decode_image(data: bytes, path: str) -> np.ndarray:
     if img is not None and img.ndim == 3 and img.shape[2] == 4:
         img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
     if img is None:
-        raise RuntimeError(f"Failed to open {path}")
+        raise RuntimeError(
+            f"Failed to open {path}: not a decodable image (expected a PNG/JPEG/TIFF "
+            "photograph). ENVI cubes go to segment_hyperspectral(), radiometric "
+            "thermal files to segment_thermal()."
+        )
+    if img.ndim != 3 or img.shape[2] != 3:
+        # Guard HERE, at the one place pixels enter, so segment(),
+        # suggest_segmentation(), calibrate_scale_from_marker() and the batch
+        # refuse the same way instead of each dying in a different cvtColor.
+        channels = 1 if img.ndim == 2 else img.shape[2]
+        raise NotColorImageError(
+            f"{path} decodes to {img.shape[1]}x{img.shape[0]} with {channels} channel"
+            f"{'' if channels == 1 else 's'}, not the 3-channel colour photograph the "
+            "RGB tools measure. If this is a thermal frame, use segment_thermal(); if "
+            "it is a mask or a single band, it is not an image to segment."
+        )
     return img
 
 

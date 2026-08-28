@@ -679,3 +679,31 @@ def test_list_methods_names_the_server_itself():
     from plantcv_mcp.server import list_methods_impl
 
     assert list_methods_impl()["server_version"] == __version__
+
+
+@pytest.mark.anyio
+async def test_grayscale_image_is_refused_by_name_everywhere(tmp_path):
+    """A 1-channel PNG used to die three different ways (raw cvtColor traceback
+    from segment() and the batch, PlantCV's bare 'not RGB' from suggest). The
+    guard lives at the one load boundary, so every RGB tool now says the same
+    thing and names segment_thermal() as the likely intent."""
+    import cv2
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    gray = tmp_path / "gray.png"
+    cv2.imwrite(str(gray), np.full((40, 60), 90, dtype=np.uint8))
+    mcp = build_server()
+    for name, args in [
+        ("segment", {"image_path": str(gray), "channel": "a", "method": "otsu"}),
+        ("suggest_segmentation", {"image_path": str(gray)}),
+    ]:
+        with pytest.raises(ToolError, match="1 channel.*segment_thermal"):
+            await mcp.call_tool(name, args)
+    result = await mcp.call_tool(
+        "measure_images",
+        {"image_paths": [str(gray)], "channel": "a", "method": "otsu"},
+    )
+    entry = json.loads(result.content[0].text)["results"][0]
+    assert entry["measured"] is False
+    assert "1 channel" in entry["refused_because"]
+    assert "cvtColor" not in entry["refused_because"]
