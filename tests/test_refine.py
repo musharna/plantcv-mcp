@@ -127,6 +127,7 @@ def test_fill_holes_plus_keep_largest_recovers_the_known_disc_area():
         ([{"op": "sharpen"}], "sharpen"),
         ([{"op": "fill"}], "size"),  # missing param
         ([{"op": "fill", "size": -1}], "size"),  # PlantCV silently accepts this
+        ([{"op": "fill", "size": 0}], "size"),  # PlantCV no-op; lineage would lie
         ([{"op": "erode", "ksize": 3, "iterations": 0}], "iterations"),
         ([{"op": "erode", "ksize": 1}], "ksize"),
         ([{"op": "median_blur", "ksize": 4}], "odd"),

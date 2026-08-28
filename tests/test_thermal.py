@@ -69,6 +69,21 @@ def test_segment_by_temperature_and_measure_a_known_warm_disc(tmp_path):
     assert cold.temperature["mean"] == pytest.approx(20.0, abs=0.01)
 
 
+def test_nan_pixels_are_reported_not_silently_dropped(tmp_path):
+    """Non-finite pixels are excluded from segmentation correctly — but
+    silently. The result must say how many pixels the band never saw."""
+    frame, _ = _scene()
+    frame[:10, :10] = np.nan  # 100 dead pixels, away from the disc
+    seg = segment_thermal(_write_npz(tmp_path, frame), min_c=25.0)
+    nan_warnings = [w for w in seg.warnings if w.code == "nan_pixels"]
+    assert len(nan_warnings) == 1
+    assert "100" in nan_warnings[0].message
+    # Positive control: a finite frame carries no such advisory.
+    clean, _ = _scene()
+    seg2 = segment_thermal(_write_npz(tmp_path, clean, name="clean.npz"), min_c=25.0)
+    assert not [w for w in seg2.warnings if w.code == "nan_pixels"]
+
+
 def test_a_band_that_selects_nothing_is_refused(tmp_path):
     from plantcv_mcp.diagnostics import DegenerateMaskError
 

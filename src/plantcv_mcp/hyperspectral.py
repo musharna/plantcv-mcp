@@ -156,11 +156,19 @@ def prepare_cube(
             np.float64
         ) - np.mean(dark.array_data, axis=0, keepdims=True).astype(np.float64)
         if not np.all(span > 0):
+            if not np.all(np.isfinite(span)):
+                n_bad = int((~np.isfinite(span)).sum())
+                detail = (
+                    f"is not finite (NaN/Inf) at {n_bad} band-column position(s) — "
+                    "a reference file contains invalid pixels"
+                )
+            else:
+                detail = f"is not positive at every band and column (min {float(span.min())})"
             raise CalibrationDegenerateError(
-                "white_reference - dark_reference is not positive at every band and "
-                f"column (min {float(span.min())}), so reflectance is undefined there. "
-                "PlantCV would clip this to 1.0 silently; check that the white and "
-                "dark references are the right files and not the same one."
+                f"white_reference - dark_reference {detail}, so reflectance is "
+                "undefined there. PlantCV would clip this to 1.0 silently; check "
+                "that the white and dark references are the right files and not "
+                "the same one."
             )
         calibrated = pcv.hyperspectral.calibrate(
             raw_data=cube, white_reference=white, dark_reference=dark
