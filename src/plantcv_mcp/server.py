@@ -14,6 +14,7 @@ is guarded by measurement.PCV_OUTPUTS_LOCK (via isolated_pcv_outputs), and the
 session store carries its own lock.
 """
 
+import functools
 import json
 from typing import Any, NotRequired
 
@@ -23,6 +24,7 @@ import numpy as np
 # class, same decorator, same kwargs — a rename, not a rewrite. Image moved with
 # it. ToolAnnotations stayed in mcp.types, though its fields are snake_case now.
 from mcp.server.mcpserver import Image, MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from plantcv import plantcv as pcv
 
@@ -31,7 +33,12 @@ from typing_extensions import TypedDict
 
 from . import __version__, plantcv_version
 from .color import correct_color
-from .diagnostics import analyze_mask, mask_warnings, segmentation_warnings
+from .diagnostics import (
+    analyze_mask,
+    implausible_longest_path_warning,
+    mask_warnings,
+    segmentation_warnings,
+)
 from .hyperspectral import load_cube
 from .imaging import (
     downscale,
@@ -219,6 +226,10 @@ class ThermalMeasureResult(TypedDict):
 class MethodsInfo(TypedDict):
     """Return type of list_methods()."""
 
+    # This server's own version. The engine version alone cannot say which
+    # plantcv-mcp answered — a stale cached server is indistinguishable from
+    # current over the tool surface without it.
+    server_version: str
     plantcv_version: str
     channels: list[str]
     methods: list[str]
@@ -242,6 +253,7 @@ class ImageChangedSinceSegmentationError(Exception):
 
 def list_methods_impl() -> MethodsInfo:
     return {
+        "server_version": __version__,
         "plantcv_version": plantcv_version(),
         "channels": sorted(CHANNELS),
         "methods": list(METHODS),
@@ -370,19 +382,21 @@ def _measure_impl(
     requested = tuple(analyses) if analyses else ("size",)
     session = _session_of(session_id, "rgb")
     img = _load_session_image(session)
+    traits = dispatch(
+        "measure", img, session.mask, requested, px_per_mm, include_histograms
+    )
+    warnings = mask_warnings(session.mask, analyze_mask(session.mask))
+    lp_warning = implausible_longest_path_warning(traits)
+    if lp_warning:
+        warnings.append(lp_warning)
     return {
         "session_id": session_id,
         "analyses": list(requested),
         "px_per_mm": px_per_mm,
         "lineage": [dict(op) for op in session.lineage],
-        "traits": dispatch(
-            "measure", img, session.mask, requested, px_per_mm, include_histograms
-        ),
+        "traits": traits,
         "engine": {"name": "PlantCV", "version": plantcv_version()},
-        "warnings": [
-            {"code": w.code, "message": w.message}
-            for w in mask_warnings(session.mask, analyze_mask(session.mask))
-        ],
+        "warnings": [{"code": w.code, "message": w.message} for w in warnings],
     }
 
 
@@ -755,6 +769,32 @@ def _measure_regions_impl(
     }
 
 
+def _loud(fn):
+    """Convert every exception into a ToolError carrying its text.
+
+    mcp 2.1 masks any exception other than ToolError to a bare `Error executing
+    tool <name>` — the right contract for a network service that must not leak
+    internals, and exactly the wrong one here: this is a local stdio instrument
+    (paths.py states the trust boundary) whose refusal messages ARE the product.
+    Verified live on 2.1.1: a WrongSessionKindError's "use measure_thermal()"
+    guidance reached the client as nothing at all. Converting at the tool
+    boundary — below the SDK, above the impls — keeps the impls raising their
+    own types (tests and library callers see those) while every message crosses
+    the wire. The class name is kept so a genuine bug still reads as one.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except ToolError:
+            raise
+        except Exception as exc:
+            raise ToolError(f"{type(exc).__name__}: {exc}") from exc
+
+    return wrapper
+
+
 def build_server() -> MCPServer:
     # version= is what a client sees at initialize; MCPServer defaults it to "".
     mcp = MCPServer("plantcv-mcp", instructions=INSTRUCTIONS, version=__version__)
@@ -775,12 +815,14 @@ def build_server() -> MCPServer:
     )
 
     @mcp.tool(title="List segmentation methods", annotations=READ_ONLY)
+    @_loud
     def list_methods() -> MethodsInfo:
         """List available segmentation channels, methods, object types, analyses,
         and the pinned PlantCV version."""
         return list_methods_impl()
 
     @mcp.tool(title="Suggest a segmentation", annotations=READ_ONLY)
+    @_loud
     def suggest_segmentation(
         image_path: str, channel: str = "a", method: str = "otsu"
     ) -> list:
@@ -805,6 +847,7 @@ def build_server() -> MCPServer:
         ]
 
     @mcp.tool(title="Segment an image (returns the overlay)", annotations=READ_ONLY)
+    @_loud
     def segment(
         image_path: str,
         channel: str,
@@ -840,6 +883,7 @@ def build_server() -> MCPServer:
         return [json.dumps(result), Image(data=png, format="png")]
 
     @mcp.tool(title="Refine a mask (returns the new overlay)", annotations=READ_ONLY)
+    @_loud
     def refine(session_id: str, ops: list[dict]) -> list:
         """Apply morphological cleanup to a session's mask and get a NEW session.
 
@@ -857,6 +901,7 @@ def build_server() -> MCPServer:
         return [json.dumps(result), Image(data=png, format="png")]
 
     @mcp.tool(title="Measure traits from a segmentation", annotations=READ_ONLY)
+    @_loud
     def measure(
         session_id: str,
         analyses: list[str] | None = None,
@@ -883,6 +928,7 @@ def build_server() -> MCPServer:
         title="Measure each plant in a tray (returns the labelled overlay)",
         annotations=READ_ONLY,
     )
+    @_loud
     def measure_regions(
         session_id: str,
         nrows: int,
@@ -935,6 +981,7 @@ def build_server() -> MCPServer:
         title="Measure morphology: leaves, stem, branch points (returns the overlay)",
         annotations=READ_ONLY,
     )
+    @_loud
     def measure_morphology(
         session_id: str,
         prune_size: int = 15,
@@ -968,6 +1015,7 @@ def build_server() -> MCPServer:
         return [json.dumps(result), Image(data=png, format="png")]
 
     @mcp.tool(title="Calibrate pixels per millimetre", annotations=READ_ONLY)
+    @_loud
     def calibrate_scale_from_marker(
         image_path: str,
         x: int,
@@ -1009,6 +1057,7 @@ def build_server() -> MCPServer:
         }
 
     @mcp.tool(title="Measure many images with one recipe", annotations=READ_ONLY)
+    @_loud
     def measure_images(
         image_paths: list[str],
         channel: str,
@@ -1056,6 +1105,7 @@ def build_server() -> MCPServer:
         title="Segment a hyperspectral cube by a spectral index (returns the overlay)",
         annotations=READ_ONLY,
     )
+    @_loud
     def segment_hyperspectral(
         envi_path: str,
         index: str = "ndvi",
@@ -1092,6 +1142,7 @@ def build_server() -> MCPServer:
         return [json.dumps(result), Image(data=png, format="png")]
 
     @mcp.tool(title="Measure spectral indices and reflectance", annotations=READ_ONLY)
+    @_loud
     def measure_spectral(
         session_id: str,
         indices: list[str] | None = None,
@@ -1116,6 +1167,7 @@ def build_server() -> MCPServer:
         title="Segment a thermal frame by temperature (returns the overlay)",
         annotations=READ_ONLY,
     )
+    @_loud
     def segment_thermal(
         path: str,
         min_c: float | None = None,
@@ -1137,6 +1189,7 @@ def build_server() -> MCPServer:
         return [json.dumps(result), Image(data=png, format="png")]
 
     @mcp.tool(title="Measure temperatures under a thermal mask", annotations=READ_ONLY)
+    @_loud
     def measure_thermal(
         session_id: str, include_histograms: bool = False
     ) -> ThermalMeasureResult:

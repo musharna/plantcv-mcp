@@ -160,7 +160,11 @@ def measure_morphology(
                 saved_palette = pcv.params.saved_color_scale
                 pcv.params.saved_color_scale = None
                 try:
-                    segmented_img, _ = pcv.morphology.segment_id(
+                    # Two returns: the plain colored segments (what the other
+                    # segment_* functions consume) and the labeled copy with the
+                    # id DIGITS drawn on. The overlay must use the labeled one —
+                    # the table's `id` column is unreadable without the digits.
+                    segmented_img, id_img = pcv.morphology.segment_id(
                         skel_img=pruned, objects=leaf_objects, mask=mask255
                     )
                 finally:
@@ -186,6 +190,7 @@ def measure_morphology(
             else:
                 segmented_img = np.zeros_like(img)
                 segmented_img[pruned > 0] = (255, 255, 255)
+                id_img = segmented_img
                 warnings.append(
                     Advisory(
                         code="no_leaf_segments",
@@ -370,10 +375,11 @@ def measure_morphology(
     units.update({key: "degrees" for key in ANGULAR_SEGMENT_TRAITS + ("stem_angle",)})
     units["curvature"] = "ratio"
 
-    # The overlay: the tinted mask with PlantCV's numbered segments drawn on top.
+    # The overlay: the tinted mask with PlantCV's numbered segments — digits
+    # included — drawn on top.
     overlay = render_overlay(img, mask255)
-    drawn = segmented_img.any(axis=2)
-    overlay[drawn] = segmented_img[drawn]
+    drawn = id_img.any(axis=2)
+    overlay[drawn] = id_img[drawn]
 
     return MorphologyResult(
         plant=plant,

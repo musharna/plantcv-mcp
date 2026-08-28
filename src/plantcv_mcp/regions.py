@@ -38,6 +38,7 @@ from .diagnostics import (
     analyze_mask,
     assert_not_degenerate,
     implausible_coverage_warning,
+    implausible_longest_path_warning,
 )
 from .measurement import (
     ANALYSES,
@@ -359,6 +360,8 @@ def measure_regions(
                 name: TraitValue(value=obs.get("value"), unit=obs.get("label"))
                 for name, obs in _read_group(label).items()
             }
+            # Checked on the pixel values, before any unit conversion.
+            lp_warning = implausible_longest_path_warning(traits)
             if not include_histograms:
                 traits = {k: v for k, v in traits.items() if k not in HISTOGRAM_TRAITS}
             if px_per_mm is not None:
@@ -368,6 +371,8 @@ def measure_regions(
             cover = implausible_coverage_warning(cell_diag)
             if cover:
                 region_warnings.append(cover)
+            if lp_warning:
+                region_warnings.append(lp_warning)
 
             out.append(
                 RegionMeasurement(

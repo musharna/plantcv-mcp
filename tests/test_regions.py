@@ -406,3 +406,23 @@ def test_nan_px_per_mm_is_refused_on_the_regions_path_too():
     # Positive control: a finite scale converts to mm2.
     res = measure_regions(img, mask, _rect_grid(img, mask), px_per_mm=2.0)
     assert res[0]["traits"]["area"]["unit"] == "mm2"
+
+
+def test_implausible_longest_path_is_flagged_per_region():
+    """Live dogfood repro: on the four-view fixture, PlantCV reports region 3's
+    longest_path as ~7 px against a ~343 px tall object — an artefact that read
+    like a measurement. It must carry a warning naming itself."""
+    from pathlib import Path
+
+    from plantcv_mcp.server import _measure_regions_impl, _segment_impl
+
+    fixture = str(Path(__file__).parent / "fixtures" / "multi_specimen.png")
+    seg = _segment_impl(fixture, "a", "otsu")  # the exact recipe observed live
+    res = _measure_regions_impl(seg["session_id"], nrows=2, ncols=2)
+    r3 = res["regions"][3]
+    assert r3["traits"]["longest_path"]["value"] < 0.1 * r3["traits"]["height"]["value"]
+    assert "implausible_longest_path" in [w["code"] for w in r3["warnings"]]
+    # Positive control: region 1's longest_path is honest and stays unflagged.
+    assert "implausible_longest_path" not in [
+        w["code"] for w in res["regions"][1]["warnings"]
+    ]

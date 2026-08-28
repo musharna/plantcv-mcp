@@ -259,6 +259,11 @@ def test_cli_configured_roots_reach_the_worker(isolated, tmp_path):
     try:
         workers.shutdown_worker()  # a fresh worker must pick up the live roots
         assert run_isolated("_configured_roots") == [os.path.realpath(str(tmp_path))]
+        # And a WARM worker must track a later change: roots travel with each
+        # request, or a worker spawned under one policy silently enforces it
+        # forever (found live: a batch refused paths the parent had re-allowed).
+        paths.set_roots(None)
+        assert run_isolated("_configured_roots") is None
     finally:
         paths.set_roots(None)
         workers.shutdown_worker()
