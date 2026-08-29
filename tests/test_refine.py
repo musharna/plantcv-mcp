@@ -19,6 +19,8 @@ from plantcv_mcp.refine import (
     RefinementErasedMaskError,
     RefineSpecError,
     apply_refinements,
+    apply_refinements_traced,
+    refinement_warnings,
     validate_ops,
 )
 
@@ -173,3 +175,76 @@ def test_erosion_that_empties_the_mask_is_refused_with_before_and_after():
     assert "before" in msg and "after" in msg
     # Positive control: a mild erosion on the same mask is fine.
     assert (apply_refinements(mask, [{"op": "erode", "ksize": 3}]) > 0).any()
+
+
+# --- a refinement that discards a major object says so (real-photo finding #5) ---
+
+
+def _plant_with_bridged_leaf(size: int = 300) -> np.ndarray:
+    """A big disc (the plant) joined by a 3-px bridge to a smaller disc (a leaf).
+
+    opening(7) cuts the bridge; keep_largest(1) then throws the leaf away. The
+    leaf is ~25% of the plant's area — a change small enough (<25% of the total
+    mask) that refine_large_change stays silent, which is exactly the gap: a
+    17% change on a real sorghum photo was a whole leaf and only the overlay
+    showed it.
+    """
+    mask = np.zeros((size, size), np.uint8)
+    cv2.circle(mask, (100, 150), 50, 255, -1)  # plant, area ~7854
+    cv2.circle(mask, (230, 150), 25, 255, -1)  # leaf, area ~1963
+    mask[149:152, 150:210] = 255  # 3-px bridge
+    return mask
+
+
+def test_dropping_a_major_object_is_named_with_the_op_that_split_it_off():
+
+    mask = _plant_with_bridged_leaf()
+    ops = [{"op": "opening", "ksize": 7}, {"op": "keep_largest", "n": 1}]
+    out, dropped = apply_refinements_traced(mask, ops)
+    assert analyze_mask(out).component_count == 1
+    assert len(dropped) == 1
+    d = dropped[0]
+    assert d.op_index == 1 and d.op_name == "keep_largest"
+    assert d.split_by_op_index == 0
+    assert 1700 < d.area < 2100  # the leaf, not the bridge
+    warnings = refinement_warnings(mask, analyze_mask(mask), analyze_mask(out), dropped)
+    codes = [w.code for w in warnings]
+    assert "refine_dropped_object" in codes
+    assert "refine_large_change" not in codes  # below 25% -- the old alarm is silent
+    msg = next(w.message for w in warnings if w.code == "refine_dropped_object")
+    assert "op 1 (keep_largest)" in msg
+    assert "op 0 (opening)" in msg
+    assert "overlay" in msg
+
+    # Positive control: keep_largest on a plant plus a genuine speck drops
+    # nothing major and stays silent; the mask is otherwise identical.
+    speck = _clean_disc()
+    speck[10:13, 10:13] = 255
+    out2, dropped2 = apply_refinements_traced(speck, [{"op": "keep_largest", "n": 1}])
+    assert dropped2 == []
+    assert analyze_mask(out2).component_count == 1
+    assert (
+        refinement_warnings(speck, analyze_mask(speck), analyze_mask(out2), dropped2)
+        == []
+    )
+
+
+def test_apply_refinements_traced_returns_the_same_mask_as_apply_refinements():
+    mask = _plant_with_bridged_leaf()
+    ops = [{"op": "opening", "ksize": 7}, {"op": "keep_largest", "n": 1}]
+    out, _ = apply_refinements_traced(mask, ops)
+    np.testing.assert_array_equal(out, apply_refinements(mask, ops))
+
+
+def test_dropped_object_warning_lists_the_largest_three_and_counts_the_rest():
+    from plantcv_mcp.refine import DroppedObject, dropped_object_warning
+
+    drops = [
+        DroppedObject(1, "keep_largest", area, 10_000, 0, "opening")
+        for area in (1200, 5000, 1500, 3000, 2000)
+    ]
+    msg = dropped_object_warning(drops).message
+    assert msg.index("5000-px") < msg.index("3000-px") < msg.index("2000-px")
+    assert "1500-px" not in msg and "1200-px" not in msg
+    assert "2 more" in msg
+    assert "2 more" not in dropped_object_warning(drops[:3]).message

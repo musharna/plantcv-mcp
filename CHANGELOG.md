@@ -6,6 +6,30 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-08-28
+
+The two LOW findings left open from the real-photo dogfood.
+
+### Added
+
+- **`refine()` says when an op throws away a leaf.** On a sorghum photo
+  `opening` split a leaf off the plant and `keep_largest` discarded it; the
+  17% change sat under the `refine_large_change` alarm and only the overlay
+  showed it. The refinement is now traced op by op: any component ≥10% of the
+  largest component present before an op that the op removes entirely is
+  reported as `refine_dropped_object`, naming the op, the object's size, and
+  the earlier op that split it off (the largest three are listed, the rest
+  counted). `keep_largest`, `fill`, and an `erode` that eats a leaf all trip
+  it; specks do not.
+- **`suggest_segmentation` says when its recommendation is noise.** The
+  polarity report's `ambiguous` flag only compares the two polarities'
+  coverage, so on sorghum-in-a-chamber `a`/otsu recommended 'dark' — 118
+  components of chamber-wall texture at 12.9% — with `ambiguous: false`. Each
+  polarity now reports `largest_fraction` (largest component / masked pixels),
+  and `polarity.warnings` carries `noisy_segmentation` when the recommended
+  polarity has ≥20 components with the largest under half the mask, pointing
+  at the colourspace sheet and at `refine()`.
+
 ## [1.3.0] — 2026-08-28
 
 Findings from the first dogfood on REAL photographs (PlantCV tutorial images:
