@@ -646,28 +646,50 @@ def test_grid_misalignment_counts_a_claimed_cell_once_on_each_side():
 def test_a_leaf_that_leaves_and_reenters_its_cell_is_one_plant():
     """Judged on the cell CROP, a single plant whose leaf loops outside the cell
     is two comparably-sized pieces and read as two plants (a 20,533-px
-    arabidopsis did). The object is one component; judge the object."""
+    arabidopsis did). The object is one component; judge the object.
+
+    Geometry is checked, not assumed: the body and a second lobe sit in cell
+    1, joined only by a stalk that loops through cell 0. PlantCV's partial
+    ROI hands the whole object to cell 1, whose crop holds TWO comparable
+    pieces while the frame holds ONE component. (The first version of this
+    test put the body in cell 0 and the loop in cell 1; PlantCV then gave the
+    object to cell 1, whose crop was a single piece, and the test could not
+    fail — a mutation check caught it.)"""
     import cv2
+
+    from plantcv_mcp.diagnostics import analyze_mask
 
     img = np.zeros((100, 200, 3), np.uint8)
     mask = np.zeros((100, 200), np.uint8)
-    cv2.circle(mask, (50, 50), 30, 255, -1)  # body in cell 0
-    cv2.rectangle(mask, (70, 20), (140, 28), 255, -1)  # leaf out over the cell edge
-    cv2.rectangle(
-        mask, (60, 28), (68, 40), 255, -1
-    )  # and back in: two pieces in the crop
-    cv2.rectangle(mask, (130, 28), (140, 45), 255, -1)
-    regions = build_regions(
-        img,
-        mask,
-        mode="rect_grid",
-        nrows=1,
-        ncols=2,
-        coord=(0, 0),
-        height=100,
-        width=100,
-        spacing=(100, 0),
+    cv2.circle(mask, (159, 30), 22, 255, -1)  # body in cell 1
+    cv2.rectangle(mask, (59, 26), (139, 34), 255, -1)  # stalk out into cell 0
+    cv2.rectangle(mask, (59, 34), (67, 70), 255, -1)  # down, inside cell 0
+    cv2.rectangle(mask, (59, 62), (139, 70), 255, -1)  # and back
+    cv2.circle(mask, (154, 78), 18, 255, -1)  # second lobe, inside cell 1
+    crop = mask[:, 100:]
+    assert cv2.connectedComponents(crop)[0] - 1 == 2, "must split in the crop"
+    assert cv2.connectedComponents(mask)[0] - 1 == 1, "one object in the frame"
+    assert analyze_mask(crop).major_object_count == 2  # comparable pieces
+    geometry = {
+        "mode": "rect_grid",
+        "nrows": 1,
+        "ncols": 2,
+        "coord": (0, 0),
+        "height": 100,
+        "width": 100,
+    }
+    rows = measure_regions(
+        img, mask, build_regions(img, mask, spacing=(100, 0), **geometry)
     )
-    rows = measure_regions(img, mask, regions)
     owner = next(r for r in rows if r["measured"])
+    assert owner["index"] == 1
     assert "multi_specimen" not in [w["code"] for w in owner["warnings"]]
+    # Positive control: two genuinely separate plants in a cell DO fire.
+    mask2 = np.zeros((100, 200), np.uint8)
+    cv2.circle(mask2, (130, 30), 18, 255, -1)
+    cv2.circle(mask2, (170, 70), 18, 255, -1)
+    rows2 = measure_regions(
+        img, mask2, build_regions(img, mask2, spacing=(100, 0), **geometry)
+    )
+    owner2 = next(r for r in rows2 if r["measured"])
+    assert "multi_specimen" in [w["code"] for w in owner2["warnings"]]
