@@ -137,7 +137,7 @@ guards withhold numbers; advisories travel with them.
   ROI method; a thermal session handed to an RGB measurer; an image edited after
   segmentation. Each is refused naming the right tool.
 
-All 25 warning codes, every tool's parameters, and the measured facts behind each guard:
+All 26 warning codes, every tool's parameters, and the measured facts behind each guard:
 **[docs/GUIDE.md](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md)** — [segmenting](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#segmenting) · [traits and units](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#what-it-measures) ·
 [polarity](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#getting-the-polarity-right) · [refining](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#refining-a-mask) ·
 [trays](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#measuring-a-tray) · [morphology](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#morphology-leaves-stem-branch-points) ·
