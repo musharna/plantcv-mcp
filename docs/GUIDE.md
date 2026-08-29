@@ -236,7 +236,11 @@ against a synthetic plant of known geometry:
 - A mask that is the background (`implausible_coverage` on the session) is refused
   before anything is skeletonised: on a real photo it cost 80 s to skeletonise the
   frame and was then refused for the wrong reason. A stem PlantCV cannot join into
-  one piece is refused naming the bridge (`closing`, `fill_holes`), not a prune size.
+  one piece is refused naming the refine chains that measured the real photos
+  (`median_blur 11`; `opening 9` + `median_blur 21`) — `closing` did not repair a
+  stem the chain had cut, so it is not offered. When PlantCV loses track of its
+  own insertion segments (an internal list desync), every `insertion_angle` is
+  `null` with `insertion_angle_undefined` as well.
 - `tangent_size` (default 25 px, chosen from a bias sweep) is the window PlantCV fits
   tangents on, from **each** end of a segment. A window longer than half a leaf
   collapses that leaf's insertion angle to `0.0`; `tangent_window_exceeds_segment`
