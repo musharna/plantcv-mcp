@@ -792,3 +792,23 @@ async def test_marker_calibration_round_trip_yields_millimetres_from_a_real_fram
     assert t["area"]["value"] == pytest.approx(800.0, rel=1e-3)
     assert t["width"]["value"] == pytest.approx(40.0, rel=1e-3)
     assert t["height"]["value"] == pytest.approx(20.0, rel=1e-3)
+
+
+@pytest.mark.anyio
+async def test_measure_images_takes_grid_geometry_and_a_time_budget():
+    mcp = build_server()
+    result = await mcp.call_tool(
+        "measure_images",
+        {
+            "image_paths": ["tests/fixtures/multi_specimen.png"],
+            "channel": "a",
+            "method": "otsu",
+            "nrows": 2,
+            "ncols": 2,
+            "max_seconds": 120,
+        },
+    )
+    payload = json.loads(result.content[0].text)
+    assert payload["results"][0]["regions_measured"] == 4
+    assert payload["elapsed_s"] > 0
+    assert payload["summary"]["not_run"] == 0

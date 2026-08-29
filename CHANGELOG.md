@@ -6,6 +6,42 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-08-29
+
+Findings from the first run of the unattended batch path on real photographs
+(12 tutorial images: trays, colour cards, side views).
+
+### Added
+
+- **`measure_images` measures per plant when given a grid.** Five of the nine
+  images a real batch "measured" were trays, returned as one group area
+  (`area=441,080` for 28 arabidopsis plants) with only a `multi_specimen`
+  advisory. `nrows`/`ncols` (plus `rect_grid` geometry) now route each image
+  through the same partition `measure_regions()` uses; the row carries
+  `regions` and `regions_measured` instead of `traits`, and the group
+  advisory is dropped because there is no group number.
+- **Time budget and timing.** Real photographs took 9–11 s each under load,
+  so the 200-image cap alone allowed a ~30-minute call with no output.
+  `max_seconds` (default 300) bounds the call: images not started in time
+  are returned as `not_run` with `summary.not_run_paths` for resubmission;
+  every row reports `seconds` and the batch `elapsed_s`.
+- **`noisy_segmentation` guard**, shared by `segment()` (advisory),
+  `suggest_segmentation()` and the batch (blocking). A sorghum-in-chamber
+  photo was measured as one 650,000-px plant at 118 components (522 at
+  `fill_size=50`). Calibrated on the real set: ≥50 components that are not
+  major objects and no object holding half the mask — which keeps a
+  27-seedling tray (22 minor components) and the arabidopsis trays (14–15)
+  measurable while withholding the sorghum (116 / 520).
+- **Batch summary triage fields**: `unique`, `duplicates_dropped` (the same
+  path twice is measured once), `with_advisories`, `advisory_counts`.
+
+### Changed
+
+- **A recipe error is raised once, before any image runs.** `channel="zz"`
+  used to run the whole loop and return N identical `UnknownChannelError`
+  rows; channel, method, object_type, analyses, `max_seconds` and grid
+  geometry are validated up front.
+
 ## [1.4.0] — 2026-08-29
 
 Findings from the first dogfood on REAL hyperspectral and thermal data

@@ -32,6 +32,7 @@ from plantcv import plantcv as pcv
 from typing_extensions import TypedDict
 
 from . import __version__, plantcv_version
+from .batch import DEFAULT_MAX_SECONDS
 from .color import correct_color
 from .diagnostics import (
     analyze_mask,
@@ -83,7 +84,8 @@ Read the `warnings` array on every segment() response. `implausible_coverage`
 means the mask is probably inverted — re-run with the opposite `object_type`.
 `multi_specimen` means several plants were merged into one measurement.
 `fill_erased_mask` means `fill_size` deleted the specimen. `empty_mask` means the
-segmentation found nothing.
+segmentation found nothing. `noisy_segmentation` means the mask is dozens of specks
+around whatever plants there are — background texture, not a plant.
 
 Do not guess `channel` or `object_type`. suggest_segmentation reports what both
 polarities actually yield on the image in front of you. Its `noisy_segmentation`
@@ -1146,8 +1148,26 @@ def build_server() -> MCPServer:
         color_correct: bool = False,
         analyses: list[str] | None = None,
         px_per_mm: float | None = None,
+        max_seconds: float | None = DEFAULT_MAX_SECONDS,
+        nrows: int | None = None,
+        ncols: int | None = None,
+        mode: str = "auto_grid",
+        coord: list[int] | None = None,
+        height: int | None = None,
+        width: int | None = None,
+        spacing: list[int] | None = None,
+        radius: int | None = None,
     ) -> BatchResult:
         """Run one fixed segmentation recipe across many images.
+
+        For trays give nrows/ncols (and rect_grid geometry if needed): each
+        image is then measured per plant exactly as measure_regions() does and
+        the row carries `regions` instead of `traits`. Without a grid a tray
+        returns the GROUP's traits with a `multi_specimen` advisory.
+
+        Real photographs take ~10 s each; max_seconds (default 300) bounds the
+        call and images not started in time come back as not_run with their
+        paths listed for resubmission. Each row reports its own `seconds`.
 
         There is no overlay here — nobody reviews two hundred of them — so instead
         every image runs the SAME guards as segment(), and any image that trips a
@@ -1176,6 +1196,15 @@ def build_server() -> MCPServer:
             color_correct=color_correct,
             analyses=tuple(analyses) if analyses else ("size",),
             px_per_mm=px_per_mm,
+            max_seconds=max_seconds,
+            nrows=nrows,
+            ncols=ncols,
+            mode=mode,
+            coord=_as_xy(coord, "coord"),
+            height=height,
+            width=width,
+            spacing=_as_xy(spacing, "spacing"),
+            radius=radius,
         )
 
     @mcp.tool(

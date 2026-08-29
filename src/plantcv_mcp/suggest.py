@@ -3,7 +3,7 @@
 import numpy as np
 from plantcv import plantcv as pcv
 
-from .diagnostics import Advisory, analyze_mask
+from .diagnostics import Advisory, analyze_mask, is_noisy, largest_fraction
 from .segmentation import OBJECT_TYPES, segment_mask, to_gray
 
 
@@ -19,18 +19,12 @@ def threshold_sheet(img: np.ndarray, channel: str) -> np.ndarray:
     return result[0] if isinstance(result, list) else result
 
 
-# A recommended polarity whose mask is at least this many components, with the
-# largest one a minority of the masked pixels, is specks rather than a plant:
-# a sorghum-in-chamber photo gave 118 components at 12.9% under a/otsu, and
-# the polarity comparison alone called it unambiguous.
-NOISY_COMPONENT_COUNT = 20
-NOISY_LARGEST_FRACTION = 0.5
-
-
 def noisy_segmentation_warning(polarity: str, stats: dict) -> Advisory | None:
-    if (
-        stats["component_count"] < NOISY_COMPONENT_COUNT
-        or stats["largest_fraction"] >= NOISY_LARGEST_FRACTION
+    """The shared noise rule (diagnostics.is_noisy), worded for the polarity
+    report: a sorghum-in-chamber photo gave 118 components at 12.9% under
+    a/otsu and the polarity comparison alone called it unambiguous."""
+    if not is_noisy(
+        stats["component_count"], stats["largest_fraction"], stats["major_object_count"]
     ):
         return None
     return Advisory(
@@ -73,11 +67,11 @@ def polarity_report(
             img, channel, method, object_type=object_type, fill_size=fill_size
         )
         diag = analyze_mask(mask)
-        total = sum(diag.areas)
         per_polarity[object_type] = {
             "mask_fraction": diag.mask_fraction,
             "component_count": diag.component_count,
-            "largest_fraction": (diag.largest_area / total) if total else 0.0,
+            "major_object_count": diag.major_object_count,
+            "largest_fraction": largest_fraction(diag),
         }
 
     fractions = {k: v["mask_fraction"] for k, v in per_polarity.items()}

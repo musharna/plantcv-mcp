@@ -264,3 +264,121 @@ def test_a_partially_out_of_frame_crop_is_refused_not_silently_clamped():
             calibrate_scale(img, *box, marker_length_mm=20.0)
     # Positive control: the same-size crop fully inside still calibrates.
     assert calibrate_scale(img, 100, 100, 100, 100, 20.0).px_per_mm > 0
+
+
+# --- batch dogfood 2026-08-29: six findings from the first real-photo batch ---
+
+
+def _speckled(tmp_path, name="speck.png", n=60):
+    """One plant blob plus n dark 18x18 specks (each > fill_size=200): the
+    sorghum-in-chamber case that batch measured as one 650k-px 'plant'."""
+    img = np.full((400, 400, 3), 200, np.uint8)
+    img[180:220, 180:220] = (30, 30, 30)
+    rng = np.random.default_rng(5)
+    placed = 0
+    while placed < n:
+        y, x = rng.integers(0, 382, 2)
+        if 150 <= y <= 240 and 150 <= x <= 240:
+            continue
+        if (img[y : y + 18, x : x + 18, 0] == 30).any():
+            continue
+        img[y : y + 18, x : x + 18] = (30, 30, 30)
+        placed += 1
+    return _write(tmp_path, name, img)
+
+
+def test_batch_reports_timing_and_stops_at_the_time_budget(tmp_path):
+    disc = _write(tmp_path, "d1.png", _disc_image())
+    disc2 = _write(tmp_path, "d2.png", _disc_image(60))
+    disc3 = _write(tmp_path, "d3.png", _disc_image(40))
+    out = measure_batch(
+        [disc, disc2, disc3], channel="l", method="otsu", max_seconds=0.0
+    )
+    rows = out["results"]
+    assert rows[0]["measured"] is True and rows[0]["seconds"] > 0
+    assert [r["measured"] for r in rows[1:]] == [False, False]
+    assert all("time budget" in r["refused_because"] for r in rows[1:])
+    assert all(r["seconds"] is None for r in rows[1:])
+    assert out["summary"]["not_run"] == 2
+    assert out["summary"]["not_run_paths"] == [disc2, disc3]
+    assert out["summary"]["needs_review"] == 0  # not run is not "needs review"
+    assert out["elapsed_s"] >= rows[0]["seconds"]
+    assert out["recipe"]["max_seconds"] == 0.0
+    # Positive control: with the default budget all three run and time is reported.
+    full = measure_batch([disc, disc2, disc3], channel="l", method="otsu")
+    assert full["summary"]["not_run"] == 0 and full["summary"]["measured"] == 3
+    assert sum(r["seconds"] for r in full["results"]) <= full["elapsed_s"] + 1e-6
+
+
+def test_batch_refuses_a_bad_recipe_before_running_anything():
+    """channel='zz' used to run every image and return N identical
+    UnknownChannelError rows; a recipe error is one error, raised up front."""
+    from plantcv_mcp.measurement import UnknownAnalysisError
+    from plantcv_mcp.segmentation import (
+        UnknownChannelError,
+        UnknownMethodError,
+        UnknownObjectTypeError,
+    )
+
+    with pytest.raises(UnknownChannelError):
+        measure_batch([FIXTURE], channel="zz", method="otsu")
+    with pytest.raises(UnknownMethodError):
+        measure_batch([FIXTURE], channel="a", method="nope")
+    with pytest.raises(UnknownObjectTypeError):
+        measure_batch([FIXTURE], channel="a", method="otsu", object_type="up")
+    with pytest.raises(UnknownAnalysisError):
+        measure_batch([FIXTURE], channel="a", method="otsu", analyses=("shape",))
+    with pytest.raises(ValueError, match="max_seconds"):
+        measure_batch([FIXTURE], channel="a", method="otsu", max_seconds=-1)
+
+
+def test_batch_dedupes_paths_and_says_so():
+    out = measure_batch([FIXTURE, FIXTURE], channel="a", method="otsu")
+    assert len(out["results"]) == 1
+    assert out["summary"]["submitted"] == 2
+    assert out["summary"]["unique"] == 1
+    assert out["summary"]["duplicates_dropped"] == [FIXTURE]
+
+
+def test_batch_summary_counts_rows_with_advisories():
+    out = measure_batch([FIXTURE], channel="a", method="otsu")
+    assert out["summary"]["measured"] == 1
+    assert out["summary"]["with_advisories"] == 1
+    assert out["summary"]["advisory_counts"]["multi_specimen"] == 1
+
+
+def test_batch_withholds_traits_from_a_noisy_segmentation(tmp_path):
+    speck = _speckled(tmp_path)
+    clean = _write(tmp_path, "clean.png", _disc_image())
+    out = measure_batch([speck, clean], channel="l", method="otsu")
+    by_path = {r["image_path"]: r for r in out["results"]}
+    row = by_path[speck]
+    assert row["measured"] is False and row["traits"] is None
+    assert "noisy_segmentation" in row["refused_because"]
+    assert row["component_count"] >= 50
+    msg = next(
+        w["message"] for w in row["warnings"] if w["code"] == "noisy_segmentation"
+    )
+    assert "components" in msg and "refine" in msg
+    # Positive control in the same batch: the clean disc is measured.
+    assert by_path[clean]["measured"] is True
+
+
+def test_batch_measures_each_plant_when_given_a_grid():
+    """The four-view panel came back as ONE area with a multi_specimen
+    advisory; with the grid it comes back as four rows, like measure_regions."""
+    out = measure_batch([FIXTURE], channel="a", method="otsu", nrows=2, ncols=2)
+    row = out["results"][0]
+    assert row["measured"] is True
+    assert row["traits"] is None
+    assert out["recipe"]["regions"] == {"mode": "auto_grid", "nrows": 2, "ncols": 2}
+    regions = row["regions"]
+    assert len(regions) == 4
+    assert [r["measured"] for r in regions] == [True] * 4
+    assert all(r["traits"]["area"]["value"] > 0 for r in regions)
+    assert row["regions_measured"] == 4
+    # multi_specimen is no longer an advisory on a row that was measured per plant
+    assert "multi_specimen" not in [w["code"] for w in row["warnings"]]
+    # a bad grid is a recipe error, raised before anything runs
+    with pytest.raises(ValueError, match="nrows"):
+        measure_batch([FIXTURE], channel="a", method="otsu", nrows=0, ncols=2)
