@@ -208,7 +208,10 @@ cells **whole** to one of them, so a misaligned grid returned objects 620–785 
 bounding box is ≥1.25× the cell (leaf-tip overhang on a clean tray reaches 1.02×; merged
 neighbours 1.68–2.13×) carries `object_exceeds_region`; the cell whose material went to a
 neighbour says `object_claimed_by_neighbour` naming it; and under `auto_grid` both together
-raise `grid_misaligned`, pointing at `rect_grid`.
+raise `grid_misaligned`, pointing at `rect_grid`. A cell whose labelled object is several
+comparably-sized components carries `multi_specimen` — several plants share the cell, or one
+plant was split by the threshold; the overlay tells which. There is deliberately no per-cell
+coverage check: a plant filling a tight cell is the happy path, not an inverted mask.
 
 ## Morphology: leaves, stem, branch points
 
@@ -250,7 +253,11 @@ This is the one place the two-step discipline cannot hold literally: nobody revi
 overlays. So the overlay is replaced by the only honest substitute — **every image runs the same
 guards as `segment()`, and any image that trips a blocking guard comes back with no traits at
 all**, just a reason and an instruction to inspect it individually. Advisory warnings such as
-`multi_specimen` are attached to the traits rather than suppressing them.
+`multi_specimen` are attached to the traits rather than suppressing them. With a grid,
+`noisy_segmentation` stops blocking (a 96-well plate with ten germinated and 86 late wells is
+90 "minor" components until the grid says each is a well; the per-cell floor guards each cell)
+and rows whose object the guard has already called a merge (`object_exceeds_region`) are
+withheld — there is no overlay here to check them against.
 
 | parameter                                                                           | default            | what it does                                                                                                           |
 | ----------------------------------------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
@@ -351,7 +358,7 @@ instead of a result.
 | `empty_mask`                                                        | any segmenter                              | nothing selected                                                                                 | blocking |
 | `fill_erased_mask`                                                  | any segmenter                              | thresholding found objects; `fill_size` deleted them all — names the size to use                 | blocking |
 | `noisy_segmentation`                                                | any segmenter, `suggest`                   | ≥50 non-major components and no dominant object — background texture                             | blocking |
-| `multi_specimen`                                                    | any segmenter, `measure`                   | several comparably-sized objects; the number describes the group → `measure_regions`             | advisory |
+| `multi_specimen`                                                    | any segmenter, `measure`, `measure_regions` (per cell) | several comparably-sized objects; the number describes the group → `measure_regions`             | advisory |
 | `frame_clipping`                                                    | any segmenter, `measure`                   | plant touches the frame edge; size traits are lower bounds                                       | advisory |
 | `threshold_outside_range`                                           | `segment_hyperspectral`, `segment_thermal` | the threshold or band lies past the data's range; selects everything or nothing                  | advisory |
 | `uncalibrated_cube`                                                 | `segment_hyperspectral`                    | integer counts cast to float; indices are relative                                               | advisory |

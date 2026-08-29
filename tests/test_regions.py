@@ -487,3 +487,187 @@ def test_auto_grid_with_empty_cells_and_spilling_objects_is_called_misaligned():
     assert grid_misalignment_warning("auto_grid", [spill, fine, fine]) is None
     assert grid_misalignment_warning("auto_grid", [empty, fine, fine]) is None
     assert grid_misalignment_warning("rect_grid", [spill, empty, fine]) is None
+
+
+# --- panel audit of 1.5.1 (2026-08-29) ---
+
+
+def _tight_two_cells():
+    """Two discs each filling ~72% of a tight rect_grid cell: the happy path a
+    tray's cells are calibrated for, which the per-cell coverage check (with
+    the whole-FRAME threshold and the RGB polarity remedy) called inverted."""
+    import cv2
+
+    img = np.zeros((100, 200, 3), np.uint8)
+    mask = np.zeros((100, 200), np.uint8)
+    cv2.circle(mask, (50, 50), 48, 255, -1)
+    cv2.circle(mask, (150, 50), 48, 255, -1)
+    regions = build_regions(
+        img,
+        mask,
+        mode="rect_grid",
+        nrows=1,
+        ncols=2,
+        coord=(0, 0),
+        height=100,
+        width=100,
+        spacing=(100, 0),
+    )
+    return img, mask, regions
+
+
+def test_a_plant_filling_its_cell_is_not_called_inverted():
+    img, mask, regions = _tight_two_cells()
+    rows = measure_regions(img, mask, regions)
+    assert [r["measured"] for r in rows] == [True, True]
+    assert all(r["region_coverage"] > 0.7 for r in rows)
+    assert all(
+        "implausible_coverage" not in [w["code"] for w in r["warnings"]] for r in rows
+    )
+    assert all(r["warnings"] == [] for r in rows)
+
+
+def test_a_cell_holding_several_plants_says_multi_specimen():
+    """A 2x2 grid over a 4x4 tray: four seedlings share a cell, their combined
+    bbox fits the cell (no object_exceeds_region), and the row's area is four
+    plants. The cell must say so."""
+    import cv2
+
+    img = np.zeros((200, 200, 3), np.uint8)
+    mask = np.zeros((200, 200), np.uint8)
+    for cx, cy in ((25, 25), (75, 25), (25, 75), (75, 75)):  # four in cell 0
+        cv2.circle(mask, (cx, cy), 12, 255, -1)
+    cv2.circle(mask, (150, 150), 30, 255, -1)  # one in cell 3
+    regions = build_regions(
+        img,
+        mask,
+        mode="rect_grid",
+        nrows=2,
+        ncols=2,
+        coord=(0, 0),
+        height=100,
+        width=100,
+        spacing=(100, 100),
+    )
+    rows = measure_regions(img, mask, regions)
+    codes = [[w["code"] for w in r["warnings"]] for r in rows]
+    assert "multi_specimen" in codes[0]
+    assert "object_exceeds_region" not in codes[0]
+    msg = next(
+        w["message"] for w in rows[0]["warnings"] if w["code"] == "multi_specimen"
+    )
+    assert "4" in msg and "cell" in msg
+    assert codes[3] == []  # positive control: one plant, no advisory
+
+
+def test_leaf_tip_overhang_does_not_trip_object_exceeds_region():
+    """The 1.25 gate has a measured margin: clean-tray overhang 1.02x, merged
+    neighbours 1.68x. Pin both sides so the constant cannot drift to 1.01."""
+    import cv2
+
+    img = np.zeros((100, 400, 3), np.uint8)
+    mask = np.zeros((100, 400), np.uint8)
+    cv2.rectangle(
+        mask, (5, 30), (114, 70), 255, -1
+    )  # 110 px wide in a 100 px cell: 1.10x
+    cv2.rectangle(mask, (205, 30), (344, 70), 255, -1)  # 140 px wide: 1.40x
+    regions = build_regions(
+        img,
+        mask,
+        mode="rect_grid",
+        nrows=1,
+        ncols=4,
+        coord=(0, 0),
+        height=100,
+        width=100,
+        spacing=(100, 0),
+    )
+    rows = measure_regions(img, mask, regions)
+    codes = {r["index"]: [w["code"] for w in r["warnings"]] for r in rows}
+    measured = {r["index"]: r["measured"] for r in rows}
+    # The 1.10x object is measured by whichever cell PlantCV hands it to, and
+    # that cell must not call it a merge.
+    owner = next(i for i in (0, 1) if measured[i])
+    assert "object_exceeds_region" not in codes[owner]
+    owner_b = next(i for i in (2, 3) if measured[i])
+    assert "object_exceeds_region" in codes[owner_b]  # 1.40x: past the gate
+
+
+def test_a_claimed_cell_reports_the_coverage_its_reason_describes():
+    """region_coverage was 0.0 on a cell whose reason said 'N px of plant
+    material lie in this cell'. Two fields of one row must agree."""
+    img = np.full((SIZE, SIZE, 3), 30, np.uint8)
+    mask = np.zeros((SIZE, SIZE), np.uint8)
+    yy, xx = np.ogrid[:SIZE, :SIZE]
+    mask[((xx - 200) / 140.0) ** 2 + ((yy - 100) / 40.0) ** 2 <= 1.0] = 255
+    rows = measure_regions(img, mask, _rect_grid(img, mask))
+    claimed = next(r for r in rows if r["reason"] and "Not empty" in r["reason"])
+    assert claimed["region_coverage"] > 0.0
+    px = int(claimed["reason"].split("Not empty: ")[1].split(" px")[0])
+    _x, _y, w, h = claimed["bbox"]
+    assert claimed["region_coverage"] == pytest.approx(px / (w * h))
+
+
+def test_region_count_mismatch_is_reported_when_fewer_regions_are_built(monkeypatch):
+    import plantcv_mcp.regions as regions_mod
+
+    img, mask = _tray()
+    real = regions_mod._bboxes_from
+    monkeypatch.setattr(regions_mod, "_bboxes_from", lambda rois: real(rois)[:-1])
+    region_set = build_regions(img, mask, mode="auto_grid", nrows=2, ncols=2)
+    assert len(region_set) == 3
+    codes = [w.code for w in region_set.warnings]
+    assert "region_count_mismatch" in codes
+    msg = next(
+        w.message for w in region_set.warnings if w.code == "region_count_mismatch"
+    )
+    assert "4" in msg and "3" in msg
+
+
+def test_grid_misalignment_counts_a_claimed_cell_once_on_each_side():
+    """A cell refused as claimed-by-neighbour is both an empty cell and a spill
+    signal; on its own it is a straddle, which under auto_grid IS the
+    misalignment signature. Pinned so the double count is a decision, not an
+    accident."""
+    from plantcv_mcp.regions import grid_misalignment_warning
+
+    claimed = {
+        "measured": False,
+        "warnings": [{"code": "object_claimed_by_neighbour", "message": ""}],
+    }
+    fine = {"measured": True, "warnings": []}
+    assert (
+        grid_misalignment_warning("auto_grid", [claimed, fine]).code
+        == "grid_misaligned"
+    )
+    assert grid_misalignment_warning("rect_grid", [claimed, fine]) is None
+
+
+def test_a_leaf_that_leaves_and_reenters_its_cell_is_one_plant():
+    """Judged on the cell CROP, a single plant whose leaf loops outside the cell
+    is two comparably-sized pieces and read as two plants (a 20,533-px
+    arabidopsis did). The object is one component; judge the object."""
+    import cv2
+
+    img = np.zeros((100, 200, 3), np.uint8)
+    mask = np.zeros((100, 200), np.uint8)
+    cv2.circle(mask, (50, 50), 30, 255, -1)  # body in cell 0
+    cv2.rectangle(mask, (70, 20), (140, 28), 255, -1)  # leaf out over the cell edge
+    cv2.rectangle(
+        mask, (60, 28), (68, 40), 255, -1
+    )  # and back in: two pieces in the crop
+    cv2.rectangle(mask, (130, 28), (140, 45), 255, -1)
+    regions = build_regions(
+        img,
+        mask,
+        mode="rect_grid",
+        nrows=1,
+        ncols=2,
+        coord=(0, 0),
+        height=100,
+        width=100,
+        spacing=(100, 0),
+    )
+    rows = measure_regions(img, mask, regions)
+    owner = next(r for r in rows if r["measured"])
+    assert "multi_specimen" not in [w["code"] for w in owner["warnings"]]

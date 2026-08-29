@@ -87,3 +87,23 @@ def test_polarity_report_flags_a_recommendation_made_of_specks():
     assert clean_report["recommended"] == "dark"
     assert clean_report["warnings"] == []
     assert clean_report["dark"]["largest_fraction"] == 1.0
+
+
+def test_polarity_report_warns_when_the_recommended_polarity_selects_nothing():
+    """A blank frame with two dust pixels: 'dark' covers 0.0% and wins the
+    less-coverage rule with no components at all, reported as unambiguous and
+    clean. An empty recommendation is not a recommendation."""
+    im = np.full((200, 200, 3), 128, np.uint8)
+    im[10, 10] = 0
+    im[100, 150] = 255
+    rep = polarity_report(im, "l", method="otsu")
+    assert rep["dark"]["component_count"] == 0
+    codes = [w["code"] for w in rep["warnings"]]
+    assert "empty_mask" in codes
+    msg = rep["warnings"][0]["message"]
+    assert "nothing" in msg or "no objects" in msg
+    assert "overlay" in msg
+    # Positive control: a real object scene carries no such warning.
+    clean = np.full((200, 200, 3), 200, np.uint8)
+    clean[60:140, 60:140] = 30
+    assert polarity_report(clean, "l")["warnings"] == []

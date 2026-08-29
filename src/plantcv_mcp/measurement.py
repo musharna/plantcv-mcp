@@ -53,6 +53,20 @@ class UnknownAnalysisError(Exception):
     """Raised for an analysis outside ANALYSES."""
 
 
+def validate_analyses(analyses: tuple[str, ...] | list[str]) -> None:
+    """One check for every caller, raised BEFORE anything expensive (a grid is
+    built before the per-region analysis, and a bad list must not reach it)."""
+    unknown = [a for a in analyses if a not in ANALYSES]
+    if unknown:
+        raise UnknownAnalysisError(
+            f"Unknown analyses {unknown}. Valid: {list(ANALYSES)}."
+        )
+    if not analyses:
+        raise UnknownAnalysisError(
+            f"No analyses requested. Choose at least one of {list(ANALYSES)}."
+        )
+
+
 # ONE lock for every code path that touches `pcv.outputs`. It is process-global
 # state, and mcp 2.x runs synchronous tools on worker threads
 # (mcp/server/mcpserver/utilities/func_metadata.py: anyio.to_thread.run_sync),
@@ -160,15 +174,7 @@ def measure_traits(
     px_per_mm: when given, spatial traits are converted to mm and mm2. See
         convert_units for why the mapping is explicit rather than unit-derived.
     """
-    unknown = [a for a in analyses if a not in ANALYSES]
-    if unknown:
-        raise UnknownAnalysisError(
-            f"Unknown analyses {unknown}. Valid: {list(ANALYSES)}."
-        )
-    if not analyses:
-        raise UnknownAnalysisError(
-            f"No analyses requested. Choose at least one of {list(ANALYSES)}."
-        )
+    validate_analyses(analyses)
     if px_per_mm is not None and (
         px_per_mm <= 0 or not math.isfinite(float(px_per_mm))
     ):

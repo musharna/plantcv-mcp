@@ -30,7 +30,13 @@ from .color import correct_color
 from .diagnostics import BLOCKING_CODES, Advisory, analyze_mask, segmentation_warnings
 from .imaging import load_image
 from .measurement import ANALYSES, UnknownAnalysisError, measure_traits
-from .regions import build_regions, grid_misalignment_warning, measure_regions
+from .regions import (
+    MAX_REGIONS,
+    REGION_MODES,
+    build_regions,
+    grid_misalignment_warning,
+    measure_regions,
+)
 from .segmentation import (
     CHANNELS,
     METHODS,
@@ -104,10 +110,28 @@ def _validate_recipe(
     if max_seconds is not None and max_seconds < 0:
         raise ValueError(f"max_seconds must be >= 0 or null, got {max_seconds}.")
     if grid is not None:
+        if grid["nrows"] is None or grid["ncols"] is None:
+            missing = "ncols" if grid["ncols"] is None else "nrows"
+            raise ValueError(
+                f"A grid needs both nrows and ncols; {missing} was not given. "
+                "Nothing is guessed for an unattended batch: a 4x1 partition of "
+                "a 4x6 tray would present row strips as plants."
+            )
         if grid["nrows"] < 1 or grid["ncols"] < 1:
             raise ValueError(
                 f"nrows and ncols must be >= 1, got {grid['nrows']}x{grid['ncols']}."
             )
+        if grid["nrows"] * grid["ncols"] > MAX_REGIONS:
+            raise ValueError(
+                f"{grid['nrows']}x{grid['ncols']} = {grid['nrows'] * grid['ncols']} "
+                f"regions exceeds the {MAX_REGIONS} cap per image."
+            )
+        if grid["mode"] not in REGION_MODES:
+            raise ValueError(
+                f"Unknown mode {grid['mode']!r}. Valid: {list(REGION_MODES)}."
+            )
+        if grid["radius"] is not None and grid["radius"] <= 0:
+            raise ValueError(f"radius must be positive, got {grid['radius']}.")
         if grid["mode"] == "rect_grid" and None in (
             grid["coord"],
             grid["height"],
@@ -175,8 +199,8 @@ def measure_batch(
     if nrows is not None or ncols is not None:
         grid = {
             "mode": mode,
-            "nrows": nrows if nrows is not None else 1,
-            "ncols": ncols if ncols is not None else 1,
+            "nrows": nrows,
+            "ncols": ncols,
             "coord": coord,
             "height": height,
             "width": width,
@@ -245,6 +269,13 @@ def measure_batch(
             continue
 
         blocking = [w for w in warnings if w.code in BLOCKING_CODES]
+        if grid is not None:
+            # "Noisy" is judged on the whole mask: a 96-well plate with ten
+            # germinated wells and 86 late ones is 90 minor components, which
+            # reads as texture until the grid says each is a well. With a
+            # grid the per-cell degeneracy floor guards each cell, so the
+            # advisory travels with the rows instead of withholding them.
+            blocking = [w for w in blocking if w.code != "noisy_segmentation"]
         if blocking:
             entries.append(
                 BatchEntry(
@@ -284,7 +315,23 @@ def measure_batch(
                     include_histograms=include_histograms,
                 )
                 traits = None
-                regions = [dict(r) for r in rows]
+                regions = []
+                for r in rows:
+                    r = dict(r)
+                    # Interactive measure_regions keeps the number beside the
+                    # numbered overlay; here nobody looks, so a row the guard
+                    # has already called a merge is withheld, not returned.
+                    spill = [
+                        w for w in r["warnings"] if w["code"] == "object_exceeds_region"
+                    ]
+                    if r["measured"] and spill:
+                        r["measured"] = False
+                        r["traits"] = None
+                        r["reason"] = (
+                            "object_exceeds_region — traits withheld: "
+                            + spill[0]["message"]
+                        )
+                    regions.append(r)
                 # multi_specimen says "this number describes a group"; with a
                 # grid there is no group number, so the advisory would mislead.
                 warnings = [w for w in warnings if w.code != "multi_specimen"]

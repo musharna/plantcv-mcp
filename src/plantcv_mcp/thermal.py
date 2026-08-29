@@ -23,6 +23,7 @@ from plantcv import plantcv as pcv
 from .diagnostics import (
     THERMAL_REMEDIES,
     Advisory,
+    DegenerateMaskError,
     MaskDiagnostics,
     analyze_mask,
     assert_not_degenerate,
@@ -150,10 +151,20 @@ def segment_thermal(
         mask = pcv.fill(bin_img=pre_fill, size=fill_size)
     mask = np.where(mask > 0, 255, 0).astype(np.uint8)
     diag = analyze_mask(mask)
-    assert_not_degenerate(diag, remedy=THERMAL_REMEDIES.degenerate)
     warnings = segmentation_warnings(
         mask, diag, analyze_mask(pre_fill), fill_size, remedies=THERMAL_REMEDIES
     )
+    # The warnings are built BEFORE the degeneracy refusal so that a plant
+    # fill_size erased is refused with the fill_size sentence, not blamed on
+    # the band (a 150-px cool plant under the default 200 was told to widen
+    # the band, which then selects background).
+    erased = next((w for w in warnings if w.code == "fill_erased_mask"), None)
+    try:
+        assert_not_degenerate(diag, remedy=THERMAL_REMEDIES.degenerate)
+    except DegenerateMaskError as exc:
+        if erased is not None:
+            raise DegenerateMaskError(erased.message) from exc
+        raise
     rng = threshold_outside_range_warning(
         selects_everything=band_lo <= lo and band_hi >= hi,
         selects_nothing=False,  # refused above, before selection
