@@ -247,3 +247,58 @@ def test_frame_clipping_fires_on_right_only_contact():
     interior = np.zeros((100, 100), dtype=np.uint8)
     interior[20:60, 20:60] = 255
     assert frame_clipping_warning(interior) is None
+
+
+def test_is_noisy_needs_both_many_specks_and_no_dominant_object():
+    """Both halves of the rule carry weight. Sixty specks around a plant that
+    holds 70% of the mask is a plant with a dirty background, not texture; the
+    same sixty specks around a plant holding 30% is texture. Dropping the
+    largest-fraction clause turns every speckled real tray into a refusal."""
+    from plantcv_mcp.diagnostics import is_noisy
+
+    assert is_noisy(component_count=61, largest_frac=0.30, major_object_count=1)
+    assert not is_noisy(component_count=61, largest_frac=0.70, major_object_count=1)
+    assert not is_noisy(component_count=30, largest_frac=0.30, major_object_count=1)
+
+
+def test_a_dominant_plant_with_many_specks_is_not_noisy_end_to_end():
+    """analyze_mask -> largest_fraction -> is_noisy on real pixels: one 200x200
+    plant (40,000 px) and 60 18x18 specks (19,440 px). The plant is 67% of
+    the mask, so it is measurable; shrink it to 90x90 and it is not."""
+    from plantcv_mcp.diagnostics import (
+        RGB_REMEDIES,
+        analyze_mask,
+        is_noisy,
+        largest_fraction,
+        noisy_segmentation_warning,
+    )
+
+    def scene(plant_px: int) -> np.ndarray:
+        rng = np.random.default_rng(3)
+        mask = np.zeros((600, 600), np.uint8)
+        mask[100 : 100 + plant_px, 100 : 100 + plant_px] = 255
+        placed = 0
+        while placed < 60:
+            y, x = rng.integers(0, 600 - 18, 2)
+            if 80 <= y <= 100 + plant_px + 2 and 80 <= x <= 100 + plant_px + 2:
+                continue
+            if mask[y - 2 : y + 20, x - 2 : x + 20].any():
+                continue
+            mask[y : y + 18, x : x + 18] = 255
+            placed += 1
+        return mask
+
+    big = analyze_mask(scene(200))
+    assert big.component_count == 61
+    assert largest_fraction(big) > 0.6
+    assert not is_noisy(
+        big.component_count, largest_fraction(big), big.major_object_count
+    )
+    assert noisy_segmentation_warning(big, RGB_REMEDIES.noisy) is None
+
+    small = analyze_mask(scene(90))
+    assert small.component_count == 61
+    assert is_noisy(
+        small.component_count, largest_fraction(small), small.major_object_count
+    )
+    assert noisy_segmentation_warning(small, RGB_REMEDIES.noisy) is not None

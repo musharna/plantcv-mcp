@@ -118,3 +118,55 @@ holds them together; if they drift, every row after an empty cell describes the
 neighbouring plant, with numbers that look entirely reasonable. It is only
 detectable because the fixture's plants have deliberately different areas
 (1257 / 5027 / 11310 px). Identical plants would make the mutant invisible.
+
+
+## Round 6 — the 1.3.1–1.5.2 guards (2026-08-29)
+
+Everything shipped between 1.3.1 and 1.5.2 (dropped-object naming, the noise rule,
+per-cell `multi_specimen`, batch grid semantics, the time budget, recipe validation,
+thermal `fill_erased_mask`, `analyses=[]`), disabled one at a time; full suite each
+time (276 tests, ~80 s). Runner: a shell loop of literal `sed` mutations with
+`git checkout` between them.
+
+| mutant                                   | change                                                                          | result |
+| ---------------------------------------- | ------------------------------------------------------------------------------- | ------ |
+| noise rule never fires                   | `component_count - major_object_count >= NOISY_MINOR_COMPONENTS` → `False`      | RED (4) |
+| noise rule ignores the dominant object   | `and largest_frac < NOISY_LARGEST_FRACTION` → `and True`                        | **GREEN → fixed** |
+| per-cell `multi_specimen` removed        | `multi = multi_specimen_warning(whole_diag, scope="cell")` → `multi = None`     | RED    |
+| per-cell `multi_specimen` on the crop    | `whole_diag = analyze_mask(labeled == label)` → same on the cell's bbox slice   | **GREEN → fixed** |
+| `object_exceeds_region` always fires     | `if ratio < EXCEEDS_CELL_RATIO:` → `if True:`                                   | RED (3) |
+| batch: noisy still blocks with a grid    | `blocking = [w … if w.code != "noisy_segmentation"]` → `blocking = blocking`    | RED    |
+| batch: merged rows returned measured     | `if r["measured"] and spill:` → `if False:`                                     | RED    |
+| batch: time budget off                   | `if max_seconds is not None and entries and elapsed > max_seconds:` → `if False:` | RED  |
+| batch: `nrows` alone accepted            | `if grid["nrows"] is None or grid["ncols"] is None:` → `if False:`              | RED    |
+| batch: `MAX_REGIONS` cap off             | `if grid["nrows"] * grid["ncols"] > MAX_REGIONS:` → `if False:`                 | RED    |
+| batch: `mode` unchecked                  | `if grid["mode"] not in REGION_MODES:` → `if False:`                            | RED    |
+| batch: `radius` unchecked                | `if grid["radius"] is not None and grid["radius"] <= 0:` → `if False:`          | RED    |
+| batch: dedupe off                        | `(duplicates if path in unique else unique).append(path)` → `unique.append(path)` | RED  |
+| thermal: `fill_erased_mask` text lost    | `if erased is not None:` → `if False:`                                          | RED    |
+| refine: dropped-object floor 10% → 50%   | `a >= DROPPED_OBJECT_FRACTION * largest` → `a >= 0.5 * largest`                 | RED (2) |
+| suggest: empty polarity unwarned         | `if per_polarity[recommended]["component_count"] == 0:` → `if False:`           | RED    |
+| `analyses=[]` allowed                    | `if not analyses:` → `if False:` in `validate_analyses`                         | RED (2) |
+
+Two of seventeen were green, and both were the same kind of hole: a rule with two
+halves, tested only from the side that fires.
+
+**The noise rule** is "≥50 minor components AND no object holds half the mask".
+The only test was a speckled scene that IS noisy; nothing asserted that a plant
+holding 70% of the mask with sixty specks around it is measurable — which is the
+case the 1.5.0 calibration was done for (the 27-seedling tray that the first rule
+refused). `test_is_noisy_needs_both_many_specks_and_no_dominant_object` and
+`test_a_dominant_plant_with_many_specks_is_not_noisy_end_to_end` now pin both
+sides; under the mutant they fail with `assert not True`.
+
+**The crop mutant** is the 1.5.2 false positive itself (a 20,533-px arabidopsis
+whose leaf left its cell and came back read as two plants). A test for it existed
+— `test_a_leaf_that_leaves_and_reenters_its_cell_is_one_plant` — and could not
+fail: it put the body in cell 0 and the loop in cell 1, and PlantCV's partial ROI
+handed the whole object to cell 1, whose crop was one piece. The test asserted
+the right thing on a fixture that never exercised the bug. It now checks its own
+geometry (`connectedComponents` on the crop == 2, on the frame == 1, both pieces
+major), asserts which cell owns the object, and carries a positive control (two
+real plants in one cell DO fire). Under the mutant it fails on `multi_specimen`.
+
+278 tests after this round.
