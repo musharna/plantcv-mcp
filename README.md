@@ -20,7 +20,9 @@ segmentation is degenerate.
 
 ## Why you are handed the overlay
 
-Red marks the pixels that were measured. Both images below come from the same file and the
+Red marks the pixels that were measured, and a cyan line traces the mask's own boundary — the
+tint alone was invisible on a photo of red beans, so the outline is drawn on the mask's edge
+pixels and never touches anything unmasked. Both images below come from the same file and the
 same threshold method — the only difference is one parameter.
 
 | ✅ `channel="a", object_type="dark"`                                                                                   | ❌ `channel="s", object_type="dark"`                                                                                     |
@@ -181,6 +183,12 @@ And `segment` emits an `implausible_coverage` warning when the mask covers more 
 frame. Neither refuses the measurement, because a macro shot of a single leaf legitimately
 fills the frame — they make the choice visible rather than making it for you.
 
+`ambiguous` in the polarity report only compares the two polarities' coverage; it is not a
+quality verdict. A recommendation made of specks — on a sorghum photo, `a`/otsu recommended
+'dark' with 118 components of chamber-wall texture — is flagged `noisy_segmentation`, with each
+polarity's `largest_fraction` (largest component / masked pixels) reported so you can see why.
+The same rule fires as an advisory on `segment()` and blocks in the batch.
+
 `fill_size` deletes any component smaller than itself, so a small specimen can vanish
 entirely. When that happens `segment` reports `fill_erased_mask` and names the size to drop
 below, rather than letting it look like a bad channel choice.
@@ -208,6 +216,12 @@ measurable, so a refinement you dislike is simply discarded. Trait tables from a
 refined session carry `lineage`, the ops that produced their mask, so two tables
 made differently can be told apart.
 
+The refinement is traced op by op. Any component at least 10% of the largest one
+present that an op removes entirely is reported as `refine_dropped_object`, naming
+the op and the earlier op that split it off — on a real sorghum photo `opening`
+detached a leaf and `keep_largest` threw it away, a 17% change that sat under the
+`refine_large_change` alarm and showed only in the overlay.
+
 ## Morphology: leaves, stem, branch points
 
 `measure_morphology(session_id)` skeletonises the mask and returns PlantCV's
@@ -234,6 +248,26 @@ against a synthetic plant of known geometry:
 Multi-plant masks are refused by name — use `measure_regions()` for a tray or
 `refine(keep_largest)` to isolate one plant first. Lengths scale with `px_per_mm`;
 angles are always degrees.
+
+## Measuring a tray
+
+`measure_regions(session_id, nrows, ncols)` measures each plant separately and
+returns the overlay with every region outlined and numbered, so a row can be
+matched to a plant. `mode="auto_grid"` infers the grid from the mask;
+`mode="rect_grid"` takes explicit `coord`/`height`/`width`/`spacing` when the mask
+is too sparse to infer a layout or the cells must line up with pots. An empty
+region returns `measured=false` and a reason, never zeros. It works on every
+session kind: RGB traits, thermal temperatures, or hyperspectral index
+statistics (`indices`) per plant.
+
+Two guards come from a real X-Rite tray photo. PlantCV assigns an object that
+overlaps two cells **whole** to one of them, so a misaligned grid returned objects
+620–785 px wide inside 369-px cells — two plants per row — and called the other
+cell empty. A region whose object's bounding box is ≥1.25× the cell (leaf-tip
+overhang on a clean tray reaches 1.02×; merged neighbours 1.68–2.13×) carries
+`object_exceeds_region`; the cell whose material went to a neighbour says
+`object_claimed_by_neighbour` naming it; and under `auto_grid` both together raise
+`grid_misaligned`, pointing at `rect_grid`.
 
 ## What it measures
 
@@ -362,6 +396,9 @@ pseudo-RGB. Two measured facts drive the guards here:
   reflectance.
 - An index the cube's wavelength range cannot support is **refused by name**,
   not returned as null.
+- A threshold past either end of the index's range selects everything or nothing;
+  on a real leaf cube (NDVI 0.19–0.89) the default `threshold=0.2` selected every
+  pixel. `threshold_outside_range` says which side, with the range.
 
 `measure_spectral(session_id, indices=[…])` reports mean/median/std/min/max per
 index; the full per-band spectrum (hundreds of numbers per list) is opt-in via
@@ -372,8 +409,15 @@ degrees Celsius — segment **by temperature**: `segment_thermal(path, min_c,
 max_c)`. A thermal frame is a different sensor from the RGB camera, so a mask is
 never borrowed from an RGB session. `measure_thermal` reports max/min/mean/median
 °C via PlantCV's `analyze.thermal`; validated against PlantCV's own test frame to
-six decimal places and against a real FLIR JPEG. Sessions are typed (`rgb`, `hsi`,
-`thermal`) and every measurer refuses the wrong kind naming the right tool.
+six decimal places and against a real FLIR JPEG. Calling `segment_thermal` without
+a band refuses **with** the frame's range and p5–p95 percentiles (the plant is
+usually the cool tail), a band entirely outside the frame is refused naming the
+range, and one enclosing the whole frame gets `threshold_outside_range`.
+
+Sessions are typed (`rgb`, `hsi`, `thermal`) and every measurer refuses the wrong
+kind naming the right tool. Refusals and advisories are worded per modality —
+"a different channel or method" is RGB advice; a cube is told about its threshold
+and a thermal frame about its band. `measure_regions` accepts all three kinds.
 
 ## Crash containment: the analysis worker
 
