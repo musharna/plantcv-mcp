@@ -6,6 +6,27 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.5.1] — 2026-08-29
+
+Documentation only; no code change. Released so the PyPI project page carries
+the current README (PyPI captures it at upload).
+
+### Changed
+
+- **README is a front door** (172 lines): the two-image argument, install,
+  configure, the tools table, one `segment()` response, what it refuses and
+  why, security, licensing. Measured against nine popular MCP server READMEs,
+  the previous page had the most top-level sections of the set (21) and the
+  latest install section.
+- **`docs/GUIDE.md`** carries everything else, in workflow order: each tool's
+  parameters and guards, the measured facts behind them, a reference of all
+  25 warning codes with which ones block the batch, worker isolation, read
+  roots, the security boundary. Two new overlays (numbered tray regions,
+  numbered morphology skeleton) rendered from the fixture; the original two
+  regenerated with the cyan outline.
+- The security section no longer claims read roots are unimplemented (they
+  shipped in 0.9.0).
+
 ## [1.5.0] — 2026-08-29
 
 Findings from the first run of the unattended batch path on real photographs
