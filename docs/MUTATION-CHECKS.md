@@ -170,3 +170,31 @@ major), asserts which cell owns the object, and carries a positive control (two
 real plants in one cell DO fire). Under the mutant it fails on `multi_specimen`.
 
 278 tests after this round.
+
+
+## Round 7 — the 1.5.3 morphology guards (2026-08-29)
+
+The five guards from the first real-photo morphology round, disabled one at a
+time the day they shipped (283 tests, ~85 s each).
+
+| mutant                                      | change                                                                          | result |
+| ------------------------------------------- | ------------------------------------------------------------------------------- | ------ |
+| palette not reset on entering the section   | `pcv.params.saved_color_scale = None` → `pass` in `isolated_pcv_outputs`        | **GREEN → fixed** |
+| host's palette not restored on exit         | `pcv.params.saved_color_scale = saved_palette` → `pass`                         | **GREEN → fixed** |
+| palette not reset after the 2× prune pass   | the reset in `measure_morphology` → `pass`                                      | RED (2) |
+| crop margin zero                            | `crop_margin()` → `return 0`                                                    | RED (2) |
+| crop off                                    | `_crop_bounds(…)` → the whole frame                                             | RED    |
+| every cv2.error swallowed                   | `if not _stem_line_leaves_int32(…):` → `if False:`                              | **GREEN → fixed** |
+| coverage refusal off                        | `if coverage:` → `if False:`                                                    | RED    |
+| combine-stem remedy off                     | `if "combine stem" in str(exc).lower():` → `if False:`                          | RED    |
+| overlay pasted at the origin                | `canvas[y0:y1, x0:x1] = id_img` → `canvas[0:h, 0:w] = id_img`                   | RED    |
+
+Three of nine green, and this time the pattern is "a guard with a belt and
+braces, tested only at the braces". The palette is reset in two places (on
+entering the isolated section, and again after the 2× prune pass); the morphology
+tests only ever hit the second, so the first — and the restore that hands the
+host's palette back — were free to go. `test_isolated_section_starts_with_an_empty_palette_and_hands_the_hosts_back`
+now pins both, on the success and the error path. The vertical-stem handler
+refits the stem before it swallows a `cv2.error`; nothing asserted that a
+*different* `cv2.error` still escapes, so the verification was removable —
+`test_a_cv2_error_that_is_not_the_vertical_stem_still_raises` does. 285 tests.

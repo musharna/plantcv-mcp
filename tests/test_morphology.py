@@ -342,3 +342,17 @@ def test_a_small_plant_in_a_huge_frame_is_analysed_on_its_crop(monkeypatch):
     assert big.plant == small.plant
     assert big.segments == small.segments
     assert [w.code for w in big.warnings] == [w.code for w in small.warnings]
+
+
+def test_a_cv2_error_that_is_not_the_vertical_stem_still_raises(monkeypatch):
+    """The vertical-stem handler verifies its cause by refitting the stem. A
+    cv2.error from segment_insertion_angle on a plant whose stem line is
+    drawable is something else and must not be turned into a tidy warning."""
+    from plantcv import plantcv as pcv
+
+    def other_failure(*a, **k):
+        raise cv2.error("something else entirely")
+
+    monkeypatch.setattr(pcv.morphology, "segment_insertion_angle", other_failure)
+    with pytest.raises(cv2.error, match="something else"):
+        measure_morphology(*_plant(stem_tilt_deg=20.0), prune_size=5)

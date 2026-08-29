@@ -155,3 +155,26 @@ def test_keyed_lookup_raises_on_missing_key(monkeypatch):
     error_message = str(exc_info.value)
     assert "default_1" in error_message, "Error message should name expected key"
     assert "Available keys" in error_message, "Error message should list actual keys"
+
+
+def test_isolated_section_starts_with_an_empty_palette_and_hands_the_hosts_back():
+    """PlantCV's morphology functions share params.saved_color_scale, sized by
+    whichever call filled it and indexed by every later one: a host that left
+    a one-colour palette behind gives IndexError inside our morphology run,
+    and our run must not leave OUR palette in the host's process either."""
+    from plantcv_mcp.measurement import isolated_pcv_outputs
+
+    host_palette = [[1, 2, 3]]
+    pcv.params.saved_color_scale = host_palette
+    try:
+        with isolated_pcv_outputs():
+            assert pcv.params.saved_color_scale is None
+            pcv.params.saved_color_scale = [[9, 9, 9]] * 5
+        assert pcv.params.saved_color_scale is host_palette
+        # And on the error path.
+        with pytest.raises(RuntimeError), isolated_pcv_outputs():
+            pcv.params.saved_color_scale = [[7, 7, 7]]
+            raise RuntimeError("mid-analysis")
+        assert pcv.params.saved_color_scale is host_palette
+    finally:
+        pcv.params.saved_color_scale = None
