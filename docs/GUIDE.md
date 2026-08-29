@@ -228,7 +228,15 @@ Three things here are guards, not pass-throughs, all measured on PlantCV 4.11.3
 against a synthetic plant of known geometry:
 
 - A perfectly vertical stem makes PlantCV report `stem_angle = -14373°`. That is not
-  an angle, so it is returned as `null` with `stem_angle_undefined`.
+  an angle, so it is returned as `null` with `stem_angle_undefined`. The same stem
+  makes the line PlantCV measures insertion angles against undrawable (its
+  extrapolation overflows the frame — a crash inside OpenCV on a real 233-px
+  seedling); every `insertion_angle` is then `null` with `insertion_angle_undefined`,
+  and the rest of the table is unaffected.
+- A mask that is the background (`implausible_coverage` on the session) is refused
+  before anything is skeletonised: on a real photo it cost 80 s to skeletonise the
+  frame and was then refused for the wrong reason. A stem PlantCV cannot join into
+  one piece is refused naming the bridge (`closing`, `fill_holes`), not a prune size.
 - `tangent_size` (default 25 px, chosen from a bias sweep) is the window PlantCV fits
   tangents on, from **each** end of a segment. A window longer than half a leaf
   collapses that leaf's insertion angle to `0.0`; `tangent_window_exceeds_segment`
@@ -352,29 +360,30 @@ attached to the numbers it qualifies. A **refusal** is an error with a named cla
 same kind of guidance (`WrongSessionKindError: … Use measure_thermal() for it`), raised
 instead of a result.
 
-| code                                                                | raised by                                  | meaning                                                                                          | batch    |
-| ------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------ | -------- |
-| `implausible_coverage`                                              | any segmenter, `measure`                   | mask covers > 50% of the frame — probably the background                                         | blocking |
-| `empty_mask`                                                        | any segmenter                              | nothing selected                                                                                 | blocking |
-| `fill_erased_mask`                                                  | any segmenter                              | thresholding found objects; `fill_size` deleted them all — names the size to use                 | blocking |
-| `noisy_segmentation`                                                | any segmenter, `suggest`                   | ≥50 non-major components and no dominant object — background texture                             | blocking |
+| code                                                                | raised by                                              | meaning                                                                                          | batch    |
+| ------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | -------- |
+| `implausible_coverage`                                              | any segmenter, `measure`                               | mask covers > 50% of the frame — probably the background                                         | blocking |
+| `empty_mask`                                                        | any segmenter                                          | nothing selected                                                                                 | blocking |
+| `fill_erased_mask`                                                  | any segmenter                                          | thresholding found objects; `fill_size` deleted them all — names the size to use                 | blocking |
+| `noisy_segmentation`                                                | any segmenter, `suggest`                               | ≥50 non-major components and no dominant object — background texture                             | blocking |
 | `multi_specimen`                                                    | any segmenter, `measure`, `measure_regions` (per cell) | several comparably-sized objects; the number describes the group → `measure_regions`             | advisory |
-| `frame_clipping`                                                    | any segmenter, `measure`                   | plant touches the frame edge; size traits are lower bounds                                       | advisory |
-| `threshold_outside_range`                                           | `segment_hyperspectral`, `segment_thermal` | the threshold or band lies past the data's range; selects everything or nothing                  | advisory |
-| `uncalibrated_cube`                                                 | `segment_hyperspectral`                    | integer counts cast to float; indices are relative                                               | advisory |
-| `nan_pixels`                                                        | thermal and spectral measurers             | non-finite values excluded from statistics; counts given                                         | advisory |
-| `refine_large_change`                                               | `refine`                                   | mask changed > 25% — a different outline, not a cleanup                                          | —        |
-| `refine_dropped_object`                                             | `refine`                                   | an op removed a component ≥ 10% of the largest — a leaf, not a speck; names the op that split it | —        |
-| `object_exceeds_region`                                             | `measure_regions`                          | a cell's object is ≥ 1.25× the cell — two plants, or a misaligned grid                           | —        |
-| `object_claimed_by_neighbour`                                       | `measure_regions`                          | this cell's material was assigned whole to a neighbour                                           | —        |
-| `grid_misaligned`                                                   | `measure_regions` (`auto_grid`)            | empty cells plus exceeded cells → use `rect_grid`                                                | —        |
-| `region_count_mismatch`                                             | `measure_regions` (`auto_grid`)            | PlantCV built fewer regions than asked                                                           | —        |
-| `implausible_longest_path`                                          | `measure`, `measure_regions`               | PlantCV's `longest_path` is shorter than the bounding box allows                                 | —        |
-| `stem_angle_undefined`                                              | `measure_morphology`                       | a vertical stem; PlantCV's angle is not an angle → `null`                                        | —        |
-| `tangent_window_exceeds_segment`                                    | `measure_morphology`                       | `tangent_size` longer than half a segment; its angles collapse to 0                              | —        |
-| `prune_size_sensitive`                                              | `measure_morphology`                       | segment count changes > 30% at 2× `prune_size`                                                   | —        |
-| `skeleton_has_cycles`, `no_leaf_segments`, `no_stem_segment`        | `measure_morphology`                       | skeleton topology PlantCV's leaf/stem split cannot use                                           | —        |
-| `marker_touches_crop_edge`, `marker_not_round`, `marker_fills_crop` | `calibrate_scale_from_marker`              | the detected marker is probably not the marker                                                   | —        |
+| `frame_clipping`                                                    | any segmenter, `measure`                               | plant touches the frame edge; size traits are lower bounds                                       | advisory |
+| `threshold_outside_range`                                           | `segment_hyperspectral`, `segment_thermal`             | the threshold or band lies past the data's range; selects everything or nothing                  | advisory |
+| `uncalibrated_cube`                                                 | `segment_hyperspectral`                                | integer counts cast to float; indices are relative                                               | advisory |
+| `nan_pixels`                                                        | thermal and spectral measurers                         | non-finite values excluded from statistics; counts given                                         | advisory |
+| `refine_large_change`                                               | `refine`                                               | mask changed > 25% — a different outline, not a cleanup                                          | —        |
+| `refine_dropped_object`                                             | `refine`                                               | an op removed a component ≥ 10% of the largest — a leaf, not a speck; names the op that split it | —        |
+| `object_exceeds_region`                                             | `measure_regions`                                      | a cell's object is ≥ 1.25× the cell — two plants, or a misaligned grid                           | —        |
+| `object_claimed_by_neighbour`                                       | `measure_regions`                                      | this cell's material was assigned whole to a neighbour                                           | —        |
+| `grid_misaligned`                                                   | `measure_regions` (`auto_grid`)                        | empty cells plus exceeded cells → use `rect_grid`                                                | —        |
+| `region_count_mismatch`                                             | `measure_regions` (`auto_grid`)                        | PlantCV built fewer regions than asked                                                           | —        |
+| `implausible_longest_path`                                          | `measure`, `measure_regions`                           | PlantCV's `longest_path` is shorter than the bounding box allows                                 | —        |
+| `stem_angle_undefined`                                              | `measure_morphology`                                   | a vertical stem; PlantCV's angle is not an angle → `null`                                        | —        |
+| `insertion_angle_undefined`                                         | `measure_morphology`                                   | a vertical stem; the stem line cannot be drawn, every `insertion_angle` → `null`                 | —        |
+| `tangent_window_exceeds_segment`                                    | `measure_morphology`                                   | `tangent_size` longer than half a segment; its angles collapse to 0                              | —        |
+| `prune_size_sensitive`                                              | `measure_morphology`                                   | segment count changes > 30% at 2× `prune_size`                                                   | —        |
+| `skeleton_has_cycles`, `no_leaf_segments`, `no_stem_segment`        | `measure_morphology`                                   | skeleton topology PlantCV's leaf/stem split cannot use                                           | —        |
+| `marker_touches_crop_edge`, `marker_not_round`, `marker_fills_crop` | `calibrate_scale_from_marker`                          | the detected marker is probably not the marker                                                   | —        |
 
 Refusals you will meet: a degenerate mask at `measure` (`DegenerateMaskError`), a refinement
 that erases the plant (`RefinementErasedMaskError`) or an invalid op list (`RefineSpecError`,

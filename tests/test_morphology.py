@@ -232,3 +232,113 @@ def test_refusal_stops_recommending_prune_size_when_doubling_it_does_not_help(
     assert "refine()" in msg
     assert "raise prune_size" not in msg
     assert "does not" in msg or "will not" in msg
+
+
+def test_leaves_that_vanish_at_double_prune_do_not_starve_plantcvs_palette():
+    """PlantCV's segment_* functions share ONE process-global colour palette
+    (params.saved_color_scale, filled by whichever call ran first). The
+    prune-sensitivity pass runs segment_skeleton at 2x prune_size; when that
+    removes every leaf it leaves a 1-colour palette behind, and the per-segment
+    functions then index past it — IndexError from inside PlantCV on a
+    233-px real seedling at prune_size=15. Leaves of 10-14 px reproduce it:
+    prune 8 keeps them, prune 16 does not."""
+    img, mask = _plant(leaves=((40, 14), (50, 12), (60, 10)))
+    res = measure_morphology(img, mask, prune_size=8)
+    assert res.plant["tip_count"] >= 2
+    assert len(res.segments) == len({s["id"] for s in res.segments})
+    # Positive control: at prune 30 the leaves are gone and that is reported.
+    bare = measure_morphology(img, mask, prune_size=30)
+    assert "no_leaf_segments" in [w.code for w in bare.warnings]
+
+
+def test_a_vertical_stem_does_not_crash_insertion_angles():
+    """segment_insertion_angle fits a line to the stem and draws it across the
+    frame; a vertical stem makes the extrapolated y ~ -4e9 and OpenCV 4.11
+    rejects the point (cv2.error, 'Can't parse pt1') — a raw traceback on a
+    real 233-px seedling at prune_size=5. The angles that need that line are
+    undefined; say so by name and keep everything else."""
+    short = ((40, 30), (50, 25))  # the default leaves happen not to trip it
+    res = measure_morphology(*_plant(leaves=short, stem_tilt_deg=0.0), prune_size=5)
+    assert "insertion_angle_undefined" in [w.code for w in res.warnings]
+    assert res.segments, "the per-segment table survives"
+    assert all(s["insertion_angle"] is None for s in res.segments)
+    assert all(s["path_length"] is not None for s in res.segments)
+    assert res.plant["stem_height"] is not None
+    # Positive control: a tilted stem at the same prune has finite insertion
+    # angles and no such warning.
+    tilted = measure_morphology(*_plant(leaves=short, stem_tilt_deg=20.0), prune_size=5)
+    assert "insertion_angle_undefined" not in [w.code for w in tilted.warnings]
+    assert any(s["insertion_angle"] is not None for s in tilted.segments)
+
+
+def test_an_inverted_mask_is_refused_before_the_skeleton_is_built(monkeypatch):
+    """A 94%-coverage mask (a real photo of beans thresholded the wrong way)
+    was skeletonised for 80 s and then refused for 'too many tips'. The
+    session already carried implausible_coverage; morphology must refuse it
+    by name first, without touching the skeletoniser."""
+    from plantcv import plantcv as pcv
+
+    img, plant = _plant()
+    inverted = 255 - plant
+
+    def no_skeleton(*a, **k):
+        raise AssertionError("skeletonize must not run on an inverted mask")
+
+    monkeypatch.setattr(pcv.morphology, "skeletonize", no_skeleton)
+    with pytest.raises(MorphologyRefusedError, match="implausible_coverage"):
+        measure_morphology(img, inverted)
+    # Positive control: the plant itself still reaches the skeletoniser.
+    with pytest.raises(AssertionError, match="skeletonize must not run"):
+        measure_morphology(img, plant)
+
+
+def test_unjoinable_stem_pieces_are_refused_with_the_bridging_remedy(monkeypatch):
+    """PlantCV's 'Unable to combine stem objects.' is a stem in pieces the
+    skeleton cannot join (a gap in the mask, or several plants), not spurs;
+    on a real maize photo it arrived wrapped in the too-many-tips advice to
+    raise prune_size. Name the cause and the ops that bridge a gap."""
+    from plantcv import plantcv as pcv
+
+    def unjoinable(*a, **k):
+        raise RuntimeError("Unable to combine stem objects.")
+
+    monkeypatch.setattr(pcv.morphology, "segment_insertion_angle", unjoinable)
+    with pytest.raises(MorphologyRefusedError) as exc:
+        measure_morphology(*_plant())
+    msg = str(exc.value)
+    assert "stem" in msg and "closing" in msg and "fill_holes" in msg
+    assert "measure_regions" in msg
+    assert "prune_size" not in msg
+
+
+def test_a_small_plant_in_a_huge_frame_is_analysed_on_its_crop(monkeypatch):
+    """PlantCV's per-segment functions allocate a full-frame image per segment:
+    on a 16 MP real photo whose plant filled 5% of the frame, segment_tangent_angle
+    alone took 354 s for 14 leaves. Every morphology trait is invariant to where
+    the plant sits, so the skeleton work runs on the mask's bounding box plus a
+    margin wider than any prune or tangent window, and the overlay is put back
+    into the frame."""
+    from plantcv import plantcv as pcv
+
+    img, mask = _plant()
+    big_img = np.full((2000, 2400, 3), 200, np.uint8)
+    big_mask = np.zeros((2000, 2400), np.uint8)
+    big_img[1200:1600, 1500:1900] = img
+    big_mask[1200:1600, 1500:1900] = mask
+
+    seen: list[tuple[int, ...]] = []
+    real = pcv.morphology.skeletonize
+    monkeypatch.setattr(
+        pcv.morphology,
+        "skeletonize",
+        lambda mask: (seen.append(mask.shape), real(mask=mask))[1],
+    )
+    small = measure_morphology(img, mask)
+    big = measure_morphology(big_img, big_mask)
+    assert seen[-1][0] < 1000 and seen[-1][1] < 1000, seen[-1]  # not the frame
+    assert big.overlay.shape == big_img.shape
+    assert big.overlay[1200:1600, 1500:1900].any()
+    assert not big.overlay[:1100].any() or (big.overlay[:1100] == 200).all()
+    assert big.plant == small.plant
+    assert big.segments == small.segments
+    assert [w.code for w in big.warnings] == [w.code for w in small.warnings]

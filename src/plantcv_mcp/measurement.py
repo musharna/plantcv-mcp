@@ -97,6 +97,14 @@ def isolated_pcv_outputs() -> Iterator[None]:
         saved_images = pcv.outputs.images
         saved_observations = pcv.outputs.observations
         saved_metadata = pcv.outputs.metadata
+        # The colour palette is global state of the same kind: every
+        # morphology segment_* function takes color_palette(saved=True), which
+        # returns WHATEVER call filled it last — another session's plant, or
+        # our own pass at a different prune size — and indexes past it when
+        # this plant has more segments (IndexError from inside PlantCV).
+        # Start empty so the first call in this section sizes it.
+        saved_palette = pcv.params.saved_color_scale
+        pcv.params.saved_color_scale = None
         pcv.outputs.clear()
         try:
             yield
@@ -108,6 +116,7 @@ def isolated_pcv_outputs() -> Iterator[None]:
             pcv.outputs.images = saved_images
             pcv.outputs.observations = saved_observations
             pcv.outputs.metadata = saved_metadata
+            pcv.params.saved_color_scale = saved_palette
 
 
 def convert_units(

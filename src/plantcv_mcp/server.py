@@ -1080,10 +1080,12 @@ def build_server() -> MCPServer:
         the plant. tangent_size is the pixel window for tangent/insertion
         angles (default 25, measured: smaller windows bias insertion angles
         upward, a window longer than a leaf collapses its angle to 0 — flagged
-        as tangent_window_exceeds_segment). A vertical stem has no defined angle: stem_angle is null with
-        a warning rather than a nonsense number. Multi-plant masks are refused;
-        use measure_regions() or refine(keep_largest) first. px_per_mm scales
-        lengths only; angles stay in degrees.
+        as tangent_window_exceeds_segment). A vertical stem has no defined angle:
+        stem_angle is null (stem_angle_undefined) and so is every
+        insertion_angle (insertion_angle_undefined) rather than a nonsense
+        number. Multi-plant and inverted (implausible_coverage) masks are
+        refused; use measure_regions() or refine(keep_largest) first. px_per_mm
+        scales lengths only; angles stay in degrees.
         """
         result = _measure_morphology_impl(
             session_id,

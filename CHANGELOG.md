@@ -6,6 +6,59 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.5.3] — 2026-08-29
+
+First run of `measure_morphology` on real photographs (eight of the tutorial
+images, after `refine(keep_largest)`), plus a mutation round over every guard
+shipped since 1.3.1. Each finding was reproduced on synthetic geometry before
+being fixed, and re-checked on the photos afterwards.
+
+### Fixed
+
+- **Two raw tracebacks from inside PlantCV no longer reach the caller.** On a
+  233-px seedling `measure_morphology` crashed with `IndexError` at some prune
+  sizes and `cv2.error: Can't parse 'pt1'` at others. The first: PlantCV's
+  `segment_*` functions share one process-global colour palette, and the
+  prune-sensitivity pass (`segment_skeleton` at 2× `prune_size`) left a palette
+  sized to _its_ segment count — one colour for two leaves. The palette is now
+  owned by `isolated_pcv_outputs` (reset on entry, restored on exit) and reset
+  again after the sensitivity pass. The second: `segment_insertion_angle` fits a
+  line to the stem and draws it across the frame; a vertical stem extrapolates to
+  y ≈ −4×10⁹ and OpenCV 4.11 rejects the point. The cause is verified by refitting
+  the stem before anything is swallowed; insertion angles are then `null` with
+  `insertion_angle_undefined`, and every other trait is kept.
+- **Morphology on a big photo took minutes.** PlantCV's per-segment functions
+  allocate a full-frame image per segment and prune iterates full-frame
+  subtractions: on a 16 MP maize photo whose plant filled 5% of the frame,
+  `segment_tangent_angle` alone took 354 s for 14 leaves (710 s per call under
+  the profiler). Every morphology trait is invariant to where the plant sits, so
+  the skeleton work now runs on the mask's bounding box plus a margin wider than
+  any prune, tangent or stem-joining window; the overlay is assembled back into
+  the frame. Traits are identical to the uncropped result (tested), the mask
+  bounding boxes on the real photos are 6–75× smaller than their frames.
+- **An inverted mask is refused before the skeleton is built.** A 94%-coverage
+  mask (beans, thresholded the wrong way) was skeletonised for 80 s and then
+  refused for "too many tips". `measure_morphology` now refuses
+  `implausible_coverage` by name in under a second; `measure()` keeps warning
+  only, because a macro shot of one leaf legitimately fills a frame and a
+  skeleton of the background has no such case.
+- **"Unable to combine stem objects" gets its own remedy.** That PlantCV error is
+  a stem in pieces the skeleton cannot join (a gap in the mask, or several
+  plants), and it arrived wrapped in the too-many-tips advice to raise
+  `prune_size`. It now names the bridge (`closing`, `fill_holes`) or
+  `measure_regions()`.
+
+### Tests
+
+- Mutation round 6 (`docs/MUTATION-CHECKS.md`): seventeen guards from 1.3.1–1.5.2
+  disabled one at a time; two were removable with a green suite and are now
+  pinned — the noise rule's largest-fraction clause, and the per-cell
+  `multi_specimen` whole-object judgment, whose existing leaf re-entry test had a
+  fixture PlantCV assigned to the other cell, so it could not fail.
+- Five new morphology tests (palette starvation, vertical stem, inverted mask
+  before skeletonise, unjoinable stem remedy, crop equivalence on a 2000×2400
+  frame). 283 tests.
+
 ## [1.5.2] — 2026-08-29
 
 Findings from an independent two-model panel audit of 1.5.1 (or-grok,

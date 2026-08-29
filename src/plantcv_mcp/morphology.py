@@ -23,6 +23,7 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
+import cv2
 import numpy as np
 from plantcv import plantcv as pcv
 
@@ -30,6 +31,7 @@ from .diagnostics import (
     Advisory,
     analyze_mask,
     assert_not_degenerate,
+    implausible_coverage_warning,
     multi_specimen_warning,
 )
 from .imaging import render_overlay
@@ -92,6 +94,42 @@ def _group(observations: dict, key: str) -> Any:
     return None
 
 
+# segment_insertion_angle joins stem pieces with up to 50 rounds of 2-px
+# dilation; the margin must hold that plus the tangent and prune windows.
+STEM_JOIN_REACH = 100
+
+
+def crop_margin(prune_size: int, tangent_size: int) -> int:
+    return STEM_JOIN_REACH + 2 * max(prune_size, tangent_size) + 8
+
+
+def _crop_bounds(mask255: np.ndarray, margin: int) -> tuple[int, int, int, int]:
+    """(y0, y1, x0, x1) of the mask's bounding box grown by `margin`, clamped
+    to the frame. The caller has already refused an empty mask."""
+    ys, xs = np.nonzero(mask255)
+    h, w = mask255.shape[:2]
+    return (
+        max(int(ys.min()) - margin, 0),
+        min(int(ys.max()) + margin + 1, h),
+        max(int(xs.min()) - margin, 0),
+        min(int(xs.max()) + margin + 1, w),
+    )
+
+
+def _stem_line_leaves_int32(stem_objects: list, cols: int) -> bool:
+    """True when the line PlantCV fits through the stem, extrapolated to the
+    frame's edges as segment_insertion_angle does, has a y outside int32 —
+    the vertical-stem case OpenCV's line() refuses."""
+    pts = np.vstack(stem_objects).reshape(-1, 2).astype(np.float32)
+    vx, vy, x, y = (
+        float(v) for v in cv2.fitLine(pts, cv2.DIST_L2, 0, 0.01, 0.01).ravel()
+    )
+    if vx == 0.0:
+        return True
+    edges = ((-x * vy / vx) + y, ((cols - x) * vy / vx) + y)
+    return any(not math.isfinite(v) or abs(v) > 2**31 - 1 for v in edges)
+
+
 def _segment_count(pruned_source: np.ndarray, mask: np.ndarray, size: int) -> int:
     pruned, _, _ = pcv.morphology.prune(skel_img=pruned_source, size=size, mask=mask)
     _, segments = pcv.morphology.segment_skeleton(skel_img=pruned, mask=mask)
@@ -118,6 +156,16 @@ def measure_morphology(
 
     diag = analyze_mask(mask)
     assert_not_degenerate(diag)
+    coverage = implausible_coverage_warning(diag)
+    if coverage:
+        # A mask that is the background skeletonises the whole frame — 80 s on
+        # a real photo — and then fails for "too many tips", which is true and
+        # useless. measure() only warns here (a macro shot of one leaf can fill
+        # the frame); a skeleton of the frame's background has no such case.
+        raise MorphologyRefusedError(
+            f"implausible_coverage: {coverage.message} A skeleton of the "
+            "background is not a plant; fix the segmentation first."
+        )
     if multi_specimen_warning(diag):
         raise MorphologyRefusedError(
             f"The mask holds {diag.major_object_count} comparably sized objects; a "
@@ -128,50 +176,57 @@ def measure_morphology(
 
     warnings: list[Advisory] = []
     mask255 = np.where(mask > 0, 255, 0).astype(np.uint8)
+    # PlantCV's per-segment functions allocate a FULL-FRAME image per segment
+    # (and prune iterates full-frame subtractions): on a 16 MP real photo whose
+    # plant filled 5% of the frame, segment_tangent_angle alone took 354 s for
+    # 14 leaves. Every trait here is invariant to where the plant sits, so the
+    # skeleton work runs on the mask's bounding box plus a margin wider than
+    # any prune, tangent window or stem-joining dilation (2 px x 50 rounds).
+    y0, y1, x0, x1 = _crop_bounds(mask255, crop_margin(prune_size, tangent_size))
+    img_c = img[y0:y1, x0:x1]
+    mask_c = mask255[y0:y1, x0:x1]
 
     n_here = n_double = 0
     try:
         with isolated_pcv_outputs():
-            skel = pcv.morphology.skeletonize(mask=mask255)
+            skel = pcv.morphology.skeletonize(mask=mask_c)
             pruned, _, _ = pcv.morphology.prune(
-                skel_img=skel, size=prune_size, mask=mask255
+                skel_img=skel, size=prune_size, mask=mask_c
             )
-            _, segments = pcv.morphology.segment_skeleton(skel_img=pruned, mask=mask255)
+            _, segments = pcv.morphology.segment_skeleton(skel_img=pruned, mask=mask_c)
             if not segments:
                 raise MorphologyRefusedError(
                     "Skeletonisation produced no segments: the mask is too small or too "
                     "compact to carry a skeleton. Check the overlay from segment()."
                 )
             leaf_objects, stem_objects = pcv.morphology.segment_sort(
-                skel_img=pruned, objects=segments, mask=mask255, first_stem=True
+                skel_img=pruned, objects=segments, mask=mask_c, first_stem=True
             )
             # Sensitivity first, because it is cheap and because the per-segment
             # functions below can abort on a fragmented skeleton — and the refusal
             # then needs these counts to say what to do.
             n_here = len(segments)
-            n_double = _segment_count(skel, mask255, max(2 * prune_size, 1))
+            n_double = _segment_count(skel, mask_c, max(2 * prune_size, 1))
+            # That pass ran segment_skeleton at 2x prune_size, which saved a
+            # palette sized to ITS segment count — fewer, when the double prune
+            # removes leaves — and every segment_* function below takes the
+            # saved palette and indexes it by leaf: a 1-colour palette for two
+            # leaves was IndexError on a 233-px real seedling. Start empty
+            # again so segment_id sizes it to the leaves it draws.
+            # (isolated_pcv_outputs restores the host's palette on exit.)
+            pcv.params.saved_color_scale = None
 
             # A skeleton with no leaf-like segment (a bare stem, a ring) is still
             # reported — cycles, tips, branch points and stem traits are exactly
             # what tells the user WHY there are no leaves — with an empty table.
             if leaf_objects:
-                # segment_id reuses a process-global cached palette
-                # (params.saved_color_scale, color_palette(saved=True)) and
-                # indexes past it when this plant has more segments than the
-                # one that filled the cache: IndexError from inside PlantCV.
-                # Reset it here, inside the lock, and hand it back afterwards.
-                saved_palette = pcv.params.saved_color_scale
-                pcv.params.saved_color_scale = None
-                try:
-                    # Two returns: the plain colored segments (what the other
-                    # segment_* functions consume) and the labeled copy with the
-                    # id DIGITS drawn on. The overlay must use the labeled one —
-                    # the table's `id` column is unreadable without the digits.
-                    segmented_img, id_img = pcv.morphology.segment_id(
-                        skel_img=pruned, objects=leaf_objects, mask=mask255
-                    )
-                finally:
-                    pcv.params.saved_color_scale = saved_palette
+                # Two returns: the plain colored segments (what the other
+                # segment_* functions consume) and the labeled copy with the
+                # id DIGITS drawn on. The overlay must use the labeled one —
+                # the table's `id` column is unreadable without the digits.
+                segmented_img, id_img = pcv.morphology.segment_id(
+                    skel_img=pruned, objects=leaf_objects, mask=mask_c
+                )
                 pcv.morphology.segment_path_length(
                     segmented_img=segmented_img, objects=leaf_objects, label=LABEL
                 )
@@ -191,7 +246,7 @@ def measure_morphology(
                     label=LABEL,
                 )
             else:
-                segmented_img = np.zeros_like(img)
+                segmented_img = np.zeros_like(img_c)
                 segmented_img[pruned > 0] = (255, 255, 255)
                 id_img = segmented_img
                 warnings.append(
@@ -207,16 +262,38 @@ def measure_morphology(
                 )
             if stem_objects:
                 if leaf_objects:
-                    pcv.morphology.segment_insertion_angle(
-                        skel_img=pruned,
-                        segmented_img=segmented_img,
-                        leaf_objects=leaf_objects,
-                        stem_objects=stem_objects,
-                        size=tangent_size,
-                        label=LABEL,
-                    )
+                    try:
+                        pcv.morphology.segment_insertion_angle(
+                            skel_img=pruned,
+                            segmented_img=segmented_img,
+                            leaf_objects=leaf_objects,
+                            stem_objects=stem_objects,
+                            size=tangent_size,
+                            label=LABEL,
+                        )
+                    except cv2.error:
+                        # It fits a line to the stem and draws it across the
+                        # frame; a vertical stem extrapolates to y ~ -4e9 and
+                        # OpenCV rejects the point. Confirm that is the cause
+                        # before swallowing anything: any other cv2.error
+                        # stays a crash.
+                        if not _stem_line_leaves_int32(stem_objects, mask_c.shape[1]):
+                            raise
+                        warnings.append(
+                            Advisory(
+                                code="insertion_angle_undefined",
+                                message=(
+                                    "The stem is vertical, so the stem line PlantCV "
+                                    "measures insertion angles against cannot be drawn "
+                                    "(its extrapolation overflows the frame); "
+                                    "insertion_angle is null for every segment. Path "
+                                    "lengths, tangent angles and stem traits are "
+                                    "unaffected."
+                                ),
+                            )
+                        )
                 pcv.morphology.analyze_stem(
-                    rgb_img=img, stem_objects=stem_objects, label=LABEL
+                    rgb_img=img_c, stem_objects=stem_objects, label=LABEL
                 )
             else:
                 warnings.append(
@@ -228,19 +305,31 @@ def measure_morphology(
                         ),
                     )
                 )
-            pcv.morphology.find_tips(skel_img=pruned, mask=mask255, label=LABEL)
-            pcv.morphology.find_branch_pts(skel_img=pruned, mask=mask255, label=LABEL)
+            pcv.morphology.find_tips(skel_img=pruned, mask=mask_c, label=LABEL)
+            pcv.morphology.find_branch_pts(skel_img=pruned, mask=mask_c, label=LABEL)
             pcv.morphology.check_cycles(skel_img=pruned, label=LABEL)
             if leaf_objects:
                 pcv.morphology.segment_width(
                     segmented_img=segmented_img,
                     skel_img=pruned,
-                    labeled_mask=np.where(mask > 0, 1, 0).astype(np.uint8),
+                    labeled_mask=np.where(mask_c > 0, 1, 0).astype(np.uint8),
                     n_labels=1,
                     label=LABEL,
                 )
             observations = {k: dict(v) for k, v in pcv.outputs.observations.items()}
     except RuntimeError as exc:
+        if "combine stem" in str(exc).lower():
+            # segment_insertion_angle dilates the stem pieces up to fifty
+            # times trying to join them and gives up: the stem is in parts
+            # the skeleton cannot connect. Pruning is not the lever; a gap
+            # in the mask (or a second plant) is.
+            raise MorphologyRefusedError(
+                "PlantCV could not join the stem segments into one stem: the "
+                "mask's stem is in pieces (a gap where the threshold lost it, "
+                "or more than one plant). refine() with closing or fill_holes "
+                "to bridge the gap and re-measure; if the overlay shows several "
+                "plants, use measure_regions() or refine(keep_largest=1)."
+            ) from exc
         # PlantCV's fatal_error() on a skeleton it cannot analyse ("Too many
         # tips found per segment, try pruning again"). Refuse with the
         # sensitivity numbers, which are exactly what the user needs to act.
@@ -395,8 +484,10 @@ def measure_morphology(
     # The overlay: the tinted mask with PlantCV's numbered segments — digits
     # included — drawn on top.
     overlay = render_overlay(img, mask255)
-    drawn = id_img.any(axis=2)
-    overlay[drawn] = id_img[drawn]
+    canvas = np.zeros_like(img)
+    canvas[y0:y1, x0:x1] = id_img
+    drawn = canvas.any(axis=2)
+    overlay[drawn] = canvas[drawn]
 
     return MorphologyResult(
         plant=plant,
