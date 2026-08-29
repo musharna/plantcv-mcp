@@ -6,6 +6,46 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-08-29
+
+Findings from the first dogfood on REAL hyperspectral and thermal data
+(Danforth Center tutorial cubes and a FLIR tray frame) after every earlier
+round had used PlantCV's 43×31 test cube and synthetic frames.
+
+### Added
+
+- **`measure_regions()` works on thermal and hyperspectral sessions.** A
+  FLIR frame of a 20-plant tray could only be measured as one mask, while
+  its `multi_specimen` advisory sent the caller to a tool that refused the
+  session. The per-region partition (grid, PlantCV labels, empty /
+  claimed-by-neighbour / too-small refusals, `object_exceeds_region`) is now
+  shared by every modality; thermal sessions return per-region temperature
+  statistics through `analyze.thermal`, hyperspectral sessions per-region
+  index statistics through `analyze.spectral_index` (`indices`, default the
+  session's index, with the pinned white/dark calibration). Arguments that
+  belong to another modality (`analyses`, `px_per_mm`, `include_histograms`
+  on a typed session; `indices` on an RGB one) are refused by name, not
+  ignored.
+- **`threshold_outside_range` advisory.** On a real leaf cube (NDVI
+  0.19–0.89) the default `threshold=0.2` sat below the minimum and selected
+  every pixel; 0.95 sat above the maximum and selected none, and neither
+  result blamed the threshold. `segment_hyperspectral()` now says which side
+  of the index range the threshold falls on; `segment_thermal()` says when a
+  band encloses the whole frame, and refuses outright a band that lies
+  entirely outside it, naming the frame range.
+- **Band-less `segment_thermal()` refuses with the frame's range and
+  percentiles** (p5–p95) instead of "give min_c and/or max_c" alone, so the
+  first call is no longer a blind guess.
+
+### Changed
+
+- **Refusals and advisories name the right knob for the modality.** Only
+  the inverted-mask remedy had ever been written for thermal; `empty_mask`,
+  degenerate-mask refusals from `measure_spectral()` / `measure_thermal()` /
+  `segment_thermal()`, and `implausible_coverage` on cubes all said "re-run
+  segment() with a different channel or method". A per-modality `Remedies`
+  bundle now supplies the sentence for RGB, hyperspectral and thermal.
+
 ## [1.3.1] — 2026-08-28
 
 The two LOW findings left open from the real-photo dogfood.

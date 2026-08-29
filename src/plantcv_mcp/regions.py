@@ -40,6 +40,7 @@ from .diagnostics import (
     implausible_coverage_warning,
     implausible_longest_path_warning,
 )
+from .hyperspectral import compute_index
 from .measurement import (
     ANALYSES,
     HISTOGRAM_TRAITS,
@@ -342,6 +343,131 @@ def grid_misalignment_warning(mode: str, measurements: list) -> Advisory | None:
     )
 
 
+@dataclass
+class RegionSlot:
+    """One cell of the grid after labelling: measurable, or refused with a reason.
+
+    The partition is the same for every modality -- which cell holds which
+    object, which cells are empty, which had their material claimed by a
+    neighbour, which hold too little to measure. Only the statistic computed
+    on a measurable slot differs (traits, temperature, index values).
+    """
+
+    index: int
+    row: int
+    col: int
+    bbox: tuple[int, int, int, int]
+    label: int
+    coverage: float
+    measured: bool
+    reason: str | None
+    warnings: list[Advisory]
+
+
+def _refused_row(slot: RegionSlot) -> dict[str, Any]:
+    return {
+        "index": slot.index,
+        "row": slot.row,
+        "col": slot.col,
+        "bbox": list(slot.bbox),
+        "measured": False,
+        "reason": slot.reason,
+        "region_coverage": slot.coverage,
+        "warnings": [{"code": w.code, "message": w.message} for w in slot.warnings],
+    }
+
+
+def partition_regions(
+    mask: np.ndarray, regions: RegionSet
+) -> tuple[np.ndarray, int, list[RegionSlot]]:
+    """Label the mask by region and decide, per cell, whether it can be measured.
+
+    Must be called under the `isolated_pcv_outputs` lock: PlantCV's
+    create_labels is native code sharing state with the analyses that follow.
+    """
+    labeled, n = pcv.create_labels(mask=mask, rois=regions.rois, roi_type="partial")
+    # Labels actually carrying pixels. A region whose label is absent here is
+    # empty -- this is the only reliable discriminator, since the analysis
+    # emits a full zero-valued group for it either way.
+    present = {int(v) for v in np.unique(labeled)} - {0}
+
+    slots: list[RegionSlot] = []
+    for i, bbox in enumerate(regions.bboxes):
+        label = i + 1
+        x, y, w, h = bbox
+        row, col = divmod(i, regions.ncols) if regions.ncols else (0, i)
+
+        cell = labeled[y : y + h, x : x + w] if w and h else labeled[:0, :0]
+        coverage = float((cell == label).sum()) / float(cell.size) if cell.size else 0.0
+
+        if label not in present:
+            # "Empty" per the labels is not "empty" per the mask: with
+            # roi_type="partial" an object straddling two cells is handed
+            # WHOLE to one of them, and the other reads as nothing. Say so,
+            # naming the region that took it, instead of calling it empty.
+            claimed = {int(v) for v in np.unique(cell)} - {0}
+            in_cell = int((mask[y : y + h, x : x + w] > 0).sum()) if w and h else 0
+            if claimed and in_cell:
+                takers = ", ".join(f"region {c - 1}" for c in sorted(claimed))
+                reason = (
+                    f"Not empty: {in_cell} px of plant material lie in this cell "
+                    f"but PlantCV assigned the whole object to {takers} because "
+                    "it overlaps both. The neighbour's numbers include this "
+                    "material. Look at the overlay; if these are two plants, "
+                    "give rect_grid geometry that puts one plant per cell."
+                )
+                cell_warnings = [
+                    Advisory(code="object_claimed_by_neighbour", message=reason)
+                ]
+            else:
+                reason = (
+                    "No plant material in this region. PlantCV reports a "
+                    "complete result of zeros for an empty region, which is "
+                    "indistinguishable from a real zero-area plant, so nothing "
+                    "is returned for it."
+                )
+                cell_warnings = []
+            slots.append(
+                RegionSlot(i, row, col, bbox, label, 0.0, False, reason, cell_warnings)
+            )
+            continue
+
+        # Each cell is held to the same degeneracy floor measure() applies
+        # to a whole frame: a 2x2 speck of threshold noise otherwise comes
+        # back as a full result indistinguishable from a real seedling.
+        cell_diag = analyze_mask((cell == label).astype(np.uint8) * 255)
+        try:
+            assert_not_degenerate(cell_diag)
+        except DegenerateMaskError as exc:
+            slots.append(
+                RegionSlot(
+                    i,
+                    row,
+                    col,
+                    bbox,
+                    label,
+                    coverage,
+                    False,
+                    "Too little plant material in this region to measure (of "
+                    f"the cell, not the frame): {exc}",
+                    [],
+                )
+            )
+            continue
+
+        region_warnings: list[Advisory] = []
+        cover = implausible_coverage_warning(cell_diag)
+        if cover:
+            region_warnings.append(cover)
+        spill = object_exceeds_region_warning(labeled, label, bbox)
+        if spill:
+            region_warnings.append(spill)
+        slots.append(
+            RegionSlot(i, row, col, bbox, label, coverage, True, None, region_warnings)
+        )
+    return labeled, n, slots
+
+
 def measure_regions(
     img: np.ndarray,
     mask: np.ndarray,
@@ -368,11 +494,7 @@ def measure_regions(
 
     # The SAME lock as measure_traits: both paths write and read the one global.
     with isolated_pcv_outputs():
-        labeled, n = pcv.create_labels(mask=mask, rois=regions.rois, roi_type="partial")
-        # Labels actually carrying pixels. A region whose label is absent here is
-        # empty -- this is the only reliable discriminator, since the analysis
-        # emits a full zero-valued group for it either way.
-        present = {int(v) for v in np.unique(labeled)} - {0}
+        labeled, n, slots = partition_regions(mask, regions)
 
         if "size" in analyses:
             pcv.analyze.size(img=img, labeled_mask=labeled, n_labels=n)
@@ -382,89 +504,14 @@ def measure_regions(
             )
 
         out: list[RegionMeasurement] = []
-        for i, bbox in enumerate(regions.bboxes):
-            label = i + 1
-            x, y, w, h = bbox
-            row, col = divmod(i, regions.ncols) if regions.ncols else (0, i)
-
-            cell = labeled[y : y + h, x : x + w] if w and h else labeled[:0, :0]
-            coverage = (
-                float((cell == label).sum()) / float(cell.size) if cell.size else 0.0
-            )
-
-            if label not in present:
-                # "Empty" per the labels is not "empty" per the mask: with
-                # roi_type="partial" an object straddling two cells is handed
-                # WHOLE to one of them, and the other reads as nothing. Say so,
-                # naming the region that took it, instead of calling it empty.
-                claimed = {int(v) for v in np.unique(cell)} - {0}
-                in_cell = int((mask[y : y + h, x : x + w] > 0).sum()) if w and h else 0
-                if claimed and in_cell:
-                    takers = ", ".join(f"region {c - 1}" for c in sorted(claimed))
-                    reason = (
-                        f"Not empty: {in_cell} px of plant material lie in this cell "
-                        f"but PlantCV assigned the whole object to {takers} because "
-                        "it overlaps both. The neighbour's traits include this "
-                        "material. Look at the overlay; if these are two plants, "
-                        "give rect_grid geometry that puts one plant per cell."
-                    )
-                    cell_warnings = [
-                        {
-                            "code": "object_claimed_by_neighbour",
-                            "message": reason,
-                        }
-                    ]
-                else:
-                    reason = (
-                        "No plant material in this region. PlantCV reports a "
-                        "complete trait set of zeros for an empty region, which "
-                        "is indistinguishable from a real zero-area plant, so "
-                        "no traits are returned for it."
-                    )
-                    cell_warnings = []
-                out.append(
-                    RegionMeasurement(
-                        index=i,
-                        row=row,
-                        col=col,
-                        bbox=list(bbox),
-                        measured=False,
-                        reason=reason,
-                        region_coverage=0.0,
-                        traits=None,
-                        warnings=cell_warnings,
-                    )
-                )
-                continue
-
-            # Each cell is held to the same degeneracy floor measure() applies
-            # to a whole frame: a 2x2 speck of threshold noise otherwise comes
-            # back as a full trait row indistinguishable from a real seedling.
-            cell_diag = analyze_mask((cell == label).astype(np.uint8) * 255)
-            try:
-                assert_not_degenerate(cell_diag)
-            except DegenerateMaskError as exc:
-                out.append(
-                    RegionMeasurement(
-                        index=i,
-                        row=row,
-                        col=col,
-                        bbox=list(bbox),
-                        measured=False,
-                        reason=(
-                            "Too little plant material in this region to "
-                            f"measure (of the cell, not the frame): {exc}"
-                        ),
-                        region_coverage=coverage,
-                        traits=None,
-                        warnings=[],
-                    )
-                )
+        for slot in slots:
+            if not slot.measured:
+                out.append(RegionMeasurement(traits=None, **_refused_row(slot)))
                 continue
 
             traits: dict[str, TraitValue] = {
                 name: TraitValue(value=obs.get("value"), unit=obs.get("label"))
-                for name, obs in _read_group(label).items()
+                for name, obs in _read_group(slot.label).items()
             }
             # Checked on the pixel values, before any unit conversion.
             lp_warning = implausible_longest_path_warning(traits)
@@ -473,29 +520,145 @@ def measure_regions(
             if px_per_mm is not None:
                 traits = convert_units(traits, float(px_per_mm))
 
-            region_warnings: list[Advisory] = []
-            cover = implausible_coverage_warning(cell_diag)
-            if cover:
-                region_warnings.append(cover)
+            region_warnings = list(slot.warnings)
             if lp_warning:
                 region_warnings.append(lp_warning)
-            spill = object_exceeds_region_warning(labeled, label, bbox)
-            if spill:
-                region_warnings.append(spill)
 
             out.append(
                 RegionMeasurement(
-                    index=i,
-                    row=row,
-                    col=col,
-                    bbox=list(bbox),
+                    index=slot.index,
+                    row=slot.row,
+                    col=slot.col,
+                    bbox=list(slot.bbox),
                     measured=True,
                     reason=None,
-                    region_coverage=coverage,
+                    region_coverage=slot.coverage,
                     traits=traits,
                     warnings=[
                         {"code": w.code, "message": w.message} for w in region_warnings
                     ],
                 )
             )
+        return out
+
+
+def _single_group(name: str) -> dict[str, dict]:
+    """The observation group for a single-label analysis run under `name`.
+
+    PlantCV writes `name` for n_labels=1 in some versions and `name_1` in
+    others; either is accepted, anything else raises rather than resolving to
+    a neighbour's group.
+    """
+    for key in (name, f"{name}_1"):
+        if key in pcv.outputs.observations:
+            return pcv.outputs.observations[key]
+    raise KeyError(
+        f"Expected observation group {name!r} not found. Available: "
+        f"{list(pcv.outputs.observations.keys())}."
+    )
+
+
+def _measured_row(slot: RegionSlot, labeled: np.ndarray) -> dict[str, Any]:
+    return {
+        "index": slot.index,
+        "row": slot.row,
+        "col": slot.col,
+        "bbox": list(slot.bbox),
+        "measured": True,
+        "reason": None,
+        "region_coverage": slot.coverage,
+        "pixel_count": int((labeled == slot.label).sum()),
+        "warnings": [{"code": w.code, "message": w.message} for w in slot.warnings],
+    }
+
+
+def measure_regions_thermal(
+    celsius: np.ndarray, mask: np.ndarray, regions: RegionSet
+) -> list[dict[str, Any]]:
+    """Per-region temperature statistics, through PlantCV's analyze.thermal.
+
+    Same partition, same refusals as the RGB path; the statistic is the one
+    measure_thermal() reports for the whole mask.
+    """
+    if celsius.shape != mask.shape:
+        raise ValueError(f"mask {mask.shape} does not match the frame {celsius.shape}")
+    with isolated_pcv_outputs():
+        labeled, _n, slots = partition_regions(mask, regions)
+        out: list[dict[str, Any]] = []
+        for slot in slots:
+            if not slot.measured:
+                out.append(_refused_row(slot))
+                continue
+            # One label at a time: unlike analyze.size, analyze.thermal raises
+            # on an empty label instead of reporting zeros, so a multi-label
+            # call dies on the first empty cell.
+            one = np.where(labeled == slot.label, 1, 0).astype(np.uint8)
+            name = f"region{slot.index}"
+            pcv.analyze.thermal(
+                thermal_img=celsius, labeled_mask=one, n_labels=1, bins=100, label=name
+            )
+            obs = _single_group(name)
+            out.append(
+                {
+                    **_measured_row(slot, labeled),
+                    "temperature": {
+                        "max": float(obs["max_temp"]["value"]),
+                        "min": float(obs["min_temp"]["value"]),
+                        "mean": float(obs["mean_temp"]["value"]),
+                        "median": float(obs["median_temp"]["value"]),
+                        "unit": "celsius",
+                    },
+                }
+            )
+        return out
+
+
+def measure_regions_spectral(
+    cube: Any,
+    mask: np.ndarray,
+    regions: RegionSet,
+    indices: tuple[str, ...] = ("ndvi",),
+) -> list[dict[str, Any]]:
+    """Per-region index statistics on a PREPARED (float, calibrated) cube,
+    through PlantCV's analyze.spectral_index -- the same numbers
+    measure_spectral() reports for the whole mask."""
+    if cube.array_data.shape[:2] != mask.shape:
+        raise ValueError(
+            f"mask {mask.shape} does not match the cube's frame "
+            f"{cube.array_data.shape[:2]}"
+        )
+    computed = {name: compute_index(cube, name) for name in indices}
+    with isolated_pcv_outputs():
+        labeled, _n, slots = partition_regions(mask, regions)
+        out: list[dict[str, Any]] = []
+        for slot in slots:
+            if not slot.measured:
+                out.append(_refused_row(slot))
+                continue
+            sel = labeled == slot.label
+            one = np.where(sel, 1, 0).astype(np.uint8)
+            group = f"region{slot.index}"
+            stats: dict[str, dict[str, float | int | None]] = {}
+            for name, idx in computed.items():
+                pcv.analyze.spectral_index(
+                    index_img=idx,
+                    labeled_mask=one,
+                    n_labels=1,
+                    bins=100,
+                    min_bin="auto",
+                    max_bin="auto",
+                    label=group,
+                )
+                obs = _single_group(group)
+                raw = idx.array_data.astype(np.float64)[sel]
+                values = raw[np.isfinite(raw)]
+                stats[name] = {
+                    "mean": float(obs[f"mean_index_{name}"]["value"]),
+                    "median": float(obs[f"med_index_{name}"]["value"]),
+                    "std": float(obs[f"std_index_{name}"]["value"]),
+                    "min": float(values.min()) if values.size else None,
+                    "max": float(values.max()) if values.size else None,
+                    "finite_pixel_count": int(values.size),
+                }
+            out.append({**_measured_row(slot, labeled), "indices": stats})
         return out

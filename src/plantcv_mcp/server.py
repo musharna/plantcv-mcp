@@ -60,7 +60,7 @@ from .scale import calibrate_scale
 from .segmentation import CHANNELS, METHODS, OBJECT_TYPES, threshold_mask
 from .session import SessionStore
 from .suggest import colorspace_sheet, polarity_report, threshold_sheet
-from .thermal import load_thermal
+from .thermal import grey_frame, load_thermal
 from .workers import dispatch, set_isolation
 
 _store = SessionStore()
@@ -105,9 +105,13 @@ not comparable between images taken at different distances or zoom levels.
 
 Hyperspectral ENVI cubes and thermal frames have their own segmenters
 (segment_hyperspectral, segment_thermal) and their own measurers
-(measure_spectral, measure_thermal); sessions are typed, and a session handed to
-the wrong measurer is refused naming the right one. The same rule holds
-everywhere: look at the returned overlay before trusting any number.\
+(measure_spectral, measure_thermal); measure_regions() works on all three kinds
+(traits, temperatures or index statistics per plant). Sessions are typed, and a
+session handed to the wrong measurer is refused naming the right one. segment_thermal()
+without a band refuses WITH the frame's temperature range and percentiles; use
+them. `threshold_outside_range` means the threshold or band lies past the data's
+own range and the mask is meaningless. The same rule holds everywhere: look at
+the returned overlay before trusting any number.\
 """
 
 
@@ -482,8 +486,8 @@ def _measure_morphology_impl(
 
 TOOL_FOR_KIND = {
     "rgb": "measure(), measure_regions(), measure_morphology() or refine()",
-    "hsi": "measure_spectral()",
-    "thermal": "measure_thermal()",
+    "hsi": "measure_spectral() or measure_regions()",
+    "thermal": "measure_thermal() or measure_regions()",
 }
 
 
@@ -723,27 +727,82 @@ def _measure_regions_impl(
     analyses: list[str] | None = None,
     px_per_mm: float | None = None,
     include_histograms: bool = False,
+    indices: list[str] | None = None,
 ) -> dict:
-    requested = tuple(analyses) if analyses else ("size",)
-    session = _session_of(session_id, "rgb")
-    img = _load_session_image(session)
+    session = _store.get(session_id)
+    geometry = {
+        "mode": mode,
+        "nrows": nrows,
+        "ncols": ncols,
+        "coord": _as_xy(coord, "coord"),
+        "height": height,
+        "width": width,
+        "spacing": _as_xy(spacing, "spacing"),
+        "radius": radius,
+    }
+    # Arguments that belong to one modality are refused on another rather than
+    # ignored: a px_per_mm silently dropped on a thermal tray would leave the
+    # caller believing the numbers were converted.
+    if session.kind != "rgb":
+        for name, value in (
+            ("analyses", analyses),
+            ("px_per_mm", px_per_mm),
+            ("include_histograms", include_histograms or None),
+        ):
+            if value is not None:
+                raise WrongSessionKindError(
+                    f"{name} applies to rgb sessions; session {session_id!r} is "
+                    f"{session.kind}. Its regions report "
+                    f"{'temperature' if session.kind == 'thermal' else 'index'} "
+                    "statistics."
+                )
+    if session.kind != "hsi" and indices is not None:
+        raise WrongSessionKindError(
+            f"indices applies to hsi sessions; session {session_id!r} is "
+            f"{session.kind}."
+        )
 
-    regions = dispatch(
-        "regions",
-        img,
-        session.mask,
-        mode=mode,
-        nrows=nrows,
-        ncols=ncols,
-        coord=_as_xy(coord, "coord"),
-        height=height,
-        width=width,
-        spacing=_as_xy(spacing, "spacing"),
-        radius=radius,
-        analyses=requested,
-        px_per_mm=px_per_mm,
-        include_histograms=include_histograms,
-    )
+    extra: dict = {}
+    if session.kind == "rgb":
+        requested = tuple(analyses) if analyses else ("size",)
+        img = _load_session_image(session)
+        regions = dispatch(
+            "regions",
+            img,
+            session.mask,
+            **geometry,
+            analyses=requested,
+            px_per_mm=px_per_mm,
+            include_histograms=include_histograms,
+        )
+        extra = {
+            "analyses": list(requested),
+            "px_per_mm": px_per_mm,
+            "lineage": [dict(op) for op in session.lineage],
+        }
+    elif session.kind == "thermal":
+        load = _load_session_thermal(session)
+        img = grey_frame(load.celsius)
+        regions = dispatch("thermal_regions", load, session.mask, geometry=geometry)
+    elif session.kind == "hsi":
+        load = _load_session_cube(session)
+        img = np.ascontiguousarray(load.cube.pseudo_rgb)
+        cal = session.extra.get("calibration_args") or {}
+        wref, dref = cal.get("white_reference"), cal.get("dark_reference")
+        wanted = tuple(indices) if indices else (session.extra.get("index", "ndvi"),)
+        regions = dispatch(
+            "hsi_regions",
+            load,
+            session.mask,
+            indices=wanted,
+            calibration=cal,
+            white_load=load_cube(wref) if wref is not None else None,
+            dark_load=load_cube(dref) if dref is not None else None,
+            geometry=geometry,
+        )
+        extra = {"indices": list(wanted), "calibration": regions["calibration"]}
+    else:  # pragma: no cover - the store only mints the three kinds
+        raise WrongSessionKindError(f"Unknown session kind {session.kind!r}.")
     measurements = regions["measurements"]
 
     overlay = render_region_overlay(
@@ -758,15 +817,14 @@ def _measure_regions_impl(
     measured = [m for m in measurements if m["measured"]]
     return {
         "session_id": session_id,
+        "kind": session.kind,
         "mode": regions["mode"],
         "nrows": regions["nrows"],
         "ncols": regions["ncols"],
         "regions_total": len(measurements),
         "regions_measured": len(measured),
         "regions_empty": len(measurements) - len(measured),
-        "analyses": list(requested),
-        "px_per_mm": px_per_mm,
-        "lineage": [dict(op) for op in session.lineage],
+        **extra,
         "regions": measurements,
         "warnings": [{"code": c, "message": m} for c, m in regions["warnings"]],
         "overlay_scale": scale,
@@ -953,8 +1011,15 @@ def build_server() -> MCPServer:
         analyses: list[str] | None = None,
         px_per_mm: float | None = None,
         include_histograms: bool = False,
+        indices: list[str] | None = None,
     ) -> list:
         """Measure EACH plant in a multi-plant image separately.
+
+        Works on every session kind: an RGB session returns traits per
+        region (analyses / px_per_mm apply); a thermal session returns
+        temperature statistics per region; a hyperspectral session returns
+        index statistics per region (`indices`, default the session's index).
+        Arguments belonging to another modality are refused, not ignored.
 
         measure() treats the whole frame as one region, so on a tray it merges
         every plant into a single object and every size trait describes the
@@ -984,6 +1049,7 @@ def build_server() -> MCPServer:
             analyses=analyses,
             px_per_mm=px_per_mm,
             include_histograms=include_histograms,
+            indices=indices,
         )
         png = result.pop("_png")
         return [json.dumps(result), Image(data=png, format="png")]
