@@ -117,7 +117,7 @@ the methods, and the pinned PlantCV version.
 | `measure_morphology(session_id, prune_size, tangent_size, ...)`         | leaf/stem skeleton traits + the numbered-segment overlay |
 | `measure(session_id, analyses, px_per_mm, ...)`                         | traits, or a raised error on a degenerate mask          |
 | `calibrate_scale_from_marker(image_path, x, y, w, h, marker_length_mm)` | `px_per_mm` from a marker of known real size            |
-| `measure_regions(session_id, nrows, ncols, ...)`                        | one row per plant in a tray, plus the numbered overlay  |
+| `measure_regions(session_id, nrows, ncols, ...)`                        | one row per plant in a tray (RGB traits, thermal temperatures or HSI index stats), plus the numbered overlay |
 | `measure_images(image_paths, channel, method, ...)`                     | one recipe across many images; traits only where valid  |
 | `segment_hyperspectral(envi_path, index, threshold, ...)`               | an HSI session from a spectral-index threshold + pseudo-RGB overlay |
 | `measure_spectral(session_id, indices, ...)`                            | index statistics (and, opt-in, per-band reflectance)    |

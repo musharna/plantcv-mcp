@@ -32,11 +32,13 @@ import numpy as np
 from plantcv import plantcv as pcv
 
 from .diagnostics import (
+    HSI_REMEDIES,
     Advisory,
     MaskDiagnostics,
     analyze_mask,
     assert_not_degenerate,
     segmentation_warnings,
+    threshold_outside_range_warning,
 )
 from .imaging import read_image_bytes, render_overlay
 from .measurement import isolated_pcv_outputs
@@ -275,8 +277,22 @@ def segment_hyperspectral(
     mask = np.where(mask > 0, 255, 0).astype(np.uint8)
     diag = analyze_mask(mask)
     warnings = warnings + segmentation_warnings(
-        mask, diag, analyze_mask(pre_fill), fill_size
+        mask, diag, analyze_mask(pre_fill), fill_size, remedies=HSI_REMEDIES
     )
+    # pcv.threshold.binary: 'light' keeps values > threshold, 'dark' keeps
+    # values < threshold. A threshold past either end of the index selects
+    # everything or nothing, and neither result blames the threshold.
+    t = float(threshold)
+    rng = threshold_outside_range_warning(
+        selects_everything=(t < lo) if object_type == "light" else (t > hi),
+        selects_nothing=(t >= hi) if object_type == "light" else (t <= lo),
+        what=f"threshold {t:g} with object_type={object_type!r} on {index}",
+        lo=lo,
+        hi=hi,
+        unit="",
+    )
+    if rng:
+        warnings = [rng, *warnings]
     pseudo = load.cube.pseudo_rgb
     overlay = render_overlay(np.ascontiguousarray(pseudo), mask)
     wl = sorted(float(w) for w in load.cube.wavelength_dict)
@@ -338,6 +354,27 @@ def _value(observations: dict, key: str) -> Any:
     return None
 
 
+def check_reference_digests(
+    calibration: dict[str, str | None],
+    white_load: "CubeLoad | None",
+    dark_load: "CubeLoad | None",
+) -> None:
+    """Every calibrated number depends on the reference bytes, so the refs are
+    held to the same identity rule as the cube: the digest pinned at
+    segmentation must match the file measured against now."""
+    for role, ref_load, pinned in (
+        ("white_reference", white_load, calibration.get("white_digest")),
+        ("dark_reference", dark_load, calibration.get("dark_digest")),
+    ):
+        if ref_load is not None and pinned and ref_load.digest != pinned:
+            raise CalibrationReferencesChangedError(
+                f"The {role} file changed since segment_hyperspectral() pinned "
+                "it (SHA-256 mismatch). The calibrated values would silently "
+                "differ from the segmentation's; re-run segment_hyperspectral() "
+                "with the current reference files."
+            )
+
+
 def measure_spectral(
     path: str,
     mask: np.ndarray,
@@ -354,27 +391,14 @@ def measure_spectral(
             f"No indices requested. Valid: {available_indices()}."
         )
     diag = analyze_mask(mask)
-    assert_not_degenerate(diag)
+    assert_not_degenerate(diag, remedy=HSI_REMEDIES.degenerate)
     load = cube_load or load_cube(path)
     calibration = calibration or {}
     wref = calibration.get("white_reference")
     dref = calibration.get("dark_reference")
     white_load = white_load or (load_cube(wref) if wref is not None else None)
     dark_load = dark_load or (load_cube(dref) if dref is not None else None)
-    # Every calibrated number depends on the reference bytes, so the refs are
-    # held to the same identity rule as the cube: the digest pinned at
-    # segmentation must match the file measured against now.
-    for role, ref_load, pinned in (
-        ("white_reference", white_load, calibration.get("white_digest")),
-        ("dark_reference", dark_load, calibration.get("dark_digest")),
-    ):
-        if ref_load is not None and pinned and ref_load.digest != pinned:
-            raise CalibrationReferencesChangedError(
-                f"The {role} file changed since segment_hyperspectral() pinned "
-                "it (SHA-256 mismatch). The calibrated values would silently "
-                "differ from the segmentation's; re-run segment_hyperspectral() "
-                "with the current reference files."
-            )
+    check_reference_digests(calibration, white_load, dark_load)
     prepared, label, warnings = prepare_cube(load.cube, white_load, dark_load)
     if prepared.array_data.shape[:2] != mask.shape:
         raise ValueError(

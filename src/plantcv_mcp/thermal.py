@@ -21,11 +21,13 @@ import numpy as np
 from plantcv import plantcv as pcv
 
 from .diagnostics import (
+    THERMAL_REMEDIES,
     Advisory,
     MaskDiagnostics,
     analyze_mask,
     assert_not_degenerate,
     segmentation_warnings,
+    threshold_outside_range_warning,
 )
 from .imaging import digest_bytes, read_image_bytes, render_overlay
 from .measurement import isolated_pcv_outputs
@@ -82,7 +84,8 @@ def load_thermal(path: str) -> ThermalLoad:
     return ThermalLoad(celsius=celsius, digest=digest, source=source)
 
 
-def _grey(celsius: np.ndarray) -> np.ndarray:
+def grey_frame(celsius: np.ndarray) -> np.ndarray:
+    """Min-max scaled BGR rendering of a temperature frame, for overlays."""
     lo, hi = float(np.nanmin(celsius)), float(np.nanmax(celsius))
     scaled = np.zeros_like(celsius) if hi <= lo else (celsius - lo) / (hi - lo)
     grey = (np.nan_to_num(scaled) * 255).astype(np.uint8)
@@ -108,14 +111,35 @@ def segment_thermal(
     fill_size: int = 200,
     load: ThermalLoad | None = None,
 ) -> ThermalSegmentation:
-    if min_c is None and max_c is None:
-        raise ValueError(
-            "Give min_c and/or max_c: the band of temperatures that is the plant."
-        )
     if min_c is not None and max_c is not None and min_c >= max_c:
         raise ValueError(f"min_c must be below max_c, got {min_c} >= {max_c}")
     load = load or load_thermal(path)
     c = load.celsius
+    finite = c[np.isfinite(c)]
+    if finite.size == 0:
+        raise ValueError(f"No finite temperatures in {path!r}; nothing to segment.")
+    lo, hi = float(finite.min()), float(finite.max())
+    if min_c is None and max_c is None:
+        # Refusing without the range made the first call a blind guess; the
+        # percentiles show where the plant (usually the cool tail) sits.
+        pct = np.percentile(finite, [5, 25, 50, 75, 95])
+        pct_txt = ", ".join(
+            f"p{q}={v:.1f}" for q, v in zip((5, 25, 50, 75, 95), pct, strict=True)
+        )
+        raise ValueError(
+            "Give min_c and/or max_c: the band of temperatures that is the plant. "
+            f"This frame spans {lo:.1f} to {hi:.1f} C ({pct_txt}). Re-run "
+            "segment_thermal() with a band inside that range, e.g. max_c near "
+            "the cool tail for a transpiring plant on a warmer background."
+        )
+    band_lo = lo if min_c is None else min_c
+    band_hi = hi if max_c is None else max_c
+    if band_lo > hi or band_hi < lo:
+        raise ValueError(
+            f"The band {band_lo:.1f}-{band_hi:.1f} C lies entirely outside this "
+            f"frame's {lo:.1f}-{hi:.1f} C, so it can select nothing. Re-run "
+            "segment_thermal() with a band inside the frame range."
+        )
     sel = np.isfinite(c)
     if min_c is not None:
         sel &= c >= min_c
@@ -126,18 +150,20 @@ def segment_thermal(
         mask = pcv.fill(bin_img=pre_fill, size=fill_size)
     mask = np.where(mask > 0, 255, 0).astype(np.uint8)
     diag = analyze_mask(mask)
-    assert_not_degenerate(diag)
+    assert_not_degenerate(diag, remedy=THERMAL_REMEDIES.degenerate)
     warnings = segmentation_warnings(
-        mask,
-        diag,
-        analyze_mask(pre_fill),
-        fill_size,
-        # The default remedy names object_type, which this tool does not have.
-        coverage_remedy=(
-            "Narrow the temperature band (min_c / max_c) to the plant's own "
-            "temperatures and re-run segment_thermal()."
-        ),
+        mask, diag, analyze_mask(pre_fill), fill_size, remedies=THERMAL_REMEDIES
     )
+    rng = threshold_outside_range_warning(
+        selects_everything=band_lo <= lo and band_hi >= hi,
+        selects_nothing=False,  # refused above, before selection
+        what=f"band {band_lo:.1f}-{band_hi:.1f} C",
+        lo=lo,
+        hi=hi,
+        unit=" C",
+    )
+    if rng:
+        warnings.insert(0, rng)
     n_bad = int(c.size - np.isfinite(c).sum())
     if n_bad:
         warnings.append(
@@ -153,7 +179,7 @@ def segment_thermal(
         )
     return ThermalSegmentation(
         mask=mask,
-        overlay=render_overlay(_grey(c), mask),
+        overlay=render_overlay(grey_frame(c), mask),
         diagnostics=diag,
         warnings=warnings,
         frame_range=(float(np.nanmin(c)), float(np.nanmax(c))),
@@ -195,7 +221,7 @@ def measure_thermal(
     load: ThermalLoad | None = None,
 ) -> ThermalResult:
     diag = analyze_mask(mask)
-    assert_not_degenerate(diag)
+    assert_not_degenerate(diag, remedy=THERMAL_REMEDIES.degenerate)
     load = load or load_thermal(path)
     c = load.celsius
     if c.shape != mask.shape:

@@ -89,8 +89,10 @@ def test_a_band_that_selects_nothing_is_refused(tmp_path):
 
     frame, _ = _scene()
     path = _write_csv(tmp_path, frame)
+    with pytest.raises(ValueError, match="entirely"):
+        segment_thermal(path, min_c=40.0)  # outside the frame: refused by range
     with pytest.raises(DegenerateMaskError):
-        segment_thermal(path, min_c=40.0)
+        segment_thermal(path, min_c=22.0, max_c=24.0)  # inside, selects nothing
     with pytest.raises(ValueError, match="min_c"):
         segment_thermal(path, min_c=30.0, max_c=25.0)
     with pytest.raises(ValueError, match="min_c"):
@@ -165,3 +167,63 @@ def test_thermal_implausible_coverage_advises_the_band_not_object_type(tmp_path)
     assert "implausible_coverage" in msgs
     assert "min_c" in msgs["implausible_coverage"]
     assert "object_type" not in msgs["implausible_coverage"]
+
+
+# --- modality dogfood 2026-08-28: remedies, blind band refusal, out-of-range bands ---
+
+
+def test_band_less_call_refuses_with_the_frame_range_and_percentiles(tmp_path):
+    """The old refusal said only "give min_c and/or max_c": the first call was
+    always wasted because nothing told the caller the frame spans 20-31.5."""
+    frame, _ = _scene()
+    path = _write_csv(tmp_path, frame)
+    with pytest.raises(ValueError) as exc:
+        segment_thermal(path)
+    msg = str(exc.value)
+    assert "min_c" in msg and "20.0" in msg and "31.5" in msg
+    assert "p50" in msg and "p95" in msg
+    assert "segment_thermal" in msg
+
+
+def test_band_outside_the_frame_is_refused_naming_the_frame_range(tmp_path):
+    frame, _ = _scene()
+    path = _write_csv(tmp_path, frame)
+    with pytest.raises(ValueError) as exc:
+        segment_thermal(path, min_c=40.0)
+    msg = str(exc.value)
+    assert "40.0" in msg and "31.5" in msg and "entirely" in msg
+    assert "channel" not in msg  # not the RGB remedy
+    with pytest.raises(ValueError, match="entirely"):
+        segment_thermal(path, max_c=10.0)
+    # Positive control: an in-range band that selects the disc is fine, no
+    # range advisory.
+    seg = segment_thermal(path, min_c=25.0)
+    assert "threshold_outside_range" not in [w.code for w in seg.warnings]
+
+
+def test_band_enclosing_the_whole_frame_gets_a_range_advisory(tmp_path):
+    frame, _ = _scene()
+    path = _write_csv(tmp_path, frame)
+    seg = segment_thermal(path, min_c=10.0, max_c=40.0)
+    codes = [w.code for w in seg.warnings]
+    assert "threshold_outside_range" in codes
+    msg = next(w.message for w in seg.warnings if w.code == "threshold_outside_range")
+    assert "20 to 31.5" in msg and "every" in msg
+
+
+def test_thermal_refusals_and_advisories_name_thermal_tools_not_rgb(tmp_path):
+    from plantcv_mcp.diagnostics import DegenerateMaskError
+
+    frame, _ = _scene()
+    path = _write_csv(tmp_path, frame)
+    # measure on an empty mask: the degenerate refusal must send the caller to
+    # segment_thermal(), not to "a different channel or method".
+    with pytest.raises(DegenerateMaskError) as exc:
+        measure_thermal(path, np.zeros(frame.shape, np.uint8))
+    assert "segment_thermal" in str(exc.value)
+    assert "channel" not in str(exc.value)
+    # a band inside the frame that selects nothing (a gap) is degenerate too
+    frame2 = frame.copy()
+    with pytest.raises(DegenerateMaskError) as exc2:
+        segment_thermal(_write_csv(tmp_path, frame2, "f2.csv"), min_c=22.0, max_c=24.0)
+    assert "segment_thermal" in str(exc2.value) and "channel" not in str(exc2.value)

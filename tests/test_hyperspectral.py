@@ -407,3 +407,51 @@ def test_nonfinite_index_values_are_reported_not_silently_dropped(tmp_path):
     )
     assert "nan_pixels" not in [w.code for w in clean.warnings]
     assert clean.indices["ndvi"]["finite_pixel_count"] == clean.pixel_count
+
+
+# --- modality dogfood 2026-08-28: remedies and threshold-vs-index-range ---
+
+
+def test_threshold_above_the_index_maximum_is_named(tmp_path):
+    """On a real leaf cube (NDVI 0.19-0.89) threshold=0.95 returned an empty
+    mask blaming 'channel or method'; threshold=0.2 (below the minimum)
+    selected 100% with only the inverted-mask advisory."""
+    path = _write_cube(tmp_path, "synth", _known_cube())
+    seg = segment_hyperspectral(path, index="ndvi", threshold=0.95, object_type="light")
+    codes = [w.code for w in seg.warnings]
+    assert "threshold_outside_range" in codes and "empty_mask" in codes
+    rng = next(w.message for w in seg.warnings if w.code == "threshold_outside_range")
+    assert "0.95" in rng and "0.6" in rng and "nothing" in rng
+    empty = next(w.message for w in seg.warnings if w.code == "empty_mask")
+    assert "segment_hyperspectral" in empty and "threshold" in empty
+    assert "channel or method" not in empty
+
+    low = segment_hyperspectral(path, index="ndvi", threshold=-0.5, object_type="light")
+    codes = [w.code for w in low.warnings]
+    assert "threshold_outside_range" in codes and "implausible_coverage" in codes
+    rng = next(w.message for w in low.warnings if w.code == "threshold_outside_range")
+    assert "-0.5" in rng and "-0.2" in rng and "every" in rng
+    cov = next(w.message for w in low.warnings if w.code == "implausible_coverage")
+    assert "segment_hyperspectral" in cov and "segment()" not in cov
+
+    # Positive control: a threshold inside the range carries no range advisory,
+    # and dark polarity flips which side is "nothing".
+    ok = segment_hyperspectral(path, index="ndvi", threshold=0.2, object_type="light")
+    assert "threshold_outside_range" not in [w.code for w in ok.warnings]
+    dark_none = segment_hyperspectral(
+        path, index="ndvi", threshold=-0.5, object_type="dark"
+    )
+    rng = next(
+        w.message for w in dark_none.warnings if w.code == "threshold_outside_range"
+    )
+    assert "nothing" in rng
+
+
+def test_spectral_degenerate_refusal_names_segment_hyperspectral(tmp_path):
+    from plantcv_mcp.diagnostics import DegenerateMaskError
+
+    path = _write_cube(tmp_path, "synth", _known_cube())
+    with pytest.raises(DegenerateMaskError) as exc:
+        measure_spectral(path, np.zeros((H, W), np.uint8), indices=["ndvi"])
+    assert "segment_hyperspectral" in str(exc.value)
+    assert "channel" not in str(exc.value)

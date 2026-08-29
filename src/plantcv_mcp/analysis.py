@@ -18,17 +18,26 @@ from .hyperspectral import (
     CubeLoad,
     HsiSegmentation,
     SpectralResult,
+    check_reference_digests,
     measure_spectral,
+    prepare_cube,
     segment_hyperspectral,
 )
 from .measurement import measure_traits
 from .morphology import MorphologyResult, measure_morphology
 from .refine import DroppedObject, apply_refinements_traced
-from .regions import build_regions, grid_misalignment_warning, measure_regions
+from .regions import (
+    build_regions,
+    grid_misalignment_warning,
+    measure_regions,
+    measure_regions_spectral,
+    measure_regions_thermal,
+)
 from .thermal import (
     ThermalLoad,
     ThermalResult,
     ThermalSegmentation,
+    grey_frame,
     measure_thermal,
     segment_thermal,
 )
@@ -147,7 +156,71 @@ def thermal_measure(
     return measure_thermal(path, mask, load=load, **kwargs)
 
 
+def _region_set(img: np.ndarray, mask: np.ndarray, geometry: dict[str, Any]):
+    return build_regions(
+        img,
+        mask,
+        mode=geometry["mode"],
+        nrows=geometry["nrows"],
+        ncols=geometry["ncols"],
+        coord=geometry["coord"],
+        height=geometry["height"],
+        width=geometry["width"],
+        spacing=geometry["spacing"],
+        radius=geometry["radius"],
+    )
+
+
+def _region_result(region_set, measurements: list) -> dict[str, Any]:
+    set_warnings = list(region_set.warnings)
+    misaligned = grid_misalignment_warning(region_set.mode, measurements)
+    if misaligned:
+        set_warnings.append(misaligned)
+    return {
+        "measurements": measurements,
+        "bboxes": list(region_set.bboxes),
+        "mode": region_set.mode,
+        "nrows": region_set.nrows,
+        "ncols": region_set.ncols,
+        "warnings": [(w.code, w.message) for w in set_warnings],
+    }
+
+
+def thermal_regions(
+    load: ThermalLoad, mask: np.ndarray, *, geometry: dict[str, Any]
+) -> dict[str, Any]:
+    region_set = _region_set(grey_frame(load.celsius), mask, geometry)
+    return _region_result(
+        region_set, measure_regions_thermal(load.celsius, mask, region_set)
+    )
+
+
+def hsi_regions(
+    cube_load: CubeLoad,
+    mask: np.ndarray,
+    *,
+    indices: tuple[str, ...],
+    calibration: dict[str, Any],
+    white_load: CubeLoad | None,
+    dark_load: CubeLoad | None,
+    geometry: dict[str, Any],
+) -> dict[str, Any]:
+    check_reference_digests(calibration, white_load, dark_load)
+    prepared, label, cal_warnings = prepare_cube(cube_load.cube, white_load, dark_load)
+    region_set = _region_set(
+        np.ascontiguousarray(cube_load.cube.pseudo_rgb), mask, geometry
+    )
+    region_set.warnings = [*cal_warnings, *region_set.warnings]
+    result = _region_result(
+        region_set, measure_regions_spectral(prepared, mask, region_set, indices)
+    )
+    result["calibration"] = label
+    return result
+
+
 REGISTRY: dict[str, Any] = {
+    "thermal_regions": thermal_regions,
+    "hsi_regions": hsi_regions,
     "hsi_segment": hsi_segment,
     "hsi_measure": hsi_measure,
     "thermal_segment": thermal_segment,

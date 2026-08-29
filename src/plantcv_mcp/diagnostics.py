@@ -51,7 +51,64 @@ def analyze_mask(mask: np.ndarray, major_threshold: float = 0.25) -> MaskDiagnos
     )
 
 
-def assert_not_degenerate(diag: MaskDiagnostics, min_fraction: float = 0.001) -> None:
+# Remedy sentences are written per modality. The RGB ones name segment(),
+# channels and methods; a thermal frame has a temperature band and a cube has
+# an index threshold, and advice naming the wrong knob misdirects (found on a
+# real FLIR tray and a real leaf cube: every refusal said "channel or method").
+@dataclass(frozen=True)
+class Remedies:
+    coverage: str  # implausible_coverage: how to get the other polarity
+    empty: str  # empty_mask: what to change when nothing was selected
+    degenerate: str  # DegenerateMaskError: which segmenter to go back to
+
+
+RGB_REMEDIES = Remedies(
+    coverage=(
+        "Re-run segment() with the opposite object_type ('light' instead of "
+        "'dark', or vice versa)."
+    ),
+    empty=(
+        "Try the opposite object_type, a different channel or method, or a "
+        "smaller fill_size."
+    ),
+    degenerate="Re-run segment() with a different channel or method.",
+)
+HSI_REMEDIES = Remedies(
+    coverage=(
+        "Re-run segment_hyperspectral() with the opposite object_type, or a "
+        "threshold inside the index_range."
+    ),
+    empty=(
+        "Re-run segment_hyperspectral() with a threshold inside the reported "
+        "index_range (or the opposite object_type), or a smaller fill_size."
+    ),
+    degenerate=(
+        "Re-run segment_hyperspectral() with a threshold inside the index_range, "
+        "or a different index."
+    ),
+)
+THERMAL_REMEDIES = Remedies(
+    coverage=(
+        "Narrow the temperature band (min_c / max_c) to the plant's own "
+        "temperatures and re-run segment_thermal()."
+    ),
+    empty=(
+        "Re-run segment_thermal() with a band (min_c / max_c) inside the "
+        "frame_range, or a smaller fill_size."
+    ),
+    degenerate=(
+        "Re-run segment_thermal() with a band (min_c / max_c) that covers the "
+        "plant's temperatures."
+    ),
+)
+RGB_COVERAGE_REMEDY = RGB_REMEDIES.coverage
+
+
+def assert_not_degenerate(
+    diag: MaskDiagnostics,
+    min_fraction: float = 0.001,
+    remedy: str = RGB_REMEDIES.degenerate,
+) -> None:
     """Raise DegenerateMaskError if traits would be meaningless.
 
     Degenerate if ANY of: zero components; zero largest area; mask fraction
@@ -60,15 +117,13 @@ def assert_not_degenerate(diag: MaskDiagnostics, min_fraction: float = 0.001) ->
     """
     if diag.component_count == 0 or diag.largest_area == 0:
         raise DegenerateMaskError(
-            "Segmentation produced no objects. The mask is empty. "
-            "Re-run segment() with a different channel or method."
+            f"Segmentation produced no objects. The mask is empty. {remedy}"
         )
     if diag.mask_fraction < min_fraction:
         raise DegenerateMaskError(
             f"Mask covers {diag.mask_fraction:.4%} of the frame, below the "
             f"{min_fraction:.2%} minimum. This is almost certainly a failed "
-            "segmentation, not a very small plant. Re-run segment() with a "
-            "different channel or method."
+            f"segmentation, not a very small plant. {remedy}"
         )
 
 
@@ -76,14 +131,6 @@ def assert_not_degenerate(diag: MaskDiagnostics, min_fraction: float = 0.001) ->
 class Advisory:
     code: str
     message: str
-
-
-# The default remedy sentence is written for segment(); tools without an
-# object_type (thermal) pass their own, or the advice misdirects.
-RGB_COVERAGE_REMEDY = (
-    "Re-run segment() with the opposite object_type ('light' instead of "
-    "'dark', or vice versa)."
-)
 
 
 def implausible_coverage_warning(
@@ -122,7 +169,9 @@ def implausible_coverage_warning(
     )
 
 
-def empty_mask_warning(diag: MaskDiagnostics) -> "Advisory | None":
+def empty_mask_warning(
+    diag: MaskDiagnostics, remedy: str = RGB_REMEDIES.empty
+) -> "Advisory | None":
     """Say plainly that the segmentation found nothing.
 
     segment() previously returned component_count=0 with no warning at all, so
@@ -136,8 +185,7 @@ def empty_mask_warning(diag: MaskDiagnostics) -> "Advisory | None":
         code="empty_mask",
         message=(
             "Segmentation found no objects at all — the mask is empty. No traits "
-            "can be measured from it. Try the opposite object_type, a different "
-            "channel or method, or a smaller fill_size."
+            f"can be measured from it. {remedy}"
         ),
     )
 
@@ -176,7 +224,7 @@ BLOCKING_CODES: frozenset[str] = frozenset(
 def mask_warnings(
     mask: np.ndarray,
     diag: MaskDiagnostics,
-    coverage_remedy: str = RGB_COVERAGE_REMEDY,
+    remedies: Remedies = RGB_REMEDIES,
 ) -> list["Advisory"]:
     """Advisories derivable from the mask alone, with no segmentation history.
 
@@ -186,7 +234,7 @@ def mask_warnings(
     """
     warnings: list[Advisory] = []
 
-    coverage = implausible_coverage_warning(diag, remedy=coverage_remedy)
+    coverage = implausible_coverage_warning(diag, remedy=remedies.coverage)
     if coverage:
         warnings.append(coverage)
 
@@ -210,7 +258,7 @@ def segmentation_warnings(
     diag: MaskDiagnostics,
     pre_fill_diag: MaskDiagnostics,
     fill_size: int,
-    coverage_remedy: str = RGB_COVERAGE_REMEDY,
+    remedies: Remedies = RGB_REMEDIES,
 ) -> list["Advisory"]:
     """Every advisory a segmented mask earns, in one place.
 
@@ -235,11 +283,11 @@ def segmentation_warnings(
             )
         )
     else:
-        empty = empty_mask_warning(diag)
+        empty = empty_mask_warning(diag, remedy=remedies.empty)
         if empty:
             warnings.append(empty)
 
-    warnings.extend(mask_warnings(mask, diag, coverage_remedy=coverage_remedy))
+    warnings.extend(mask_warnings(mask, diag, remedies=remedies))
     return warnings
 
 
@@ -294,5 +342,34 @@ def frame_clipping_warning(mask: np.ndarray) -> "Advisory | None":
             "Plant material touches the frame edge, so it is cut off by the "
             "image boundary. Size traits (area, width, height, perimeter) are "
             "a LOWER BOUND on the true plant, not a measurement of it."
+        ),
+    )
+
+
+def threshold_outside_range_warning(
+    selects_everything: bool,
+    selects_nothing: bool,
+    what: str,
+    lo: float,
+    hi: float,
+    unit: str,
+) -> "Advisory | None":
+    """Say when the selection rule lies outside the data's own range.
+
+    Found on a real leaf cube (NDVI 0.19-0.89): the default threshold 0.2 sat
+    below the minimum and selected every pixel, and 0.95 sat above the
+    maximum and selected none; neither result said the threshold was the
+    problem. `what` names the rule ("threshold 0.95 with object_type='light'"
+    or "band 10.0-40.0 C").
+    """
+    if not (selects_everything or selects_nothing):
+        return None
+    outcome = "every pixel" if selects_everything else "nothing"
+    return Advisory(
+        code="threshold_outside_range",
+        message=(
+            f"The {what} selects {outcome}: the data span {lo:.4g} to {hi:.4g}"
+            f"{unit}, so no pixel is on the other side of the rule. The mask "
+            "says nothing about the plant. Choose a value inside that range."
         ),
     )
