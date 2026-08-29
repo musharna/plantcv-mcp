@@ -13,6 +13,7 @@ Two rules make this more than a pass-through to PlantCV.
 """
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import cv2
@@ -86,6 +87,26 @@ REFINE_OPS: dict[str, dict[str, Any]] = {
 # Above this relative change in mask_fraction the refinement reshaped the mask
 # enough that the overlay must be looked at, whatever the diagnostics say.
 LARGE_CHANGE_FRACTION = 0.25
+
+# A component that vanishes under one op counts as a dropped OBJECT (not a
+# speck) when it was at least this fraction of the largest component present
+# before that op. Matches the "major object" threshold order of magnitude in
+# diagnostics: a leaf split off by opening() is ~10-40% of the plant; the
+# specks keep_largest exists to remove are <1%.
+DROPPED_OBJECT_FRACTION = 0.10
+DROPPED_OBJECTS_LISTED = 3  # the advisory names the largest N; the rest are counted
+
+
+@dataclass(frozen=True)
+class DroppedObject:
+    """A major component that one op removed entirely."""
+
+    op_index: int
+    op_name: str
+    area: int
+    largest_area: int  # the largest component present just before the op
+    split_by_op_index: int | None  # the last earlier op that raised component_count
+    split_by_op_name: str | None
 
 
 def validate_ops(ops: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -173,16 +194,58 @@ def _apply_one(mask: np.ndarray, op: Mapping[str, Any]) -> np.ndarray:
     raise RefineSpecError(f"unhandled op {name!r}")  # unreachable after validate_ops
 
 
-def apply_refinements(mask: np.ndarray, ops: Sequence[Mapping[str, Any]]) -> np.ndarray:
-    """Apply a validated op list in order; return the new uint8 {0,255} mask.
+def _dropped_by(
+    before: np.ndarray,
+    after: np.ndarray,
+    op_index: int,
+    op_name: str,
+    split_by: tuple[int, str] | None,
+) -> list[DroppedObject]:
+    """Components of `before` with no surviving pixel in `after`, if major."""
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(
+        (before > 0).astype(np.uint8), connectivity=8
+    )
+    if count <= 1:
+        return []
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    largest = int(areas.max())
+    survivors = set(np.unique(labels[after > 0])) - {0}
+    return [
+        DroppedObject(
+            op_index,
+            op_name,
+            int(a),
+            largest,
+            split_by[0] if split_by else None,
+            split_by[1] if split_by else None,
+        )
+        for label, a in enumerate(areas, start=1)
+        if label not in survivors and a >= DROPPED_OBJECT_FRACTION * largest
+    ]
+
+
+def apply_refinements_traced(
+    mask: np.ndarray, ops: Sequence[Mapping[str, Any]]
+) -> tuple[np.ndarray, list[DroppedObject]]:
+    """Apply a validated op list in order; return the new uint8 {0,255} mask
+    and every major object an op discarded along the way.
 
     Raises RefineSpecError (nothing applied) or RefinementErasedMaskError (the
     result is degenerate and must not become a session).
     """
     validated = validate_ops(ops)
     out = np.where(mask > 0, 255, 0).astype(np.uint8)
-    for op in validated:
-        out = np.where(_apply_one(out, op) > 0, 255, 0).astype(np.uint8)
+    dropped: list[DroppedObject] = []
+    split_by: tuple[int, str] | None = None
+    n_components = analyze_mask(out).component_count
+    for i, op in enumerate(validated):
+        nxt = np.where(_apply_one(out, op) > 0, 255, 0).astype(np.uint8)
+        dropped.extend(_dropped_by(out, nxt, i, op["op"], split_by))
+        n_next = analyze_mask(nxt).component_count
+        if n_next > n_components:
+            split_by = (i, op["op"])
+        n_components = n_next
+        out = nxt
     before, after = analyze_mask(mask), analyze_mask(out)
     try:
         assert_not_degenerate(after)
@@ -197,14 +260,56 @@ def apply_refinements(mask: np.ndarray, ops: Sequence[Mapping[str, Any]]) -> np.
             f"largest_area={after.largest_area}. Use a smaller kernel, fewer "
             f"iterations, or a smaller fill size. ({exc})"
         ) from exc
-    return out
+    return out, dropped
+
+
+def apply_refinements(mask: np.ndarray, ops: Sequence[Mapping[str, Any]]) -> np.ndarray:
+    """apply_refinements_traced without the trace."""
+    return apply_refinements_traced(mask, ops)[0]
+
+
+def dropped_object_warning(dropped: Sequence[DroppedObject]) -> Advisory | None:
+    """One advisory naming every major object the op list threw away."""
+    if not dropped:
+        return None
+    ranked = sorted(dropped, key=lambda d: d.area, reverse=True)
+    parts = []
+    for d in ranked[:DROPPED_OBJECTS_LISTED]:
+        origin = (
+            f", which op {d.split_by_op_index} ({d.split_by_op_name}) had split off"
+            if d.split_by_op_index is not None
+            else ""
+        )
+        parts.append(
+            f"op {d.op_index} ({d.op_name}) discarded a {d.area}-px object "
+            f"({d.area / d.largest_area:.0%} of the largest, {d.largest_area} px){origin}"
+        )
+    rest = len(ranked) - DROPPED_OBJECTS_LISTED
+    if rest > 0:
+        parts.append(f"and {rest} more discarded objects")
+    return Advisory(
+        code="refine_dropped_object",
+        message=(
+            "; ".join(parts) + ". That is a leaf or a second specimen, not a "
+            "speck: look at the overlay, and if it belongs to the plant, drop "
+            "the op that split it (a smaller opening/erode kernel) or raise n on "
+            "keep_largest."
+        ),
+    )
 
 
 def refinement_warnings(
-    mask: np.ndarray, before: MaskDiagnostics, after: MaskDiagnostics
+    mask: np.ndarray,
+    before: MaskDiagnostics,
+    after: MaskDiagnostics,
+    dropped: Sequence[DroppedObject] = (),
 ) -> list[Advisory]:
-    """Advisories for a refined mask: the shared mask guards plus a change alarm."""
+    """Advisories for a refined mask: the shared mask guards, a change alarm,
+    and any major object an op discarded."""
     warnings: list[Advisory] = []
+    dropped_warning = dropped_object_warning(dropped)
+    if dropped_warning:
+        warnings.append(dropped_warning)
     coverage = implausible_coverage_warning(after)
     if coverage:
         warnings.append(coverage)

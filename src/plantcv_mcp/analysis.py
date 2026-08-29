@@ -23,7 +23,7 @@ from .hyperspectral import (
 )
 from .measurement import measure_traits
 from .morphology import MorphologyResult, measure_morphology
-from .refine import apply_refinements
+from .refine import DroppedObject, apply_refinements_traced
 from .regions import build_regions, grid_misalignment_warning, measure_regions
 from .thermal import (
     ThermalLoad,
@@ -125,8 +125,8 @@ def batch(image_paths: list[str], **recipe: Any) -> dict:
     return measure_batch(image_paths, **recipe)
 
 
-def refine(mask: np.ndarray, ops: list[dict]) -> np.ndarray:
-    return apply_refinements(mask, ops)
+def refine(mask: np.ndarray, ops: list[dict]) -> tuple[np.ndarray, list[DroppedObject]]:
+    return apply_refinements_traced(mask, ops)
 
 
 def hsi_segment(cube_load: CubeLoad, **kwargs: Any) -> HsiSegmentation:

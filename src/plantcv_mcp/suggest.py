@@ -3,7 +3,7 @@
 import numpy as np
 from plantcv import plantcv as pcv
 
-from .diagnostics import analyze_mask
+from .diagnostics import Advisory, analyze_mask
 from .segmentation import OBJECT_TYPES, segment_mask, to_gray
 
 
@@ -17,6 +17,34 @@ def threshold_sheet(img: np.ndarray, channel: str) -> np.ndarray:
     gray = to_gray(img, channel)
     result = pcv.visualize.auto_threshold_methods(gray_img=gray, grid_img=True)
     return result[0] if isinstance(result, list) else result
+
+
+# A recommended polarity whose mask is at least this many components, with the
+# largest one a minority of the masked pixels, is specks rather than a plant:
+# a sorghum-in-chamber photo gave 118 components at 12.9% under a/otsu, and
+# the polarity comparison alone called it unambiguous.
+NOISY_COMPONENT_COUNT = 20
+NOISY_LARGEST_FRACTION = 0.5
+
+
+def noisy_segmentation_warning(polarity: str, stats: dict) -> Advisory | None:
+    if (
+        stats["component_count"] < NOISY_COMPONENT_COUNT
+        or stats["largest_fraction"] >= NOISY_LARGEST_FRACTION
+    ):
+        return None
+    return Advisory(
+        code="noisy_segmentation",
+        message=(
+            f"The recommended polarity ('{polarity}') is {stats['component_count']} "
+            f"components and the largest is only {stats['largest_fraction']:.0%} of "
+            "the masked pixels: this channel/method is picking up background "
+            "texture, not a plant. `ambiguous` only compares the two polarities' "
+            "coverage and is not a quality verdict. Try a different channel "
+            "(look at the colorspace sheet), or segment() and refine() with "
+            "median_blur/opening plus keep_largest and check the overlay."
+        ),
+    )
 
 
 def polarity_report(
@@ -45,9 +73,11 @@ def polarity_report(
             img, channel, method, object_type=object_type, fill_size=fill_size
         )
         diag = analyze_mask(mask)
+        total = sum(diag.areas)
         per_polarity[object_type] = {
             "mask_fraction": diag.mask_fraction,
             "component_count": diag.component_count,
+            "largest_fraction": (diag.largest_area / total) if total else 0.0,
         }
 
     fractions = {k: v["mask_fraction"] for k, v in per_polarity.items()}
@@ -57,6 +87,10 @@ def polarity_report(
     report = dict(per_polarity)
     report["recommended"] = recommended
     report["ambiguous"] = ambiguous
+    noisy = noisy_segmentation_warning(recommended, per_polarity[recommended])
+    report["warnings"] = (
+        [{"code": noisy.code, "message": noisy.message}] if noisy else []
+    )
     report["basis"] = (
         "The polarity covering less of the frame is assumed to be the plant. "
         "Check the overlay before trusting this on a subject that fills the frame."

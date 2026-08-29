@@ -86,14 +86,19 @@ means the mask is probably inverted — re-run with the opposite `object_type`.
 segmentation found nothing.
 
 Do not guess `channel` or `object_type`. suggest_segmentation reports what both
-polarities actually yield on the image in front of you.
+polarities actually yield on the image in front of you. Its `noisy_segmentation`
+warning means the recommended polarity is specks, not a plant: pick another
+channel from the colourspace sheet. `ambiguous` is a polarity comparison, not a
+quality verdict.
 
 If the overlay is nearly right — a hole in the leaf, specks on the background, a
 second object that is not the plant — use refine() instead of hunting for a
 different threshold: [{"op": "fill_holes"}, {"op": "keep_largest", "n": 1}] is
 the usual cleanup. refine() returns a NEW session and its overlay; look at that
-overlay too, and measure the refined session. Trait tables carry `lineage`, the
-ops that produced their mask.
+overlay too, and measure the refined session. `refine_dropped_object` means an
+op threw away a leaf-sized component (a leaf that opening/erode split off and
+keep_largest discarded) — decide from the overlay whether it belonged to the
+plant. Trait tables carry `lineage`, the ops that produced their mask.
 
 Traits are in PIXELS unless you pass px_per_mm to measure(), and pixel sizes are
 not comparable between images taken at different distances or zoom levels.
@@ -403,10 +408,11 @@ def _measure_impl(
 def _refine_impl(session_id: str, ops: list[dict]) -> dict:
     session = _session_of(session_id, "rgb")
     validated = validate_ops(ops)  # all-or-nothing, before anything runs
-    mask = dispatch("refine", session.mask, validated)  # refuses a degenerate result
+    # refuses a degenerate result; reports every major object an op threw away
+    mask, dropped = dispatch("refine", session.mask, validated)
     before = analyze_mask(session.mask)
     after = analyze_mask(mask)
-    warnings = refinement_warnings(mask, before, after)
+    warnings = refinement_warnings(mask, before, after, dropped)
 
     # Re-read through the same integrity guards measure() uses: refining a
     # session whose file changed underneath would draw the overlay on pixels
@@ -828,7 +834,10 @@ def build_server() -> MCPServer:
     ) -> list:
         """Return colourspace and threshold contact sheets, plus what each
         object_type would yield on this image, so the channel/method/polarity
-        choice is informed rather than blind. Call this before segment()."""
+        choice is informed rather than blind. Call this before segment().
+        polarity.warnings carries `noisy_segmentation` when the recommended
+        polarity is many components with no dominant one — background texture,
+        not a plant — which the `ambiguous` flag alone cannot tell you."""
         img = load_image(check_readable(image_path))
         cs, cs_scale = downscale(colorspace_sheet(img))
         th, th_scale = downscale(threshold_sheet(img, channel))
@@ -893,8 +902,10 @@ def build_server() -> MCPServer:
         looks wrong is simply discarded. Returns the refined overlay — look at it
         — plus before/after mask diagnostics and warnings; NOT traits. Every op
         is validated before any runs, and a refinement that leaves no measurable
-        plant is refused rather than minted. measure() results carry `lineage`,
-        the ops that produced their mask.
+        plant is refused rather than minted. A `refine_dropped_object` warning
+        names any component ≥10% of the largest that an op removed entirely,
+        and the earlier op that split it off. measure() results carry
+        `lineage`, the ops that produced their mask.
         """
         result = _refine_impl(session_id, ops)
         png = result.pop("_png")
