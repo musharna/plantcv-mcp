@@ -292,11 +292,13 @@ def test_an_inverted_mask_is_refused_before_the_skeleton_is_built(monkeypatch):
         measure_morphology(img, plant)
 
 
-def test_unjoinable_stem_pieces_are_refused_with_the_bridging_remedy(monkeypatch):
-    """PlantCV's 'Unable to combine stem objects.' is a stem in pieces the
-    skeleton cannot join (a gap in the mask, or several plants), not spurs;
-    on a real maize photo it arrived wrapped in the too-many-tips advice to
-    raise prune_size. Name the cause and the ops that bridge a gap."""
+def test_unjoinable_stem_pieces_are_refused_with_what_actually_worked(monkeypatch):
+    """PlantCV's 'Unable to combine stem objects.' is a stem in pieces. The
+    first remedy shipped for it — closing/fill_holes to bridge the gap — was
+    a guess, and on the real sorghum photo closing 7 and 15 both left the stem
+    unjoinable; the break came from the refine chain itself (opening 5 +
+    median_blur 11), and a different chain measured the plant. Say what was
+    measured, not what sounds right."""
     from plantcv import plantcv as pcv
 
     def unjoinable(*a, **k):
@@ -306,8 +308,9 @@ def test_unjoinable_stem_pieces_are_refused_with_the_bridging_remedy(monkeypatch
     with pytest.raises(MorphologyRefusedError) as exc:
         measure_morphology(*_plant())
     msg = str(exc.value)
-    assert "stem" in msg and "closing" in msg and "fill_holes" in msg
-    assert "measure_regions" in msg
+    assert "stem" in msg and "closing did not" in msg
+    assert "opening 9" in msg and "median_blur 21" in msg and "median_blur 11" in msg
+    assert "overlay" in msg and "measure_regions" in msg
     assert "prune_size" not in msg
 
 
@@ -356,3 +359,54 @@ def test_a_cv2_error_that_is_not_the_vertical_stem_still_raises(monkeypatch):
     monkeypatch.setattr(pcv.morphology, "segment_insertion_angle", other_failure)
     with pytest.raises(cv2.error, match="something else"):
         measure_morphology(*_plant(stem_tilt_deg=20.0), prune_size=5)
+
+
+def _raiser_inside_plantcvs_insertion_angle(exc_type, text):
+    """A function whose code object claims PlantCV's segment_insertion_angle.py
+    as its file, so a traceback through it looks like PlantCV raised."""
+    ns = {}
+    src = f"def f(*a, **k):\n    raise {exc_type.__name__}({text!r})\n"
+    exec(  # noqa: S102 — a test double that must claim PlantCV's file name
+        compile(
+            src,
+            "/site-packages/plantcv/plantcv/morphology/segment_insertion_angle.py",
+            "exec",
+        ),
+        {exc_type.__name__: exc_type},
+        ns,
+    )
+    return ns["f"]
+
+
+def test_plantcvs_lost_insertion_segment_bookkeeping_is_a_named_warning(monkeypatch):
+    """segment_insertion_angle keeps one list of 'pruned away' flags and another
+    of computed angles; when a segment vanishes for a reason it did not flag
+    the two desync and it pops an empty list — IndexError at its line 140 on a
+    real 37-leaf photo (merged_VS, opening 5 + median_blur 11). Only an
+    IndexError raised INSIDE that PlantCV module is turned into
+    insertion_angle_undefined; the rest of the table is kept."""
+    from plantcv import plantcv as pcv
+
+    monkeypatch.setattr(
+        pcv.morphology,
+        "segment_insertion_angle",
+        _raiser_inside_plantcvs_insertion_angle(IndexError, "list index out of range"),
+    )
+    res = measure_morphology(*_plant(stem_tilt_deg=20.0))
+    assert "insertion_angle_undefined" in [w.code for w in res.warnings]
+    assert res.segments and all(s["insertion_angle"] is None for s in res.segments)
+    assert all(s["path_length"] is not None for s in res.segments)
+    msg = next(w.message for w in res.warnings if w.code == "insertion_angle_undefined")
+    assert "PlantCV" in msg and "insertion" in msg
+
+
+def test_an_index_error_from_our_own_code_is_not_disguised(monkeypatch):
+    """The same exception type raised anywhere else is a bug and must surface."""
+    from plantcv import plantcv as pcv
+
+    def ours(*a, **k):
+        raise IndexError("list index out of range")
+
+    monkeypatch.setattr(pcv.morphology, "segment_insertion_angle", ours)
+    with pytest.raises(IndexError):
+        measure_morphology(*_plant(stem_tilt_deg=20.0))

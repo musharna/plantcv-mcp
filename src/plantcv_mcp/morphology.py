@@ -116,6 +116,16 @@ def _crop_bounds(mask255: np.ndarray, margin: int) -> tuple[int, int, int, int]:
     )
 
 
+def _raised_inside(exc: BaseException, filename: str) -> bool:
+    """True when the innermost frame of `exc` is in a file of that name."""
+    tb = exc.__traceback__
+    if tb is None:
+        return False
+    while tb.tb_next is not None:
+        tb = tb.tb_next
+    return tb.tb_frame.f_code.co_filename.endswith(filename)
+
+
 def _stem_line_leaves_int32(stem_objects: list, cols: int) -> bool:
     """True when the line PlantCV fits through the stem, extrapolated to the
     frame's edges as segment_insertion_angle does, has a y outside int32 —
@@ -292,6 +302,29 @@ def measure_morphology(
                                 ),
                             )
                         )
+                    except IndexError as exc:
+                        # PlantCV keeps one list of "pruned away" flags and
+                        # another of computed angles; when an insertion
+                        # segment vanishes for a reason it did not flag, the
+                        # two desync and it pops an empty list (its line 140,
+                        # on a real 37-leaf photo). Only an IndexError raised
+                        # INSIDE that module is PlantCV's; ours stays a crash.
+                        if not _raised_inside(exc, "segment_insertion_angle.py"):
+                            raise
+                        warnings.append(
+                            Advisory(
+                                code="insertion_angle_undefined",
+                                message=(
+                                    "PlantCV lost track of which insertion segments "
+                                    "survived its own pruning (an internal list "
+                                    "desync in segment_insertion_angle), so "
+                                    "insertion_angle is null for every segment. Path "
+                                    "lengths, tangent angles and stem traits are "
+                                    "unaffected; a different refine() chain usually "
+                                    "avoids it."
+                                ),
+                            )
+                        )
                 pcv.morphology.analyze_stem(
                     rgb_img=img_c, stem_objects=stem_objects, label=LABEL
                 )
@@ -325,9 +358,12 @@ def measure_morphology(
             # in the mask (or a second plant) is.
             raise MorphologyRefusedError(
                 "PlantCV could not join the stem segments into one stem: the "
-                "mask's stem is in pieces (a gap where the threshold lost it, "
-                "or more than one plant). refine() with closing or fill_holes "
-                "to bridge the gap and re-measure; if the overlay shows several "
+                "mask's stem is in pieces. Measured on real photos, the break "
+                "came from the refine() chain itself (opening 5 + median_blur 11 "
+                "cut the sorghum and maize stems) and closing did not repair it, "
+                "while median_blur 11 alone measured the maize and opening 9 + "
+                "median_blur 21 the sorghum. Try a different chain and check the "
+                "refined overlay for a stem in one piece; if it shows several "
                 "plants, use measure_regions() or refine(keep_largest=1)."
             ) from exc
         # PlantCV's fatal_error() on a skeleton it cannot analyse ("Too many
@@ -342,9 +378,11 @@ def measure_morphology(
             # than any prune reaches (a jagged mask edge on a real photo), and
             # "raise prune_size" sends the user up a ladder that never ends.
             remedy = (
-                "; raising prune_size does not help here. refine() the mask "
-                "(median_blur, opening) so the skeleton has fewer spurs, then "
-                "re-measure."
+                "; raising prune_size does not help here. refine() the mask so "
+                "the skeleton has fewer spurs, then re-measure — measured on real "
+                "photos: median_blur 11 (maize, a 37-leaf plant), opening 9 + "
+                "median_blur 21 (sorghum); median_blur 5 was not enough, and "
+                "prune_size 100 then gave a warning-free table on all three."
             )
         else:
             remedy = (

@@ -6,6 +6,38 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.5.4] — 2026-08-29
+
+A remedy-convergence sweep over the leafy real photos (4 photos × 4 refine
+chains × 4 prune sizes, after 1.5.3 made each call cheap), plus mutation round 7
+over the 1.5.3 guards.
+
+### Fixed
+
+- **A third crash inside `segment_insertion_angle` is named.** PlantCV keeps one
+  list of "pruned away" flags and another of computed angles; when an insertion
+  segment vanishes for a reason it did not flag, the two desync and it pops an
+  empty list — `IndexError` at its line 140 on a real 37-leaf photo. Only an
+  `IndexError` raised inside that PlantCV module is turned into
+  `insertion_angle_undefined` (the traceback is checked); the rest of the table
+  is kept. An `IndexError` from anywhere else still raises.
+- **The refusal remedies say what was measured, not what sounded right.** The
+  "stem cannot be joined" remedy shipped in 1.5.3 suggested `closing` /
+  `fill_holes`; on the real sorghum photo `closing` 7 and 15 both left the stem
+  unjoinable — the break came from the refine chain (`opening 5` +
+  `median_blur 11`), and a different chain measured the plant. Both that remedy
+  and the "too many tips" one now name the chains that worked on the real
+  photos (`median_blur 11`; `opening 9` + `median_blur 21`; `prune_size 100`
+  warning-free on all three) and that `median_blur 5` was not enough.
+
+### Tests
+
+- Mutation round 7 (`docs/MUTATION-CHECKS.md`): nine 1.5.3 guards; three were
+  removable — the palette reset on entering `isolated_pcv_outputs`, the restore
+  of the host's palette on exit, and the refit that verifies a `cv2.error` is
+  the vertical-stem case — and are now pinned.
+- 287 tests.
+
 ## [1.5.3] — 2026-08-29
 
 First run of `measure_morphology` on real photographs (eight of the tutorial
