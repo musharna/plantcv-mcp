@@ -213,11 +213,65 @@ def multi_specimen_warning(diag: MaskDiagnostics) -> "Advisory | None":
     )
 
 
+# Specks, not plants. Calibrated on real photographs (a/otsu, fill 200/50):
+#   sorghum in a chamber   118/522 components, 2 major, largest 30%  -> noise
+#   27-seedling tray        27/34  components, 5 major, largest 19%  -> plants
+#   arabidopsis trays       28-36  components, 13-15 major           -> plants
+#   maize + colour card     21-31  components, 2 major, largest 52%  -> plants
+# Component count and the largest object's share cannot separate the first
+# two rows; the number of NON-major components can (116 vs 22): texture is
+# dozens of specks around whatever plants there are.
+NOISY_MINOR_COMPONENTS = 50
+NOISY_LARGEST_FRACTION = 0.5
+
+
+def largest_fraction(diag: MaskDiagnostics) -> float:
+    """Largest component's share of all masked pixels (0.0 for an empty mask)."""
+    total = sum(diag.areas)
+    return diag.largest_area / total if total else 0.0
+
+
+def is_noisy(
+    component_count: int, largest_frac: float, major_object_count: int
+) -> bool:
+    """At least NOISY_MINOR_COMPONENTS components that are not major objects,
+    and no single object holding half the mask."""
+    return (
+        component_count - major_object_count >= NOISY_MINOR_COMPONENTS
+        and largest_frac < NOISY_LARGEST_FRACTION
+    )
+
+
+def noisy_segmentation_warning(diag: MaskDiagnostics) -> "Advisory | None":
+    """Warn when the mask is background texture rather than plant material.
+
+    Found unattended: a batch measured a sorghum photo at 118 components as
+    one 650,000-px plant, because nothing between the guards looked at
+    what the components were.
+    """
+    frac = largest_fraction(diag)
+    if not is_noisy(diag.component_count, frac, diag.major_object_count):
+        return None
+    return Advisory(
+        code="noisy_segmentation",
+        message=(
+            f"The mask is {diag.component_count} components, "
+            f"{diag.component_count - diag.major_object_count} of them specks "
+            f"beside {diag.major_object_count} object(s), and the largest is "
+            f"only {frac:.0%} of the masked pixels: this looks like background "
+            "texture, not a plant, and size traits would describe the specks. "
+            "Try a different channel (suggest_segmentation shows the "
+            "colourspace sheet), or segment() and refine() with "
+            "median_blur/opening plus keep_largest, and check the overlay."
+        ),
+    )
+
+
 # Warnings meaning the traits would describe something other than the plant.
 # Anything listed here BLOCKS an unattended measurement: with nobody looking at an
 # overlay, these are the cases where a number must not be returned at all.
 BLOCKING_CODES: frozenset[str] = frozenset(
-    {"empty_mask", "fill_erased_mask", "implausible_coverage"}
+    {"empty_mask", "fill_erased_mask", "implausible_coverage", "noisy_segmentation"}
 )
 
 
@@ -237,6 +291,10 @@ def mask_warnings(
     coverage = implausible_coverage_warning(diag, remedy=remedies.coverage)
     if coverage:
         warnings.append(coverage)
+
+    noisy = noisy_segmentation_warning(diag)
+    if noisy:
+        warnings.append(noisy)
 
     multi = multi_specimen_warning(diag)
     if multi:

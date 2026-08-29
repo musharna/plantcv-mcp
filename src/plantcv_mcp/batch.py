@@ -18,7 +18,10 @@ That is weaker than a human looking at a mask, and it is stated here so nobody
 mistakes it for the same thing.
 """
 
+import time
+from collections import Counter
 from dataclasses import dataclass, field
+from typing import Any
 
 from plantcv import plantcv as pcv
 
@@ -26,12 +29,28 @@ from . import plantcv_version
 from .color import correct_color
 from .diagnostics import BLOCKING_CODES, Advisory, analyze_mask, segmentation_warnings
 from .imaging import load_image
-from .measurement import measure_traits
-from .segmentation import threshold_mask
+from .measurement import ANALYSES, UnknownAnalysisError, measure_traits
+from .regions import build_regions, grid_misalignment_warning, measure_regions
+from .segmentation import (
+    CHANNELS,
+    METHODS,
+    OBJECT_TYPES,
+    UnknownChannelError,
+    UnknownMethodError,
+    UnknownObjectTypeError,
+    threshold_mask,
+)
 
 # A cap, so a model passing a directory glob of ten thousand files fails fast and
 # loudly instead of pinning a CPU for an hour.
 MAX_BATCH = 200
+
+# Wall-clock budget for one call. Measured on real 3000-px photographs: 9-11 s
+# per image, serial, so the 200-image cap alone allowed a ~30-minute call with
+# no output at all -- longer than most MCP clients wait. Images not started
+# before the budget runs out are returned as not run, so the caller gets the
+# partial result and the list to resubmit.
+DEFAULT_MAX_SECONDS = 300.0
 
 
 class BatchTooLargeError(Exception):
@@ -47,6 +66,58 @@ class BatchEntry:
     warnings: list[Advisory] = field(default_factory=list)
     traits: dict | None = None
     refused_because: str | None = None
+    seconds: float | None = None
+    not_run: bool = False
+    regions: list[dict] | None = None  # per-plant rows when a grid was given
+
+
+def _validate_recipe(
+    channel: str,
+    method: str,
+    object_type: str,
+    analyses: tuple[str, ...],
+    max_seconds: float | None,
+    grid: dict[str, Any] | None,
+) -> None:
+    """A recipe error is ONE error, raised before any image is loaded.
+
+    Found on a real batch: channel='zz' ran every image and returned N
+    identical UnknownChannelError rows with measured=0.
+    """
+    if channel not in CHANNELS:
+        raise UnknownChannelError(
+            f"Unknown channel {channel!r}. Valid channels: {sorted(CHANNELS)}."
+        )
+    if method not in METHODS:
+        raise UnknownMethodError(f"Unknown method {method!r}. Valid: {list(METHODS)}.")
+    if object_type not in OBJECT_TYPES:
+        raise UnknownObjectTypeError(
+            f"Unknown object_type {object_type!r}. Valid: {list(OBJECT_TYPES)}."
+        )
+    unknown = [a for a in analyses if a not in ANALYSES]
+    if unknown or not analyses:
+        raise UnknownAnalysisError(
+            f"Unknown analyses {unknown}. Valid: {list(ANALYSES)}."
+            if unknown
+            else f"No analyses requested. Choose at least one of {list(ANALYSES)}."
+        )
+    if max_seconds is not None and max_seconds < 0:
+        raise ValueError(f"max_seconds must be >= 0 or null, got {max_seconds}.")
+    if grid is not None:
+        if grid["nrows"] < 1 or grid["ncols"] < 1:
+            raise ValueError(
+                f"nrows and ncols must be >= 1, got {grid['nrows']}x{grid['ncols']}."
+            )
+        if grid["mode"] == "rect_grid" and None in (
+            grid["coord"],
+            grid["height"],
+            grid["width"],
+            grid["spacing"],
+        ):
+            raise ValueError(
+                "mode='rect_grid' needs coord, height, width and spacing; nothing "
+                "is guessed for an unattended batch."
+            )
 
 
 def measure_batch(
@@ -61,8 +132,27 @@ def measure_batch(
     px_per_mm: float | None = None,
     include_histograms: bool = False,
     color_correct: bool = False,
+    max_seconds: float | None = DEFAULT_MAX_SECONDS,
+    nrows: int | None = None,
+    ncols: int | None = None,
+    mode: str = "auto_grid",
+    coord: tuple[int, int] | None = None,
+    height: int | None = None,
+    width: int | None = None,
+    spacing: tuple[int, int] | None = None,
+    radius: int | None = None,
 ) -> dict:
     """Segment and measure many images with one fixed recipe.
+
+    With nrows/ncols the mask of each image is measured per region exactly as
+    measure_regions() does (same partition, same refusals), and the row
+    carries `regions` instead of `traits`: a batch of trays otherwise returns
+    the group's area with only an advisory, which real batches are mostly
+    made of. Blocking guards still apply to the whole mask first.
+
+    max_seconds bounds the call: images not started before it runs out are
+    returned as not run, listed for resubmission, so the caller gets a partial
+    result instead of a hung call.
 
     The recipe is EVERYTHING segment() takes — channel, method, object_type,
     fill_size, ksize, offset, color_correct — so a recipe settled interactively
@@ -81,9 +171,45 @@ def measure_batch(
             f"{len(image_paths)} images submitted, limit is {MAX_BATCH}. Split the "
             "batch, or narrow the selection."
         )
+    grid: dict[str, Any] | None = None
+    if nrows is not None or ncols is not None:
+        grid = {
+            "mode": mode,
+            "nrows": nrows if nrows is not None else 1,
+            "ncols": ncols if ncols is not None else 1,
+            "coord": coord,
+            "height": height,
+            "width": width,
+            "spacing": spacing,
+            "radius": radius,
+        }
+    _validate_recipe(channel, method, object_type, analyses, max_seconds, grid)
 
-    entries: list[BatchEntry] = []
+    # The same file twice is measured once; the summary says what was dropped.
+    unique: list[str] = []
+    duplicates: list[str] = []
     for path in image_paths:
+        (duplicates if path in unique else unique).append(path)
+
+    started = time.perf_counter()
+    entries: list[BatchEntry] = []
+    for path in unique:
+        elapsed = time.perf_counter() - started
+        if max_seconds is not None and entries and elapsed > max_seconds:
+            entries.append(
+                BatchEntry(
+                    image_path=path,
+                    measured=False,
+                    not_run=True,
+                    refused_because=(
+                        f"not run: the {max_seconds:g} s time budget was used up "
+                        f"after {len(entries)} image(s) ({elapsed:.0f} s). "
+                        "Resubmit the not_run_paths, or raise max_seconds."
+                    ),
+                )
+            )
+            continue
+        t0 = time.perf_counter()
         try:
             img = load_image(path)
             if color_correct:
@@ -113,6 +239,7 @@ def measure_batch(
                     image_path=path,
                     measured=False,
                     refused_because=f"{type(exc).__name__}: {exc}",
+                    seconds=time.perf_counter() - t0,
                 )
             )
             continue
@@ -131,18 +258,40 @@ def measure_batch(
                         "because the mask probably does not describe the plant. "
                         "Inspect this image with segment() and look at the overlay."
                     ),
+                    seconds=time.perf_counter() - t0,
                 )
             )
             continue
 
         try:
-            traits = measure_traits(
-                img,
-                mask,
-                analyses=analyses,
-                px_per_mm=px_per_mm,
-                include_histograms=include_histograms,
-            )
+            if grid is None:
+                traits = measure_traits(
+                    img,
+                    mask,
+                    analyses=analyses,
+                    px_per_mm=px_per_mm,
+                    include_histograms=include_histograms,
+                )
+                regions = None
+            else:
+                region_set = build_regions(img, mask, **grid)
+                rows = measure_regions(
+                    img,
+                    mask,
+                    region_set,
+                    analyses=analyses,
+                    px_per_mm=px_per_mm,
+                    include_histograms=include_histograms,
+                )
+                traits = None
+                regions = [dict(r) for r in rows]
+                # multi_specimen says "this number describes a group"; with a
+                # grid there is no group number, so the advisory would mislead.
+                warnings = [w for w in warnings if w.code != "multi_specimen"]
+                warnings.extend(region_set.warnings)
+                misaligned = grid_misalignment_warning(region_set.mode, rows)
+                if misaligned:
+                    warnings.append(misaligned)
         except Exception as exc:  # noqa: BLE001 — same rationale as above:
             # a single image failing to measure must not lose the other 199.
             entries.append(
@@ -153,6 +302,7 @@ def measure_batch(
                     component_count=diag.component_count,
                     warnings=warnings,
                     refused_because=f"{type(exc).__name__}: {exc}",
+                    seconds=time.perf_counter() - t0,
                 )
             )
             continue
@@ -165,11 +315,15 @@ def measure_batch(
                 component_count=diag.component_count,
                 warnings=warnings,
                 traits=traits,
+                regions=regions,
+                seconds=time.perf_counter() - t0,
             )
         )
 
     measured = [e for e in entries if e.measured]
-    refused = [e for e in entries if not e.measured]
+    not_run = [e for e in entries if e.not_run]
+    refused = [e for e in entries if not e.measured and not e.not_run]
+    advisory_counts = Counter(w.code for e in measured for w in e.warnings)
     return {
         "recipe": {
             "channel": channel,
@@ -181,15 +335,26 @@ def measure_batch(
             "color_correct": color_correct,
             "analyses": list(analyses),
             "px_per_mm": px_per_mm,
+            "max_seconds": max_seconds,
+            "regions": (
+                {k: v for k, v in grid.items() if v is not None} if grid else None
+            ),
         },
+        "elapsed_s": time.perf_counter() - started,
         # Which PlantCV produced these numbers, travelling WITH them — the same
         # provenance measure() carries, for the same reason.
         "engine": {"name": "PlantCV", "version": plantcv_version()},
         "summary": {
             "submitted": len(image_paths),
+            "unique": len(unique),
+            "duplicates_dropped": duplicates,
             "measured": len(measured),
+            "with_advisories": sum(1 for e in measured if e.warnings),
+            "advisory_counts": dict(advisory_counts),
             "needs_review": len(refused),
             "review_paths": [e.image_path for e in refused],
+            "not_run": len(not_run),
+            "not_run_paths": [e.image_path for e in not_run],
         },
         "results": [
             {
@@ -202,6 +367,15 @@ def measure_batch(
                 ],
                 "traits": e.traits,
                 "refused_because": e.refused_because,
+                "seconds": e.seconds,
+                **(
+                    {
+                        "regions": e.regions,
+                        "regions_measured": sum(1 for r in e.regions if r["measured"]),
+                    }
+                    if e.regions is not None
+                    else {}
+                ),
             }
             for e in entries
         ],

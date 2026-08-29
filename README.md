@@ -118,7 +118,7 @@ the methods, and the pinned PlantCV version.
 | `measure(session_id, analyses, px_per_mm, ...)`                         | traits, or a raised error on a degenerate mask          |
 | `calibrate_scale_from_marker(image_path, x, y, w, h, marker_length_mm)` | `px_per_mm` from a marker of known real size            |
 | `measure_regions(session_id, nrows, ncols, ...)`                        | one row per plant in a tray (RGB traits, thermal temperatures or HSI index stats), plus the numbered overlay |
-| `measure_images(image_paths, channel, method, ...)`                     | one recipe across many images; traits only where valid  |
+| `measure_images(image_paths, channel, method, ...)`                     | one recipe across many images (per plant with a grid); traits only where valid; time-budgeted |
 | `segment_hyperspectral(envi_path, index, threshold, ...)`               | an HSI session from a spectral-index threshold + pseudo-RGB overlay |
 | `measure_spectral(session_id, indices, ...)`                            | index statistics (and, opt-in, per-band reflectance)    |
 | `segment_thermal(path, min_c, max_c, ...)`                              | a thermal session from a °C band + grey-frame overlay   |
@@ -312,7 +312,15 @@ This is the one place the two-step discipline cannot hold literally: nobody revi
 overlays. So the overlay is replaced by the only honest substitute — **every image runs the same
 guards as `segment()`, and any image that trips a blocking guard comes back with no traits at
 all**, just a reason and an instruction to inspect it individually. Advisory warnings such as
-`multi_specimen` are attached to the traits rather than suppressing them.
+`multi_specimen` are attached to the traits rather than suppressing them; `noisy_segmentation`
+(dozens of specks around whatever plants there are) blocks.
+
+Trays: pass `nrows`/`ncols` (and `rect_grid` geometry if needed) and each image is measured per
+plant exactly as `measure_regions()` does — the row carries `regions` instead of `traits`. Real
+photographs take seconds each, so `max_seconds` (default 300) bounds the call: images not started
+in time come back as `not_run` with their paths listed for resubmission, and every row reports its
+own `seconds`. A recipe error (unknown channel, method, analysis) is raised once, before any image
+runs; duplicate paths are measured once and listed in the summary.
 
 ```json
 {
