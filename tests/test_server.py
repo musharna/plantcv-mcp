@@ -812,3 +812,44 @@ async def test_measure_images_takes_grid_geometry_and_a_time_budget():
     assert payload["results"][0]["regions_measured"] == 4
     assert payload["elapsed_s"] > 0
     assert payload["summary"]["not_run"] == 0
+
+
+@pytest.mark.anyio
+async def test_an_explicit_empty_analyses_list_is_refused_not_defaulted(tmp_path):
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    path = _write_multi_specimen_png(tmp_path)
+    mcp = build_server()
+    seg = json.loads(
+        (
+            await mcp.call_tool(
+                "segment", {"image_path": path, "channel": "a", "method": "otsu"}
+            )
+        )
+        .content[0]
+        .text
+    )
+    with pytest.raises(ToolError, match="No analyses"):
+        await mcp.call_tool(
+            "measure", {"session_id": seg["session_id"], "analyses": []}
+        )
+    with pytest.raises(ToolError, match="No analyses"):
+        await mcp.call_tool(
+            "measure_regions",
+            {"session_id": seg["session_id"], "nrows": 2, "ncols": 2, "analyses": []},
+        )
+    with pytest.raises(ToolError, match="No analyses"):
+        await mcp.call_tool(
+            "measure_images",
+            {"image_paths": [path], "channel": "a", "method": "otsu", "analyses": []},
+        )
+    with pytest.raises(ToolError, match="indices"):
+        await mcp.call_tool(
+            "measure_regions",
+            {
+                "session_id": seg["session_id"],
+                "nrows": 2,
+                "ncols": 2,
+                "indices": ["ndvi"],
+            },
+        )

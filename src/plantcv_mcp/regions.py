@@ -37,8 +37,8 @@ from .diagnostics import (
     DegenerateMaskError,
     analyze_mask,
     assert_not_degenerate,
-    implausible_coverage_warning,
     implausible_longest_path_warning,
+    multi_specimen_warning,
 )
 from .hyperspectral import compute_index
 from .measurement import (
@@ -427,8 +427,13 @@ def partition_regions(
                     "is returned for it."
                 )
                 cell_warnings = []
+            # Coverage is the cell's own material, so a claimed cell's row
+            # agrees with its reason ("N px lie in this cell").
+            claimed_cov = in_cell / float(cell.size) if cell.size else 0.0
             slots.append(
-                RegionSlot(i, row, col, bbox, label, 0.0, False, reason, cell_warnings)
+                RegionSlot(
+                    i, row, col, bbox, label, claimed_cov, False, reason, cell_warnings
+                )
             )
             continue
 
@@ -455,10 +460,21 @@ def partition_regions(
             )
             continue
 
+        # No coverage check here: cell_diag.mask_fraction is the plant's share
+        # of the CELL, and a plant filling a tight cell is the happy path (a
+        # disc in a tight square is ~79%). The whole-frame inversion check
+        # already ran at segment()/measure(). What a cell CAN hide is several
+        # plants: with roi_type="partial" every object in the cell gets the
+        # cell's label, so four seedlings in one cell fit its bbox and look
+        # like one plant to the exceeds check.
         region_warnings: list[Advisory] = []
-        cover = implausible_coverage_warning(cell_diag)
-        if cover:
-            region_warnings.append(cover)
+        # Judged on the WHOLE labelled object, not the cell crop: a single
+        # plant whose leaf leaves and re-enters the cell is two pieces inside
+        # the crop (a 20,533-px arabidopsis read as two objects that way).
+        whole_diag = analyze_mask((labeled == label).astype(np.uint8) * 255)
+        multi = multi_specimen_warning(whole_diag, scope="cell")
+        if multi:
+            region_warnings.append(multi)
         spill = object_exceeds_region_warning(labeled, label, bbox)
         if spill:
             region_warnings.append(spill)

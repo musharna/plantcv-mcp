@@ -227,3 +227,46 @@ def test_thermal_refusals_and_advisories_name_thermal_tools_not_rgb(tmp_path):
     with pytest.raises(DegenerateMaskError) as exc2:
         segment_thermal(_write_csv(tmp_path, frame2, "f2.csv"), min_c=22.0, max_c=24.0)
     assert "segment_thermal" in str(exc2.value) and "channel" not in str(exc2.value)
+
+
+# --- panel audit of 1.5.1 (2026-08-29) ---
+
+
+def test_a_small_thermal_plant_erased_by_fill_size_is_told_the_fill_size(tmp_path):
+    """assert_not_degenerate ran before segmentation_warnings, so the
+    fill_erased_mask sentence ('fill_size below N') was unreachable and a
+    150-px plant was blamed on the band."""
+    from plantcv_mcp.diagnostics import DegenerateMaskError
+
+    frame = np.full((120, 160), 20.0)
+    yy, xx = np.ogrid[:120, :160]
+    frame[(xx - 80) ** 2 + (yy - 60) ** 2 <= 7**2] = 31.5  # ~150 px
+    path = _write_csv(tmp_path, frame)
+    with pytest.raises(DegenerateMaskError) as exc:
+        segment_thermal(path, min_c=25.0)
+    msg = str(exc.value)
+    assert "fill_size" in msg and "below" in msg
+    assert "band" not in msg.split("fill_size")[0]  # the band is not blamed first
+    # Positive control: a fill_size under the plant measures it.
+    assert (
+        segment_thermal(path, min_c=25.0, fill_size=50).diagnostics.component_count == 1
+    )
+
+
+def test_a_noisy_thermal_mask_is_advised_in_thermal_terms(tmp_path):
+    frame = np.full((400, 400), 20.0)
+    frame[180:220, 180:220] = 31.5
+    rng = np.random.default_rng(6)
+    placed = 0
+    while placed < 60:
+        y, x = rng.integers(0, 382, 2)
+        if 150 <= y <= 240 and 150 <= x <= 240:
+            continue
+        if (frame[y : y + 18, x : x + 18] > 30).any():
+            continue
+        frame[y : y + 18, x : x + 18] = 31.5
+        placed += 1
+    seg = segment_thermal(_write_csv(tmp_path, frame), min_c=25.0)
+    msg = next(w.message for w in seg.warnings if w.code == "noisy_segmentation")
+    assert "segment_thermal" in msg and "band" in msg
+    assert "colourspace" not in msg and "segment()" not in msg

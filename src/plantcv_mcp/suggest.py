@@ -81,10 +81,27 @@ def polarity_report(
     report = dict(per_polarity)
     report["recommended"] = recommended
     report["ambiguous"] = ambiguous
+    advisories = []
+    if per_polarity[recommended]["component_count"] == 0:
+        # min(coverage) happily picks a polarity that selected NOTHING (a
+        # blank frame, or a threshold past every pixel) and calls it
+        # unambiguous. An empty recommendation is not a recommendation.
+        advisories.append(
+            Advisory(
+                code="empty_mask",
+                message=(
+                    f"The recommended polarity ('{recommended}') selects nothing "
+                    "on this image: no objects at all. There may be no plant "
+                    "in the frame, or this channel/method does not separate "
+                    "it. Try another channel from the colourspace sheet and "
+                    "check the overlay from segment()."
+                ),
+            )
+        )
     noisy = noisy_segmentation_warning(recommended, per_polarity[recommended])
-    report["warnings"] = (
-        [{"code": noisy.code, "message": noisy.message}] if noisy else []
-    )
+    if noisy:
+        advisories.append(noisy)
+    report["warnings"] = [{"code": w.code, "message": w.message} for w in advisories]
     report["basis"] = (
         "The polarity covering less of the frame is assumed to be the plant. "
         "Check the overlay before trusting this on a subject that fills the frame."

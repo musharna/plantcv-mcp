@@ -382,3 +382,129 @@ def test_batch_measures_each_plant_when_given_a_grid():
     # a bad grid is a recipe error, raised before anything runs
     with pytest.raises(ValueError, match="nrows"):
         measure_batch([FIXTURE], channel="a", method="otsu", nrows=0, ncols=2)
+
+
+# --- panel audit of 1.5.1 (2026-08-29) ---
+
+
+def _late_germination_tray(tmp_path, name="well96.png"):
+    """10 germinated wells (r=25) and 86 late ones (r=7) on a 10x10 plate: 100
+    components, 10 major, 90 minor, largest 6% of the mask. Whole-mask
+    is_noisy says texture; with a grid every well is a real plant."""
+    tray = np.full((1100, 1100, 3), 200, np.uint8)
+    rng = np.random.default_rng(2)
+    big = {tuple(p) for p in rng.integers(0, 10, (10, 2))}
+    for r in range(10):
+        for c in range(10):
+            cv2.circle(
+                tray,
+                (55 + c * 110, 55 + r * 110),
+                25 if (r, c) in big else 7,
+                (30, 30, 30),
+                -1,
+            )
+    return _write(tmp_path, name, tray)
+
+
+def test_batch_with_a_grid_measures_a_late_germination_tray(tmp_path):
+    p = _late_germination_tray(tmp_path)
+    out = measure_batch(
+        [p], channel="l", method="otsu", fill_size=50, nrows=10, ncols=10
+    )
+    row = out["results"][0]
+    assert row["measured"] is True
+    assert row["regions_measured"] >= 90
+    assert "noisy_segmentation" in [
+        w["code"] for w in row["warnings"]
+    ]  # kept as advice
+    # Positive control: without a grid the same mask is still withheld.
+    blocked = measure_batch([p], channel="l", method="otsu", fill_size=50)
+    assert blocked["results"][0]["measured"] is False
+    assert "noisy_segmentation" in blocked["results"][0]["refused_because"]
+
+
+def test_batch_grid_withholds_rows_whose_object_exceeds_the_cell(tmp_path):
+    """Interactive measure_regions keeps the numbers next to the numbered
+    overlay; the batch has no overlay, so a row the guard has already called a
+    merge must not come back measured."""
+    img = np.full((100, 300, 3), 200, np.uint8)
+    cv2.ellipse(
+        img, (100, 50), (75, 20), 0, 0, 360, (30, 30, 30), -1
+    )  # spans cells 0/1
+    cv2.circle(img, (250, 50), 25, (30, 30, 30), -1)  # inside cell 2
+    p = _write(tmp_path, "spill.png", img)
+    out = measure_batch(
+        [p],
+        channel="l",
+        method="otsu",
+        mode="rect_grid",
+        nrows=1,
+        ncols=3,
+        coord=(0, 0),
+        height=100,
+        width=100,
+        spacing=(100, 0),
+    )
+    rows = out["results"][0]["regions"]
+    exceeding = [
+        r
+        for r in rows
+        if any(w["code"] == "object_exceeds_region" for w in r["warnings"])
+    ]
+    assert exceeding, "fixture must produce a spilling cell"
+    assert all(r["measured"] is False and r["traits"] is None for r in exceeding)
+    assert all("object_exceeds_region" in r["reason"] for r in exceeding)
+    assert rows[2]["measured"] is True and rows[2]["traits"]["area"]["value"] > 0
+
+
+def test_batch_refuses_bad_grid_geometry_before_running_anything():
+    from plantcv_mcp.regions import MAX_REGIONS
+
+    with pytest.raises(ValueError, match="mode"):
+        measure_batch(
+            [FIXTURE], channel="a", method="otsu", nrows=2, ncols=2, mode="hex_grid"
+        )
+    with pytest.raises(ValueError, match="radius"):
+        measure_batch([FIXTURE], channel="a", method="otsu", nrows=2, ncols=2, radius=0)
+    with pytest.raises(ValueError, match="ncols"):
+        measure_batch([FIXTURE], channel="a", method="otsu", nrows=2)
+    with pytest.raises(ValueError, match="nrows"):
+        measure_batch([FIXTURE], channel="a", method="otsu", ncols=2)
+    with pytest.raises(ValueError, match=str(MAX_REGIONS)):
+        measure_batch([FIXTURE], channel="a", method="otsu", nrows=MAX_REGIONS, ncols=2)
+
+
+def test_batch_keeps_measuring_a_tray_shaped_mask(tmp_path):
+    """The not-noisy side of is_noisy: a 30-plant tray with a 3x size spread
+    (28-36 components on the real arabidopsis trays) must stay measurable, or
+    a tightened constant would refuse every tray while every test stayed green."""
+    tray = np.full((700, 700, 3), 200, np.uint8)
+    rng = np.random.default_rng(4)
+    for r in range(6):
+        for c in range(5):
+            cv2.circle(
+                tray,
+                (70 + c * 130, 60 + r * 110),
+                int(rng.integers(12, 36)),
+                (30, 30, 30),
+                -1,
+            )
+    p = _write(tmp_path, "tray30.png", tray)
+    out = measure_batch([p], channel="l", method="otsu", fill_size=50)
+    row = out["results"][0]
+    assert row["component_count"] == 30
+    assert row["measured"] is True
+    assert "noisy_segmentation" not in [w["code"] for w in row["warnings"]]
+
+
+def test_a_marker_that_fills_its_crop_is_flagged():
+    """marker_fills_crop had no test; a crop that is all 'marker' is a crop of
+    background under the wrong polarity."""
+    canvas = np.full((200, 200, 3), 240, np.uint8)
+    canvas[52:148, 52:148] = 30  # 96x96 dark block inside a 100x100 crop: 92%
+    est = calibrate_scale(canvas, 50, 50, 100, 100, marker_length_mm=20.0)
+    codes = [w.code for w in est.warnings]
+    assert "marker_fills_crop" in codes
+    # Positive control: a real marker inside its crop is not flagged.
+    clean = calibrate_scale(_disc_image(), 100, 100, 100, 100, marker_length_mm=20.0)
+    assert "marker_fills_crop" not in [w.code for w in clean.warnings]

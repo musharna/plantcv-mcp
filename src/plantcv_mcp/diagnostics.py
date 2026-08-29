@@ -60,6 +60,7 @@ class Remedies:
     coverage: str  # implausible_coverage: how to get the other polarity
     empty: str  # empty_mask: what to change when nothing was selected
     degenerate: str  # DegenerateMaskError: which segmenter to go back to
+    noisy: str  # noisy_segmentation: where to look for a cleaner selection
 
 
 RGB_REMEDIES = Remedies(
@@ -72,6 +73,11 @@ RGB_REMEDIES = Remedies(
         "smaller fill_size."
     ),
     degenerate="Re-run segment() with a different channel or method.",
+    noisy=(
+        "Try a different channel (suggest_segmentation shows the colourspace "
+        "sheet), or segment() and refine() with median_blur/opening plus "
+        "keep_largest, and check the overlay."
+    ),
 )
 HSI_REMEDIES = Remedies(
     coverage=(
@@ -86,6 +92,10 @@ HSI_REMEDIES = Remedies(
         "Re-run segment_hyperspectral() with a threshold inside the index_range, "
         "or a different index."
     ),
+    noisy=(
+        "Re-run segment_hyperspectral() with a different index or threshold, or "
+        "a larger fill_size, and check the overlay."
+    ),
 )
 THERMAL_REMEDIES = Remedies(
     coverage=(
@@ -99,6 +109,10 @@ THERMAL_REMEDIES = Remedies(
     degenerate=(
         "Re-run segment_thermal() with a band (min_c / max_c) that covers the "
         "plant's temperatures."
+    ),
+    noisy=(
+        "Re-run segment_thermal() with a narrower band (min_c / max_c) or a "
+        "larger fill_size, and check the overlay."
     ),
 )
 RGB_COVERAGE_REMEDY = RGB_REMEDIES.coverage
@@ -190,7 +204,9 @@ def empty_mask_warning(
     )
 
 
-def multi_specimen_warning(diag: MaskDiagnostics) -> "Advisory | None":
+def multi_specimen_warning(
+    diag: MaskDiagnostics, scope: str = "frame"
+) -> "Advisory | None":
     """Warn when the mask holds two or more comparably-sized objects.
 
     Calibrated on a real failure: a 4-view render segmented to areas
@@ -204,11 +220,19 @@ def multi_specimen_warning(diag: MaskDiagnostics) -> "Advisory | None":
         code="multi_specimen",
         message=(
             f"{diag.major_object_count} comparably-sized objects detected "
-            f"(areas: {diag.areas[: diag.major_object_count]}). A whole-image "
-            "ROI will merge them into one object and every size trait will "
-            "describe the group, not a plant. Call measure_regions() "
-            "instead: it measures each plant separately and returns an "
-            "overlay with the regions outlined and numbered."
+            f"(areas: {diag.areas[: diag.major_object_count]}). "
+            + (
+                "A whole-image ROI will merge them into one object and every "
+                "size trait will describe the group, not a plant. Call "
+                "measure_regions() instead: it measures each plant separately "
+                "and returns an overlay with the regions outlined and numbered."
+                if scope == "frame"
+                else "This cell's numbers describe all of them together: either "
+                "several plants share the cell (give a finer grid, or rect_grid "
+                "geometry with one plant per cell) or one plant was split by the "
+                "threshold (refine() with fill_holes/closing). The overlay tells "
+                "which."
+            )
         ),
     )
 
@@ -242,7 +266,9 @@ def is_noisy(
     )
 
 
-def noisy_segmentation_warning(diag: MaskDiagnostics) -> "Advisory | None":
+def noisy_segmentation_warning(
+    diag: MaskDiagnostics, remedy: str = RGB_REMEDIES.noisy
+) -> "Advisory | None":
     """Warn when the mask is background texture rather than plant material.
 
     Found unattended: a batch measured a sorghum photo at 118 components as
@@ -259,10 +285,7 @@ def noisy_segmentation_warning(diag: MaskDiagnostics) -> "Advisory | None":
             f"{diag.component_count - diag.major_object_count} of them specks "
             f"beside {diag.major_object_count} object(s), and the largest is "
             f"only {frac:.0%} of the masked pixels: this looks like background "
-            "texture, not a plant, and size traits would describe the specks. "
-            "Try a different channel (suggest_segmentation shows the "
-            "colourspace sheet), or segment() and refine() with "
-            "median_blur/opening plus keep_largest, and check the overlay."
+            f"texture, not a plant, and size traits would describe the specks. {remedy}"
         ),
     )
 
@@ -292,7 +315,7 @@ def mask_warnings(
     if coverage:
         warnings.append(coverage)
 
-    noisy = noisy_segmentation_warning(diag)
+    noisy = noisy_segmentation_warning(diag, remedy=remedies.noisy)
     if noisy:
         warnings.append(noisy)
 

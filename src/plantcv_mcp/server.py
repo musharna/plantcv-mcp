@@ -49,7 +49,7 @@ from .imaging import (
     render_overlay,
     render_region_overlay,
 )
-from .measurement import ANALYSES, TraitValue
+from .measurement import ANALYSES, TraitValue, validate_analyses
 from .paths import check_readable, configured_roots, set_roots
 from .refine import (
     REFINE_OPS,
@@ -390,7 +390,7 @@ def _measure_impl(
     px_per_mm: float | None = None,
     include_histograms: bool = False,
 ) -> MeasureResult:
-    requested = tuple(analyses) if analyses else ("size",)
+    requested = tuple(analyses) if analyses is not None else ("size",)
     session = _session_of(session_id, "rgb")
     img = _load_session_image(session)
     traits = dispatch(
@@ -766,7 +766,8 @@ def _measure_regions_impl(
 
     extra: dict = {}
     if session.kind == "rgb":
-        requested = tuple(analyses) if analyses else ("size",)
+        requested = tuple(analyses) if analyses is not None else ("size",)
+        validate_analyses(requested)  # before any geometry is built
         img = _load_session_image(session)
         regions = dispatch(
             "regions",
@@ -1194,7 +1195,7 @@ def build_server() -> MCPServer:
             ksize=ksize,
             offset=offset,
             color_correct=color_correct,
-            analyses=tuple(analyses) if analyses else ("size",),
+            analyses=tuple(analyses) if analyses is not None else ("size",),
             px_per_mm=px_per_mm,
             max_seconds=max_seconds,
             nrows=nrows,

@@ -6,6 +6,68 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.5.2] — 2026-08-29
+
+Findings from an independent two-model panel audit of 1.5.1 (or-grok,
+or-deepseek; codex was quota-refused), each reproduced against the code before
+it was fixed.
+
+### Fixed
+
+- **A plant filling its cell was called an inverted mask.** `measure_regions`
+  ran the whole-frame `implausible_coverage` check (50% threshold, RGB polarity
+  remedy) on each cell's own pixels, so two discs filling tight `rect_grid`
+  cells came back "72% of the frame … probably INVERTED … opposite
+  object_type" on every region. Real trays hid it because `auto_grid` cells
+  are ~15% filled. The per-cell coverage check is gone (the whole-frame check
+  already ran at segmentation); what a cell CAN hide is several plants, so it
+  now carries `multi_specimen` when its labelled object is several
+  comparably-sized components — judged on the whole object, not the cell
+  crop, because a leaf that loops out of the cell and back is two pieces in
+  the crop and one plant in fact.
+- **A late-germination plate was withheld before its grid could run.**
+  `measure_images` applied `noisy_segmentation` (blocking) to the whole mask
+  before partitioning; a 96-well plate with ten germinated wells and 86 late
+  ones is 90 non-major components and was refused with `nrows=10, ncols=10`
+  given. With a grid the code is now an advisory on the row; the per-cell
+  degeneracy floor guards each well.
+- **Batch grid rows the guard had already called a merge were returned
+  measured.** `object_exceeds_region` rows in `measure_images` are now
+  `measured=false` with the reason (interactive `measure_regions` keeps the
+  number beside the numbered overlay). On the real X-Rite tray this withholds
+  the 8 merged cells.
+- **A small thermal plant erased by `fill_size` was blamed on the band.**
+  `segment_thermal` raised the degenerate refusal before building
+  `fill_erased_mask`, so a 150-px plant under the default `fill_size=200` was
+  told to widen the band (which then selects background). The refusal now
+  carries the fill_size sentence.
+- **Batch recipe validation** now covers `mode`, `radius`, the 400-region
+  cap, and requires BOTH `nrows` and `ncols` — `nrows=4` alone silently
+  measured 4×1 row strips as plants.
+- `suggest_segmentation` warns (`empty_mask`) when the recommended polarity
+  selected nothing (a blank frame recommended 'dark' at 0.0% as unambiguous).
+- `refine_dropped_object` says what it knows — "the last op that raised the
+  component count" — instead of attributing every drop to that op; its
+  closing sentence no longer claims every dropped object is a leaf (objects
+  under 10% of the largest are not reported).
+- `noisy_segmentation` is worded per modality (a thermal frame is told about
+  its band, not the colourspace sheet).
+- A cell refused as claimed-by-neighbour reports the `region_coverage` its
+  reason describes instead of 0.0.
+- An explicit `analyses=[]` is refused ("No analyses requested") at every
+  tool instead of silently measuring size; the check runs before any grid is
+  built.
+
+### Tests
+
+Guards that were removable with a green suite are now pinned:
+`region_count_mismatch`, `marker_fills_crop`, the firing side of
+`refine_large_change`, a not-noisy tray-shaped mask staying measurable, a
+1.10× overhang not tripping `object_exceeds_region` (and 1.40× tripping it),
+`mode`/`radius`/half-geometry recipe errors, `indices` on an RGB
+`measure_regions`, thermal `fill_erased_mask`, the claimed-cell rule in
+`grid_misaligned`, and a leaf re-entering its cell staying one plant.
+
 ## [1.5.1] — 2026-08-29
 
 Documentation only; no code change. Released so the PyPI project page carries

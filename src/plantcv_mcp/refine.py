@@ -275,8 +275,12 @@ def dropped_object_warning(dropped: Sequence[DroppedObject]) -> Advisory | None:
     ranked = sorted(dropped, key=lambda d: d.area, reverse=True)
     parts = []
     for d in ranked[:DROPPED_OBJECTS_LISTED]:
+        # One slot records the LAST op that raised the component count, so
+        # with two splitting ops the first leaf is attributed to the second
+        # split. Say what is actually known rather than which op cut it.
         origin = (
-            f", which op {d.split_by_op_index} ({d.split_by_op_name}) had split off"
+            f" (the last op that raised the component count before it was op "
+            f"{d.split_by_op_index} ({d.split_by_op_name}))"
             if d.split_by_op_index is not None
             else ""
         )
@@ -290,10 +294,11 @@ def dropped_object_warning(dropped: Sequence[DroppedObject]) -> Advisory | None:
     return Advisory(
         code="refine_dropped_object",
         message=(
-            "; ".join(parts) + ". That is a leaf or a second specimen, not a "
-            "speck: look at the overlay, and if it belongs to the plant, drop "
-            "the op that split it (a smaller opening/erode kernel) or raise n on "
-            "keep_largest."
+            "; ".join(parts) + ". At that size it is more likely a leaf or a "
+            "second specimen than a speck (objects under 10% of the largest are "
+            "not reported): look at the overlay, and if it belongs to the plant, "
+            "drop the op that split it (a smaller opening/erode kernel) or raise "
+            "n on keep_largest."
         ),
     )
 

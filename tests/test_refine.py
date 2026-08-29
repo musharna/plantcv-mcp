@@ -248,3 +248,46 @@ def test_dropped_object_warning_lists_the_largest_three_and_counts_the_rest():
     assert "1500-px" not in msg and "1200-px" not in msg
     assert "2 more" in msg
     assert "2 more" not in dropped_object_warning(drops[:3]).message
+
+
+# --- panel audit of 1.5.1 (2026-08-29) ---
+
+
+def test_refine_large_change_fires_above_the_threshold():
+    """Only the silent side was asserted; a deleted guard passed the suite."""
+    mask = _clean_disc()
+    out, dropped = apply_refinements_traced(
+        mask, [{"op": "dilate", "ksize": 15, "iterations": 3}]
+    )
+    codes = [
+        w.code
+        for w in refinement_warnings(
+            out, analyze_mask(mask), analyze_mask(out), dropped
+        )
+    ]
+    assert "refine_large_change" in codes
+
+
+def test_dropped_object_attribution_is_honest_about_which_split_it_names():
+    """Two openings split two leaves; keep_largest drops both. A single
+    'split_by' slot names the LAST op that raised the component count for
+    both, which is wrong for the first leaf. The message must say what it
+    actually knows."""
+    from plantcv_mcp.refine import dropped_object_warning
+
+    mask = np.zeros((300, 400), np.uint8)
+    cv2.circle(mask, (100, 150), 50, 255, -1)  # plant
+    cv2.circle(mask, (230, 150), 25, 255, -1)  # leaf A, thin bridge
+    mask[149:152, 150:210] = 255
+    cv2.circle(mask, (100, 40), 22, 255, -1)  # leaf B, thicker bridge
+    mask[60:110, 96:105] = 255
+    ops = [
+        {"op": "opening", "ksize": 5},  # cuts the 3-px bridge (leaf A)
+        {"op": "opening", "ksize": 11},  # cuts the 9-px bridge (leaf B)
+        {"op": "keep_largest", "n": 1},
+    ]
+    _out, dropped = apply_refinements_traced(mask, ops)
+    assert len(dropped) == 2
+    msg = dropped_object_warning(dropped).message
+    assert "last op that raised the component count" in msg
+    assert "op 1 (opening)" in msg
