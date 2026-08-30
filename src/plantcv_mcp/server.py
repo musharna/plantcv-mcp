@@ -33,7 +33,7 @@ from typing_extensions import TypedDict
 
 from . import __version__, plantcv_version
 from .batch import DEFAULT_MAX_SECONDS
-from .color import correct_color
+from .color import color_card_excluded_advisory, correct_color, exclude_card
 from .diagnostics import (
     analyze_mask,
     implausible_longest_path_warning,
@@ -303,22 +303,32 @@ def _segment_impl(
     # the path afterwards left a window in which a same-shape replacement was
     # recorded as this mask's identity.
     img, digest = load_image_with_digest(check_readable(image_path))
+    card = None
     if color_correct:
         # Raises if no card is found. Silently measuring an uncorrected image after
         # being asked to correct it would be the same confident wrongness as an
         # inverted mask.
-        img = correct_color(img)
+        img, card = correct_color(img)
 
     # Threshold and fill run separately so a mask erased by fill_size can be
     # named as such instead of looking like a bad channel/method choice.
     pre_fill = threshold_mask(
         img, channel, method, object_type=object_type, ksize=ksize, offset=offset
     )
+    card_note = None
+    if card is not None:
+        # The card the correction just located is the instrument, not a
+        # specimen. Left in, its chips merged into the largest "plant" on a
+        # real photo, suppressing multi_specimen and dominating group traits.
+        pre_fill, removed = exclude_card(pre_fill, card)
+        card_note = color_card_excluded_advisory(removed, card)
     mask = pcv.fill(bin_img=pre_fill, size=fill_size)
 
     diag = analyze_mask(mask)
     # Shared with the batch path so the two cannot apply different guards.
     warnings = segmentation_warnings(mask, diag, analyze_mask(pre_fill), fill_size)
+    if card_note is not None:
+        warnings.append(card_note)
 
     session = _store.create(
         image_path,
@@ -379,8 +389,9 @@ def _load_session_image(session) -> np.ndarray:
     if session.color_correct:
         # Applied AFTER the integrity guards, so a missing colour card cannot mask
         # a stale-image error. The mask was drawn on corrected pixels, so the
-        # traits have to be measured on corrected pixels too.
-        img = correct_color(img)
+        # traits have to be measured on corrected pixels too. The card region is
+        # not needed here: it was already excluded from the stored mask.
+        img, _ = correct_color(img)
     return img
 
 
@@ -937,7 +948,11 @@ def build_server() -> MCPServer:
         components smaller than itself and will erase a genuinely small
         specimen. ksize and offset apply to the 'mean' and 'gaussian' methods.
         color_correct requires a ColorChecker card in the frame and RAISES if it
-        cannot find one; it makes colour traits comparable across lighting.
+        cannot find one; it makes colour traits comparable across lighting. The
+        card's own region is then excluded from the mask (`color_card_excluded`
+        advisory) — the card is the instrument, not a specimen. Without
+        color_correct the server never looks for a card, so keep cards out of
+        the frame or out of the measured regions.
         """
         result = _segment_impl(
             image_path,
@@ -1189,7 +1204,9 @@ def build_server() -> MCPServer:
         SAME arguments — including ksize/offset for the 'mean' and 'gaussian'
         methods and color_correct if you used it; the returned `recipe` records
         exactly what ran. An image that cannot be colour-corrected when asked is
-        refused, not measured raw. Limit is 200 images per call.
+        refused, not measured raw, and the detected card's region is excluded
+        from every corrected mask (`color_card_excluded`) — the card is the
+        instrument, not a specimen. Limit is 200 images per call.
         """
         # Every path is checked BEFORE any is loaded: a batch with one stray
         # path is refused whole, not partially run.

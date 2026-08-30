@@ -418,18 +418,35 @@ def implausible_longest_path_warning(traits: dict) -> "Advisory | None":
 
 
 def frame_clipping_warning(mask: np.ndarray) -> "Advisory | None":
-    """Warn when mask pixels touch the frame edge.
+    """Warn when a MAJOR object's pixels touch the frame edge.
 
     Computed here rather than trusting PlantCV's in_bounds, which reports True
     on an all-zero mask and so cannot discriminate this case.
+
+    Judged per component, not on the mask as a whole: on a real photo two
+    5-px-wide background slivers at the frame edge declared eleven interior
+    beans "cut off". Clipping is a claim about the specimen, so it needs an
+    edge-touching component comparable to the largest (the analyze_mask major
+    rule); a plant that is itself mostly out of frame still warns, because its
+    visible sliver IS the largest object.
     """
-    binary = mask > 0
+    binary = (mask > 0).astype(np.uint8)
     if not (
         binary[0, :].any()
         or binary[-1, :].any()
         or binary[:, 0].any()
         or binary[:, -1].any()
     ):
+        return None
+    _, _, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    largest = int(stats[1:, cv2.CC_STAT_AREA].max())
+    frame_h, frame_w = binary.shape
+    touching_major = any(
+        (x <= 0 or y <= 0 or x + w >= frame_w or y + h >= frame_h)
+        and area >= 0.25 * largest
+        for x, y, w, h, area in stats[1:]
+    )
+    if not touching_major:
         return None
     return Advisory(
         code="frame_clipping",

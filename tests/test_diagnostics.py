@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 import pytest
 
@@ -302,3 +303,27 @@ def test_a_dominant_plant_with_many_specks_is_not_noisy_end_to_end():
         small.component_count, largest_fraction(small), small.major_object_count
     )
     assert noisy_segmentation_warning(small, RGB_REMEDIES.noisy) is not None
+
+
+def test_frame_clipping_ignores_a_minor_sliver_at_the_edge():
+    """The real beans photo: every specimen interior, but two 5-px-wide
+    background slivers on the right edge declared the group 'cut off'.
+    Clipping is a claim about the SPECIMEN, so it needs a major object at
+    the edge, not any stray pixel."""
+    mask = np.zeros((200, 200), dtype=np.uint8)
+    cv2.circle(mask, (100, 100), 40, 255, -1)  # the plant, interior
+    mask[60:140, 198:200] = 255  # a 160-px background sliver on the edge
+    assert frame_clipping_warning(mask) is None
+
+    # Positive control, same test: the plant itself at the edge still fires.
+    clipped = np.zeros((200, 200), dtype=np.uint8)
+    cv2.circle(clipped, (196, 100), 40, 255, -1)
+    warn = frame_clipping_warning(clipped)
+    assert warn is not None and warn.code == "frame_clipping"
+
+    # And a plant that is MOSTLY out of frame is itself the largest object,
+    # so its sliver still counts as clipping.
+    mostly_out = np.zeros((200, 200), dtype=np.uint8)
+    mostly_out[80:120, 197:200] = 255
+    warn = frame_clipping_warning(mostly_out)
+    assert warn is not None and warn.code == "frame_clipping"

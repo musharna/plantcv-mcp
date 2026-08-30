@@ -6,6 +6,59 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-08-30
+
+Findings from the first real-photograph run of `calibrate_scale_from_marker`
+and colour correction (a CameraTrax 24ColorCard beside eleven kidney beans, an
+X-Rite ColorChecker in an imaging booth, a card half-occluded by a cucumber
+leaf), each reproduced against the code before it was fixed.
+
+### Changed
+
+- **The detected colour card is excluded from the measured mask.** On the real
+  beans photo, `color_correct=true` detected the card, corrected the colours —
+  and then measured the card: its warm chips merged into the largest object in
+  the scene (254,571 px), which suppressed `multi_specimen` (the eleven beans
+  all read as minor beside it) and dominated the group traits — `measure()`
+  returned a 727,848-px "plant" spanning the frame with only `frame_clipping`
+  warned, and the batch row came back `measured: true`. The card the
+  correction just located is the instrument, not a specimen: its region
+  (detected chip extent, padded by the median chip size) is now removed from
+  the mask before any diagnostics, in `segment()` and `measure_images()` both,
+  with a `color_card_excluded` advisory saying how many pixels went. On the
+  same photo the eleven beans are now the eleven major objects and
+  `multi_specimen` fires. A mask that is empty after exclusion is refused as
+  `empty_mask` — everything the threshold selected was card. With
+  `color_correct=false` the server never looks for a card; the guide now says
+  to keep cards out of the frame or out of the measured regions there.
+- **`frame_clipping` is judged per component, not on the mask as a whole.**
+  Two 5-px-wide background slivers at the frame edge declared the eleven
+  interior beans "cut off" (`in_bounds: false`). Clipping is a claim about the
+  specimen, so it now requires an edge-touching component comparable to the
+  largest (the `analyze_mask` major rule, ≥ 0.25×); a plant that is itself
+  mostly out of frame still warns, because its visible sliver IS the largest
+  object.
+- `correct_color()` returns `(corrected image, card region)` instead of the
+  image alone — the card's location is the by-product that makes exclusion
+  possible.
+
+### Verified on the real photos (no change needed)
+
+- The scale tool is exact: booth chips ground-truthed at 121–127 px measured
+  127 and 124; two CameraTrax chips agreed within 0.5%; a crop that clipped a
+  chip fired `marker_touches_crop_edge` (guarding the 2.4% scale error it
+  caused), and the wrong polarity fired it both times it was tried.
+- Chip calibration (14.85 px/mm) through a 1×1 `rect_grid` cell returned a
+  20.7×10.6 mm kidney bean — the full end-to-end mm chain.
+- A half-occluded card refuses loudly, quoting PlantCV's inner reason, and
+  per-image in a batch; a CameraTrax (non-X-Rite) card corrects fine.
+
+### Tests
+
+Six new or updated, each watched red first — five on the pre-fix code, one
+(`test_correction_reports_where_the_card_is`) against the old single-return
+API. 310 tests.
+
 ## [1.5.5] — 2026-08-30
 
 Findings from an independent panel audit of 1.5.4 (big-pickle and or-deepseek

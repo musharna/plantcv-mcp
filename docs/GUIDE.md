@@ -185,7 +185,22 @@ measured on the pixels the mask was drawn on.
 
 If no card is found this **raises** rather than quietly measuring the uncorrected image —
 returning colour traits that look corrected and are not would be the same kind of confident
-wrongness as an inverted mask.
+wrongness as an inverted mask. A partially occluded card (a leaf over half the chips) counts
+as not found: the correction matrix cannot be fit on missing chips.
+
+**The card is excluded from the mask.** The card the correction just located is the
+instrument, not a specimen, so its region is removed from the mask before any diagnostics or
+traits, and the result carries a `color_card_excluded` advisory saying how many pixels went.
+On a real photo of beans beside a card, the card's warm chips otherwise merged into the
+largest object in the scene — which suppressed `multi_specimen` (the beans all read as
+minor next to it) and dominated the group traits, with nothing warned. If the mask is empty
+after exclusion, the threshold was selecting only the card and the image is refused as
+`empty_mask`. To measure a card chip as a size marker, that is `calibrate_scale_from_marker`,
+not `segment`.
+
+With `color_correct=false` the server never looks for a card, so a card left in the frame
+WILL be measured as plant material — crop it out of the photo, or keep it out of the cells of
+a `rect_grid`.
 
 ## Measuring a tray
 
@@ -391,7 +406,8 @@ instead of a result.
 | `fill_erased_mask`                                                  | any segmenter                                          | thresholding found objects; `fill_size` deleted them all — names the size to use                 | blocking |
 | `noisy_segmentation`                                                | any segmenter, `suggest`                               | ≥50 non-major components and no dominant object — background texture                             | blocking |
 | `multi_specimen`                                                    | any segmenter, `measure`, `measure_regions` (per cell) | several comparably-sized objects; the number describes the group → `measure_regions`             | advisory |
-| `frame_clipping`                                                    | any segmenter, `measure`                               | plant touches the frame edge; size traits are lower bounds                                       | advisory |
+| `frame_clipping`                                                    | any segmenter, `measure`                               | a major object touches the frame edge; size traits are lower bounds (background slivers at the edge do not count) | advisory |
+| `color_card_excluded`                                               | `segment`, `measure_images` with `color_correct`       | the detected colour card's region was removed from the mask — the card is the instrument         | advisory |
 | `threshold_outside_range`                                           | `segment_hyperspectral`, `segment_thermal`             | the threshold or band lies past the data's range; selects everything or nothing                  | advisory |
 | `uncalibrated_cube`                                                 | `segment_hyperspectral`                                | integer counts cast to float; indices are relative                                               | advisory |
 | `nan_pixels`                                                        | thermal and spectral measurers                         | non-finite values excluded from statistics; counts given                                         | advisory |
