@@ -138,12 +138,14 @@ def test_correction_reports_where_the_card_is():
     """The card's location is the by-product that makes exclusion possible:
     correction that discards it leaves the card to be measured as a plant."""
     _corrected, card = correct_color(_color_card())
-    x0, y0, x1, y1 = card
+    pts = np.array(card, np.int32)
+    assert pts.shape == (4, 2)  # a polygon: a card is rarely square to the frame
+    x0, y0 = pts.min(axis=0)
+    x1, y1 = pts.max(axis=0)
     # The fixture draws its chip grid at x 40-440, y 40-304; the reported
-    # region must cover all of it and stay inside the frame.
+    # region must cover all of it.
     assert x0 <= 40 and y0 <= 40
     assert x1 >= 440 and y1 >= 304
-    assert 0 <= x0 < x1 <= 760 and 0 <= y0 < y1 <= 560
 
 
 # --------------------------------------------------------------------------
@@ -803,3 +805,203 @@ def test_a_card_only_image_refuses_after_exclusion(tmp_path):
     codes = [w["code"] for w in row["warnings"]]
     assert "color_card_excluded" in codes
     assert "empty_mask" in codes
+
+
+# --- panel audit of 1.6.0 (2026-08-30) ---
+
+
+def _big_card(chip=180, gap=24, margin=60):
+    """The fixture card at real-photo scale (the beans card's chips were ~200
+    px). Returns the image and the chip grid's (x0, y0, x1, y1)."""
+    w = 2 * margin + 6 * chip + 5 * gap
+    h = 2 * margin + 4 * chip + 3 * gap
+    img = np.full((h, w, 3), 30, np.uint8)
+    for i, rgb in enumerate(MACBETH):
+        r, c = divmod(i, 6)
+        y = margin + r * (chip + gap)
+        x = margin + c * (chip + gap)
+        img[y : y + chip, x : x + chip] = rgb[::-1]
+    return img, (
+        margin,
+        margin,
+        margin + 6 * chip + 5 * gap,
+        margin + 4 * chip + 3 * gap,
+    )
+
+
+def _polygon_mask(card, shape):
+    m = np.zeros(shape[:2], np.uint8)
+    cv2.fillPoly(m, [np.array(card, np.int32)], 1)
+    return m
+
+
+def test_the_card_region_scales_with_the_chips():
+    """1.6.0 padded by the 'median chip extent' — which was PlantCV's fixed
+    20-px label circle, ~41 px whatever the chips measure. On the real beans
+    photo (~200-px chips) 32,093 px of chip material sat outside the exclusion
+    and five card components of up to 13,678 px were measured as plant."""
+    img, _grid = _big_card()
+    _corrected, card = correct_color(img)
+    region = _polygon_mask(card, img.shape)
+    chips = np.zeros(img.shape[:2], np.uint8)
+    for i in range(24):
+        r, c = divmod(i, 6)
+        y, x = 60 + r * 204, 60 + c * 204
+        chips[y : y + 180, x : x + 180] = 1
+    assert int((chips & (region == 0)).sum()) == 0, (
+        "chip pixels left outside the region"
+    )
+
+
+def test_a_rotated_card_is_excluded_without_taking_the_bench(tmp_path):
+    """An axis-aligned box around a card rotated 30 degrees is 18% bench: a
+    plant in that corner triangle was zeroed and counted as 'card'."""
+    base = np.full((900, 900, 3), 200, np.uint8)
+    base[170:730, 70:830] = _color_card()
+    rot = cv2.getRotationMatrix2D((450, 450), 30, 1.0)
+    img = cv2.warpAffine(base, rot, (900, 900), borderValue=(200, 200, 200))
+    corners = np.array([[70, 170], [830, 170], [830, 730], [70, 730]], np.float32)
+    corners = cv2.transform(corners.reshape(-1, 1, 2), rot).reshape(-1, 2)
+    card_poly = np.zeros((900, 900), np.uint8)
+    cv2.fillPoly(card_poly, [corners.astype(np.int32)], 1)
+    # A plant 70 px into the box's bottom-left corner triangle: on the bench.
+    px, py = int(corners[:, 0].min()) + 70, int(corners[:, 1].max()) - 70
+    assert card_poly[py, px] == 0, "fixture: the plant must be off the card"
+    cv2.circle(img, (px, py), 25, (40, 40, 200), -1)
+    p = _write(tmp_path, "rotated.png", img)
+    out = measure_batch(
+        [p], channel="a", method="otsu", object_type="light", color_correct=True
+    )
+    row = out["results"][0]
+    assert row["measured"] is True
+    assert row["component_count"] == 1  # the plant survived, the chips did not
+
+
+def test_an_incomplete_card_is_refused():
+    """PlantCV checks that every detected chip holds one grid centre, not that
+    every centre has a chip: erase one interior chip and correction still
+    'succeeds', with every pixel of the image shifted by ~19 levels."""
+    full = _color_card()
+    missing = full.copy()
+    missing[108:168, 176:236] = 30
+    with pytest.raises(ColorCardNotFoundError, match="chip"):
+        correct_color(missing)
+    # Positive control, same test: the complete card corrects.
+    assert correct_color(full)[0] is not None
+
+
+def test_background_islands_under_a_grid_are_not_plants(tmp_path):
+    """The >= 2-cell coverage demotion assumed an inverted background is ONE
+    object spanning every cell. Dark dividers cut it into one island per
+    cell: 96% of the frame, both cells measured, only an advisory."""
+    img = np.full((200, 400, 3), 200, np.uint8)
+    img[:2, :] = 30
+    img[-2:, :] = 30
+    img[:, :2] = 30
+    img[:, -2:] = 30
+    img[:, 198:202] = 30
+    p = _write(tmp_path, "islands.png", img)
+    cells = {
+        "mode": "rect_grid",
+        "nrows": 1,
+        "ncols": 2,
+        "coord": (0, 0),
+        "height": 200,
+        "width": 200,
+        "spacing": (200, 0),
+    }
+    out = measure_batch([p], channel="l", method="otsu", object_type="light", **cells)
+    row = out["results"][0]
+    assert row["measured"] is False
+    assert "probable_background" in row["refused_because"]
+    # Positive control: the dense tray (72% of each cell) still measures.
+    d = _dense_tray(tmp_path)
+    assert (
+        measure_batch([d], channel="l", method="otsu", **cells)["results"][0][
+            "regions_measured"
+        ]
+        == 2
+    )
+
+
+@pytest.mark.parametrize("n", [4, 10])
+def test_a_fine_grid_does_not_launder_a_noisy_mask(tmp_path, n):
+    """components <= 4 x cells scales with the grid: the calibrated noisy
+    scene (61 components) is refused under 1x2 and 2x2 but was measured under
+    4x4 (13 'plants') and 10x10 (44). A cell holding several comparable specks
+    falsifies the grid's claim that each cell is one plant."""
+    p = _noisy_scene(tmp_path)
+    out = measure_batch(
+        [p],
+        channel="l",
+        method="otsu",
+        fill_size=1,
+        mode="rect_grid",
+        nrows=n,
+        ncols=n,
+        coord=(0, 0),
+        height=600 // n,
+        width=600 // n,
+        spacing=(600 // n, 600 // n),
+    )
+    row = out["results"][0]
+    assert row["measured"] is False
+    assert "noisy_segmentation" in row["refused_because"]
+    # Positive control: the late-germination plate under its own 10x10.
+    t = _late_germination_tray(tmp_path)
+    ok = measure_batch(
+        [t], channel="l", method="otsu", fill_size=50, nrows=10, ncols=10
+    )
+    assert ok["results"][0]["regions_measured"] >= 90
+
+
+def test_exclude_color_card_works_without_correction(tmp_path):
+    """Excluding the instrument and calibrating colours are independent
+    choices; a batch that does not need comparable colours still must not
+    measure the card."""
+    p = _write(tmp_path, "card_plants.png", _card_and_two_plants())
+    out = measure_batch(
+        [p], channel="a", method="otsu", object_type="light", exclude_color_card=True
+    )
+    row = out["results"][0]
+    assert row["measured"] is True and row["component_count"] == 2
+    assert "color_card_excluded" in [w["code"] for w in row["warnings"]]
+    # Asked to exclude a card that is not there: refused, never measured raw.
+    plain = _write(tmp_path, "plain.png", cv2.imread(FIXTURE))
+    out = measure_batch([plain], channel="a", method="otsu", exclude_color_card=True)
+    assert out["results"][0]["measured"] is False
+    assert "ColorCardNotFound" in out["results"][0]["refused_because"]
+
+
+def test_refine_cannot_grow_into_the_card(tmp_path):
+    """The session kept only color_correct=True, so refine() dilated a plant
+    into the card region and measure() sampled card pixels as plant."""
+    from plantcv_mcp.server import _refine_impl, _segment_impl, _store
+
+    img = np.full((900, 760, 3), 200, np.uint8)
+    img[:560] = _color_card()
+    cv2.circle(img, (380, 400), 30, (40, 40, 200), -1)  # just under the card
+    p = _write(tmp_path, "card_plant.png", img)
+    seg = _segment_impl(
+        p, channel="a", method="otsu", object_type="light", color_correct=True
+    )
+    region = _polygon_mask(_store.get(seg["session_id"]).card_region, img.shape)
+    assert int(((_store.get(seg["session_id"]).mask > 0) & (region == 1)).sum()) == 0
+    ref = _refine_impl(seg["session_id"], [{"op": "dilate", "ksize": 101}])
+    child = _store.get(ref["session_id"]).mask
+    assert int(((child > 0) & (region == 1)).sum()) == 0
+    assert "color_card_excluded" in [w["code"] for w in ref["warnings"]]
+
+
+def test_measure_carries_the_card_advisory(tmp_path):
+    """segment() and measure_images() said the card was excluded; measure()
+    on the same session said nothing — the stored trait table lost it."""
+    from plantcv_mcp.server import _measure_impl, _segment_impl
+
+    p = _write(tmp_path, "card_plants.png", _card_and_two_plants())
+    seg = _segment_impl(
+        p, channel="a", method="otsu", object_type="light", color_correct=True
+    )
+    assert "color_card_excluded" in [w["code"] for w in seg["warnings"]]
+    m = _measure_impl(seg["session_id"])
+    assert "color_card_excluded" in [w["code"] for w in m["warnings"]]

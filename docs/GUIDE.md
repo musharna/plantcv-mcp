@@ -191,6 +191,13 @@ as not found: the correction matrix cannot be fit on missing chips.
 **The card is excluded from the mask.** The card the correction just located is the
 instrument, not a specimen, so its region is removed from the mask before any diagnostics or
 traits, and the result carries a `color_card_excluded` advisory saying how many pixels went.
+The region is a rotated rectangle around the detected chip lattice, one chip pitch beyond the
+outer chips, so it follows a tilted card and scales with the chips (1.6.0 used an axis-aligned
+box padded by PlantCV's fixed 20-px sample circle: on the real beans photo, whose chips are
+~200 px, 32,093 px of chip material stayed in the mask). A leaf within a pitch of the card is
+clipped, and the advisory's pixel count is how you notice. The exclusion is a property of the
+session: `refine()` re-applies it if an op grows the plant into the card, and `measure()`
+repeats the advisory.
 On a real photo of beans beside a card, the card's warm chips otherwise merged into the
 largest object in the scene — which suppressed `multi_specimen` (the beans all read as
 minor next to it) and dominated the group traits, with nothing warned. If the mask is empty
@@ -198,9 +205,17 @@ after exclusion, the threshold was selecting only the card and the image is refu
 `empty_mask`. To measure a card chip as a size marker, that is `calibrate_scale_from_marker`,
 not `segment`.
 
-With `color_correct=false` the server never looks for a card, so a card left in the frame
-WILL be measured as plant material — crop it out of the photo, or keep it out of the cells of
-a `rect_grid`.
+**An incomplete card is refused.** PlantCV checks that every chip it finds holds one grid
+centre, not that every centre has a chip, so a card with a chip missing or covered corrects
+"successfully" with the fit distorted for every pixel (a mean shift of 19 levels with one chip
+erased). After the fit each chip is read back against its reference; a chip more than 0.45
+(0–1 RGB units) off refuses the image, naming the chip. Complete real cards read under 0.3.
+
+**`exclude_color_card=true`** keeps the card out of the mask WITHOUT correcting colours, for
+size-only work where comparable colours are not needed; it raises if there is no card. With
+neither flag the server never looks for a card, so a card left in the frame WILL be measured
+as plant material — crop it out of the photo, or keep it out of the cells of a `rect_grid`.
+A second, differently sized card that PlantCV's chip-size filter drops is not excluded either.
 
 ## Measuring a tray
 
@@ -298,9 +313,15 @@ per cell (a 96-well plate with ten germinated and 86 late wells is 100 objects i
 the calibrated noisy scene, 61 specks under a 1×2 grid, came back as two measured "plants"
 of 1,620 and 2,592 px before this rule). With two or more cells `implausible_coverage` stops
 blocking too (two discs filling their cells are 72% of the frame): an inverted mask is caught
-per cell instead — the background is one object spanning every cell — and an image with **no
-measured row** is refused as `no_region_measured` with the per-cell reasons, so it reaches the
-review list. Rows whose object the guard has already called a merge
+per cell instead — the background is one object spanning every cell, or, when dark dividers cut
+it into one island per cell, each island fills its cell and is withheld as `probable_background`
+(≥ 85% of the cell in a mask covering most of the frame; the fullest real cells are 0.19–0.51)
+— and an image with **no measured row** is refused as `no_region_measured` with the per-cell
+reasons, so it reaches the review list. The count rule has a per-cell half too: the calibrated
+noisy scene satisfied `61 ≤ 4 × 16` under a 4×4 grid and came back as 13 measured "plants";
+now a cell holding several comparable specks in a mask that is texture overall is a
+`noise_cluster`, and one such cell refuses the image as `noisy_segmentation` — the grid explained
+the count, not the mask. Rows whose object the guard has already called a merge
 (`object_exceeds_region`) are withheld — there is no overlay here to check them against. Grid
 arguments (`mode`, `coord`, `radius`, …) without `nrows`/`ncols` are refused before any image
 runs rather than silently ignored, and duplicates are judged by the file, not the spelling
@@ -407,7 +428,9 @@ instead of a result.
 | `noisy_segmentation`                                                | any segmenter, `suggest`                               | ≥50 non-major components and no dominant object — background texture                             | blocking |
 | `multi_specimen`                                                    | any segmenter, `measure`, `measure_regions` (per cell) | several comparably-sized objects; the number describes the group → `measure_regions`             | advisory |
 | `frame_clipping`                                                    | any segmenter, `measure`                               | a major object touches the frame edge; size traits are lower bounds (background slivers at the edge do not count) | advisory |
-| `color_card_excluded`                                               | `segment`, `measure_images` with `color_correct`       | the detected colour card's region was removed from the mask — the card is the instrument         | advisory |
+| `color_card_excluded`                                               | `segment`, `refine`, `measure`, `measure_images`       | the detected colour card's region was removed from the mask — the card is the instrument         | advisory |
+| `probable_background` (per cell)                                    | `measure_images` with a grid                            | in a mask covering most of the frame, this cell's object fills ≥ 85% of it: background between dividers, not a plant | withheld |
+| `noise_cluster` (per cell)                                          | `measure_images` with a grid                            | several comparable specks in one cell of a mask that is texture overall; the image is refused as `noisy_segmentation` | refused  |
 | `threshold_outside_range`                                           | `segment_hyperspectral`, `segment_thermal`             | the threshold or band lies past the data's range; selects everything or nothing                  | advisory |
 | `uncalibrated_cube`                                                 | `segment_hyperspectral`                                | integer counts cast to float; indices are relative                                               | advisory |
 | `nan_pixels`                                                        | thermal and spectral measurers                         | non-finite values excluded from statistics; counts given                                         | advisory |

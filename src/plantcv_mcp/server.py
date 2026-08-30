@@ -33,7 +33,12 @@ from typing_extensions import TypedDict
 
 from . import __version__, plantcv_version
 from .batch import DEFAULT_MAX_SECONDS
-from .color import color_card_excluded_advisory, correct_color, exclude_card
+from .color import (
+    color_card_excluded_advisory,
+    correct_color,
+    detect_card_region,
+    exclude_card,
+)
 from .diagnostics import (
     analyze_mask,
     implausible_longest_path_warning,
@@ -53,6 +58,7 @@ from .measurement import ANALYSES, TraitValue, validate_analyses
 from .paths import check_readable, configured_roots, set_roots
 from .refine import (
     REFINE_OPS,
+    RefinementErasedMaskError,
     refinement_warnings,
     validate_ops,
 )
@@ -298,6 +304,7 @@ def _segment_impl(
     ksize: int = 11,
     offset: int = 2,
     color_correct: bool = False,
+    exclude_color_card: bool = False,
 ) -> dict:
     # The digest is of the SAME bytes the mask is about to be drawn on. Hashing
     # the path afterwards left a window in which a same-shape replacement was
@@ -309,6 +316,10 @@ def _segment_impl(
         # being asked to correct it would be the same confident wrongness as an
         # inverted mask.
         img, card = correct_color(img)
+    elif exclude_color_card:
+        # The instrument is kept out of the mask without touching the colours;
+        # asking for it with no card in the frame raises the same way.
+        card = detect_card_region(img)
 
     # Threshold and fill run separately so a mask erased by fill_size can be
     # named as such instead of looking like a bad channel/method choice.
@@ -316,6 +327,7 @@ def _segment_impl(
         img, channel, method, object_type=object_type, ksize=ksize, offset=offset
     )
     card_note = None
+    removed = 0
     if card is not None:
         # The card the correction just located is the instrument, not a
         # specimen. Left in, its chips merged into the largest "plant" on a
@@ -337,6 +349,8 @@ def _segment_impl(
         method,
         digest=digest,
         color_correct=color_correct,
+        card_region=card,
+        card_excluded_px=removed,
     )
     overlay, scale = downscale(render_overlay(img, mask))
     png = encode_png(overlay)
@@ -411,6 +425,13 @@ def _measure_impl(
     lp_warning = implausible_longest_path_warning(traits)
     if lp_warning:
         warnings.append(lp_warning)
+    if session.card_region is not None:
+        # The mask cannot say a card was cut out of it; the session can.
+        card_note = color_card_excluded_advisory(
+            session.card_excluded_px, session.card_region
+        )
+        if card_note is not None:
+            warnings.append(card_note)
     return {
         "session_id": session_id,
         "analyses": list(requested),
@@ -427,9 +448,31 @@ def _refine_impl(session_id: str, ops: list[dict]) -> dict:
     validated = validate_ops(ops)  # all-or-nothing, before anything runs
     # refuses a degenerate result; reports every major object an op threw away
     mask, dropped = dispatch("refine", session.mask, validated)
+    regrown = 0
+    if session.card_region is not None:
+        # The stored mask had the card cut out; a dilation, closing or
+        # fill_holes grows the plant back into it, and measure() then samples
+        # card pixels as plant. The exclusion is an invariant of the session,
+        # not of the first mask.
+        mask, regrown = exclude_card(mask, session.card_region)
+        if regrown and not (mask > 0).any():
+            raise RefinementErasedMaskError(
+                "Every pixel the refinement produced lay inside the colour card; "
+                "nothing measurable is left. The card is the instrument, not a "
+                "specimen — drop the op that grew the mask into it."
+            )
     before = analyze_mask(session.mask)
     after = analyze_mask(mask)
     warnings = refinement_warnings(mask, before, after, dropped)
+    if regrown:
+        note = color_card_excluded_advisory(
+            regrown,
+            session.card_region,
+            note=" An op grew the mask into the card region; those pixels were "
+            "removed again.",
+        )
+        if note is not None:
+            warnings.append(note)
 
     # Re-read through the same integrity guards measure() uses: refining a
     # session whose file changed underneath would draw the overlay on pixels
@@ -442,6 +485,8 @@ def _refine_impl(session_id: str, ops: list[dict]) -> dict:
         session.method,
         digest=session.digest,
         color_correct=session.color_correct,
+        card_region=session.card_region,
+        card_excluded_px=session.card_excluded_px + regrown,
         lineage=[*session.lineage, *validated],
         parent_id=session.session_id,
     )
@@ -938,6 +983,7 @@ def build_server() -> MCPServer:
         ksize: int = 11,
         offset: int = 2,
         color_correct: bool = False,
+        exclude_color_card: bool = False,
     ) -> list:
         """Segment an image. Returns the overlay image and mask diagnostics —
         NOT traits. Use the returned session_id with measure() to get traits.
@@ -950,9 +996,12 @@ def build_server() -> MCPServer:
         color_correct requires a ColorChecker card in the frame and RAISES if it
         cannot find one; it makes colour traits comparable across lighting. The
         card's own region is then excluded from the mask (`color_card_excluded`
-        advisory) — the card is the instrument, not a specimen. Without
-        color_correct the server never looks for a card, so keep cards out of
-        the frame or out of the measured regions.
+        advisory) — the card is the instrument, not a specimen. A card that is
+        incomplete or partly covered is refused: a missing chip distorts the
+        correction for every pixel. exclude_color_card=true keeps the card out
+        of the mask WITHOUT correcting colours (and raises if there is none);
+        with neither flag the server never looks for a card, so keep cards out
+        of the frame or out of the measured regions.
         """
         result = _segment_impl(
             image_path,
@@ -963,6 +1012,7 @@ def build_server() -> MCPServer:
             ksize=ksize,
             offset=offset,
             color_correct=color_correct,
+            exclude_color_card=exclude_color_card,
         )
         png = result.pop("_png")
         return [json.dumps(result), Image(data=png, format="png")]
@@ -1167,6 +1217,7 @@ def build_server() -> MCPServer:
         ksize: int = 11,
         offset: int = 2,
         color_correct: bool = False,
+        exclude_color_card: bool = False,
         analyses: list[str] | None = None,
         px_per_mm: float | None = None,
         max_seconds: float | None = DEFAULT_MAX_SECONDS,
@@ -1206,7 +1257,12 @@ def build_server() -> MCPServer:
         exactly what ran. An image that cannot be colour-corrected when asked is
         refused, not measured raw, and the detected card's region is excluded
         from every corrected mask (`color_card_excluded`) — the card is the
-        instrument, not a specimen. Limit is 200 images per call.
+        instrument, not a specimen; exclude_color_card=true does the same
+        without correcting colours. Under a grid, a cell that is nearly all
+        material in a mask covering most of the frame is refused as
+        probable_background, and a cell holding several comparable specks in
+        a mask that is texture overall refuses the image as
+        noisy_segmentation. Limit is 200 images per call.
         """
         # Every path is checked BEFORE any is loaded: a batch with one stray
         # path is refused whole, not partially run.
@@ -1221,6 +1277,7 @@ def build_server() -> MCPServer:
             ksize=ksize,
             offset=offset,
             color_correct=color_correct,
+            exclude_color_card=exclude_color_card,
             analyses=tuple(analyses) if analyses is not None else ("size",),
             px_per_mm=px_per_mm,
             max_seconds=max_seconds,

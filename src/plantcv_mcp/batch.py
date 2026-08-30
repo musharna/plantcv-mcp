@@ -27,7 +27,12 @@ from typing import Any
 from plantcv import plantcv as pcv
 
 from . import plantcv_version
-from .color import color_card_excluded_advisory, correct_color, exclude_card
+from .color import (
+    color_card_excluded_advisory,
+    correct_color,
+    detect_card_region,
+    exclude_card,
+)
 from .diagnostics import (
     BLOCKING_CODES,
     NOISE_EXPLAINED_PER_CELL,
@@ -65,6 +70,15 @@ MAX_BATCH = 200
 # before the budget runs out are returned as not run, so the caller gets the
 # partial result and the list to resubmit.
 DEFAULT_MAX_SECONDS = 300.0
+
+# Under a grid, whole-frame implausible_coverage is only advice (dense valid
+# trays are 72% plant). The demotion assumed an inverted background is ONE
+# object spanning every cell; dark dividers cut it into one island per cell
+# and both islands measured. A cell whose own object fills this much of it,
+# in a mask that covers most of the frame, is background. Measured: the
+# fullest real cells are 0.19-0.51 of their cell, the dense fixture 0.72;
+# the islands 0.90-0.96.
+CELL_BACKGROUND_COVERAGE = 0.85
 
 
 class BatchTooLargeError(Exception):
@@ -164,6 +178,7 @@ def measure_batch(
     px_per_mm: float | None = None,
     include_histograms: bool = False,
     color_correct: bool = False,
+    exclude_color_card: bool = False,
     max_seconds: float | None = DEFAULT_MAX_SECONDS,
     nrows: int | None = None,
     ncols: int | None = None,
@@ -278,6 +293,8 @@ def measure_batch(
                 # reported per-image, so the run continues and the image is
                 # refused rather than measured uncorrected.
                 img, card = correct_color(img)
+            elif exclude_color_card:
+                card = detect_card_region(img)
             pre_fill = threshold_mask(
                 img,
                 channel,
@@ -396,6 +413,38 @@ def measure_batch(
                             + spill[0]["message"]
                         )
                     regions.append(r)
+                # The two demotions above traded a whole-frame verdict for
+                # per-cell ones; these are the per-cell halves of that trade.
+                coverage_demoted = cells >= 2 and any(
+                    w.code == "implausible_coverage" for w in warnings
+                )
+                noisy_demoted = any(w.code == "noisy_segmentation" for w in warnings)
+                for r in regions:
+                    if not r["measured"]:
+                        continue
+                    if (
+                        coverage_demoted
+                        and r["region_coverage"] >= CELL_BACKGROUND_COVERAGE
+                    ):
+                        r["measured"] = False
+                        r["traits"] = None
+                        r["reason"] = (
+                            "probable_background — traits withheld: this cell's "
+                            f"object fills {r['region_coverage']:.0%} of it, in a "
+                            f"mask that covers {diag.mask_fraction:.0%} of the "
+                            "frame. That is the background between dividers, not "
+                            "a plant. Re-run with the opposite object_type."
+                        )
+                    elif noisy_demoted and any(
+                        w["code"] == "multi_specimen" for w in r["warnings"]
+                    ):
+                        r["measured"] = False
+                        r["traits"] = None
+                        r["reason"] = (
+                            "noise_cluster — traits withheld: several comparably "
+                            "sized objects in one cell of a mask that is texture "
+                            "overall are specks, not a plant."
+                        )
                 # multi_specimen says "this number describes a group"; with a
                 # grid there is no group number, so the advisory would mislead.
                 warnings = [w for w in warnings if w.code != "multi_specimen"]
@@ -418,6 +467,35 @@ def measure_batch(
             )
             continue
 
+        if regions is not None:
+            clusters = sum(
+                1
+                for r in regions
+                if (r.get("reason") or "").startswith("noise_cluster")
+            )
+            if clusters:
+                # The grid explained the component COUNT; a cell of specks says
+                # it did not explain the mask. The calibrated noisy scene was
+                # measured under 4x4 (13 "plants") and 10x10 (44) this way.
+                entries.append(
+                    BatchEntry(
+                        image_path=path,
+                        measured=False,
+                        mask_fraction=diag.mask_fraction,
+                        component_count=diag.component_count,
+                        warnings=warnings,
+                        regions=regions,
+                        refused_because=(
+                            f"noisy_segmentation — the {grid['nrows']}x{grid['ncols']} "
+                            f"grid explains the component count but {clusters} of "
+                            f"{len(regions)} cells hold clusters of comparable specks, "
+                            "not one plant each; the mask is texture. Inspect this "
+                            "image with segment() and look at the overlay."
+                        ),
+                        seconds=time.perf_counter() - t0,
+                    )
+                )
+                continue
         if regions is not None and not any(r["measured"] for r in regions):
             # Nobody looks at a batch: an image with no measured row was
             # counted as measured, and an inverted tray (every cell
@@ -471,6 +549,7 @@ def measure_batch(
             "ksize": ksize,
             "offset": offset,
             "color_correct": color_correct,
+            "exclude_color_card": exclude_color_card,
             "analyses": list(analyses),
             "px_per_mm": px_per_mm,
             "max_seconds": max_seconds,
