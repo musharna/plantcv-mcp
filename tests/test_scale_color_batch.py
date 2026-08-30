@@ -508,3 +508,154 @@ def test_a_marker_that_fills_its_crop_is_flagged():
     # Positive control: a real marker inside its crop is not flagged.
     clean = calibrate_scale(_disc_image(), 100, 100, 100, 100, marker_length_mm=20.0)
     assert "marker_fills_crop" not in [w.code for w in clean.warnings]
+
+
+# --- panel audit of 1.5.4 (2026-08-30) -------------------------------------
+
+
+def _noisy_scene(tmp_path, plant_px=90, name="noisy.png"):
+    """The calibrated noisy mask from test_diagnostics as a photo: one
+    plant_px-square plant and 60 18x18 specks. At 90 px the plant is a third
+    of the mask, so is_noisy fires on the whole frame."""
+    rng = np.random.default_rng(3)
+    img = np.full((600, 600, 3), 200, np.uint8)
+    occupied = np.zeros((600, 600), bool)
+    img[100 : 100 + plant_px, 100 : 100 + plant_px] = 30
+    occupied[100 : 100 + plant_px, 100 : 100 + plant_px] = True
+    placed = 0
+    while placed < 60:
+        y, x = rng.integers(0, 600 - 18, 2)
+        if 80 <= y <= 100 + plant_px + 2 and 80 <= x <= 100 + plant_px + 2:
+            continue
+        if occupied[y - 2 : y + 20, x - 2 : x + 20].any():
+            continue
+        img[y : y + 18, x : x + 18] = 30
+        occupied[y : y + 18, x : x + 18] = True
+        placed += 1
+    return _write(tmp_path, name, img)
+
+
+def test_batch_grid_does_not_explain_a_noisy_mask(tmp_path):
+    """1.5.2 demoted noisy_segmentation for ANY grid, on the premise that the
+    per-cell floor guards each cell. It guards near-empty cells only: the
+    calibrated noisy scene under a 1x2 grid came back as two measured plants
+    of 1,620 and 2,592 px — clusters of specks. A grid explains components
+    only when there are about as many objects as cells."""
+    p = _noisy_scene(tmp_path)
+    blocked = measure_batch([p], channel="l", method="otsu", fill_size=1)
+    assert blocked["results"][0]["measured"] is False  # fixture is noisy
+    for nrows, ncols in ((1, 2), (2, 2)):
+        out = measure_batch(
+            [p], channel="l", method="otsu", fill_size=1, nrows=nrows, ncols=ncols
+        )
+        row = out["results"][0]
+        assert row["measured"] is False, (nrows, ncols)
+        assert "noisy_segmentation" in row["refused_because"]
+        assert "grid" in row["refused_because"]
+        assert out["summary"]["needs_review"] == 1
+    # Positive control: the late-germination tray (100 objects, 100 cells)
+    # is still measured with its grid.
+    tray = _late_germination_tray(tmp_path)
+    out = measure_batch(
+        [tray], channel="l", method="otsu", fill_size=50, nrows=10, ncols=10
+    )
+    assert out["results"][0]["measured"] is True
+    assert out["results"][0]["regions_measured"] >= 90
+
+
+def _dense_tray(tmp_path, name="dense.png"):
+    """Two discs each filling its 1x2 cell: 72% of the frame is plant."""
+    img = np.full((200, 400, 3), 200, np.uint8)
+    cv2.circle(img, (100, 100), 96, (30, 30, 30), -1)
+    cv2.circle(img, (300, 100), 96, (30, 30, 30), -1)
+    return _write(tmp_path, name, img)
+
+
+def test_batch_grid_measures_a_dense_tray_and_still_refuses_it_inverted(tmp_path):
+    """Two discs filling their cells are 72% of the frame; the whole-frame
+    implausible_coverage block ran before the grid and refused a valid tray.
+    With two or more cells the grid itself catches an inverted mask: the
+    background is one object spanning every cell."""
+    p = _dense_tray(tmp_path)
+    cells = {
+        "mode": "rect_grid",
+        "nrows": 1,
+        "ncols": 2,
+        "coord": (0, 0),
+        "height": 200,
+        "width": 200,
+        "spacing": (200, 0),
+    }
+    out = measure_batch([p], channel="l", method="otsu", **cells)
+    row = out["results"][0]
+    assert row["measured"] is True
+    assert row["mask_fraction"] > 0.5
+    assert row["regions_measured"] == 2
+    assert "implausible_coverage" in [w["code"] for w in row["warnings"]]
+    # Positive control: the same tray thresholded the wrong way.
+    inv = measure_batch([p], channel="l", method="otsu", object_type="light", **cells)
+    assert inv["results"][0]["measured"] is False
+    assert inv["summary"]["needs_review"] == 1
+
+
+def test_batch_refuses_an_image_whose_every_region_was_withheld(tmp_path):
+    """One ellipse spanning both cells: both rows object_exceeds_region, yet
+    the image was measured=True and the summary said measured 1, needs_review
+    0. Nobody looks at a batch; an image with no measured row is a review."""
+    img = np.full((100, 200, 3), 200, np.uint8)
+    cv2.ellipse(img, (100, 50), (90, 20), 0, 0, 360, (30, 30, 30), -1)
+    p = _write(tmp_path, "spill.png", img)
+    out = measure_batch(
+        [p],
+        channel="l",
+        method="otsu",
+        mode="rect_grid",
+        nrows=1,
+        ncols=2,
+        coord=(0, 0),
+        height=100,
+        width=100,
+        spacing=(100, 0),
+    )
+    row = out["results"][0]
+    assert row["measured"] is False
+    assert "0 of 2" in row["refused_because"]
+    assert "object_exceeds_region" in row["refused_because"]
+    assert row["regions"] is not None  # the per-cell reasons travel with it
+    assert out["summary"]["measured"] == 0
+    assert out["summary"]["needs_review"] == 1
+    assert out["summary"]["review_paths"] == [p]
+
+
+@pytest.mark.parametrize(
+    "kw",
+    [
+        {"mode": "rect_grid"},
+        {"mode": "bogus"},
+        {"radius": -5},
+        {"coord": (0, 0), "height": 100, "width": 100, "spacing": (100, 0)},
+    ],
+)
+def test_batch_grid_arguments_without_a_grid_are_refused(tmp_path, kw):
+    """Every one of these ran a whole-frame measurement with no error: the
+    validator only looked at grid arguments once nrows/ncols were given."""
+    img = np.full((300, 300, 3), 200, np.uint8)
+    cv2.circle(img, (150, 150), 40, (30, 30, 30), -1)
+    p = _write(tmp_path, "one.png", img)
+    with pytest.raises(ValueError, match="nrows"):
+        measure_batch([p], channel="l", method="otsu", **kw)
+    # Positive control: without them the image measures.
+    assert measure_batch([p], channel="l", method="otsu")["results"][0]["measured"]
+
+
+def test_batch_dedupes_the_same_file_under_different_spellings(tmp_path):
+    img = np.full((300, 300, 3), 200, np.uint8)
+    cv2.circle(img, (150, 150), 40, (30, 30, 30), -1)
+    p = _write(tmp_path, "one.png", img)
+    link = str(tmp_path / "link.png")
+    (tmp_path / "link.png").symlink_to(p)
+    dotted = f"{tmp_path}/./one.png"  # pathlib would fold the dot away
+    out = measure_batch([p, dotted, link, p], channel="l", method="otsu")
+    assert len(out["results"]) == 1
+    assert out["summary"]["unique"] == 1
+    assert out["summary"]["duplicates_dropped"] == [dotted, link, p]

@@ -410,3 +410,15 @@ def test_an_index_error_from_our_own_code_is_not_disguised(monkeypatch):
     monkeypatch.setattr(pcv.morphology, "segment_insertion_angle", ours)
     with pytest.raises(IndexError):
         measure_morphology(*_plant(stem_tilt_deg=20.0))
+
+
+def test_the_inverted_mask_refusal_names_the_one_legitimate_case():
+    """A macro shot of one leaf can genuinely fill the frame; measure() only
+    warns for that reason. Morphology keeps refusing (the background's
+    skeleton costs 80 s and is never a plant), so the message must tell the
+    user with a real full-frame leaf what to do instead of only 'fix the
+    segmentation'."""
+    img, plant = _plant()
+    with pytest.raises(MorphologyRefusedError, match="crop") as exc:
+        measure_morphology(img, 255 - plant)
+    assert "one leaf" in str(exc.value)

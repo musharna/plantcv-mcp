@@ -17,6 +17,7 @@ Two failure modes dominate here, and both look like success:
 import asyncio
 import json
 
+import cv2
 import numpy as np
 import pytest
 from PIL import Image as PILImage
@@ -693,3 +694,71 @@ def test_a_leaf_that_leaves_and_reenters_its_cell_is_one_plant():
     )
     owner2 = next(r for r in rows2 if r["measured"])
     assert "multi_specimen" in [w["code"] for w in owner2["warnings"]]
+
+
+# --- panel audit of 1.5.4 (2026-08-30) -------------------------------------
+
+
+def _row_of_discs(n: int) -> tuple[np.ndarray, np.ndarray]:
+    img = np.full((300, 600, 3), 200, np.uint8)
+    mask = np.zeros((300, 600), np.uint8)
+    for i in range(n):
+        cv2.circle(mask, (60 + i * 110, 150), 20, 255, -1)
+    return img, mask
+
+
+@pytest.mark.parametrize(
+    ("n", "nrows", "ncols"),
+    [
+        (1, 1, 1),  # sklearn: 1 sample, GaussianMixture needs 2
+        (1, 1, 2),
+        (2, 1, 3),  # n_samples < n_components
+        (2, 2, 2),  # one row of objects, two rows asked: cv2.error drawing NaN
+        (4, 2, 2),
+    ],
+)
+def test_auto_grid_that_cannot_infer_the_layout_is_refused_by_name(n, nrows, ncols):
+    """PlantCV's auto_grid fits a mixture per axis; with fewer objects than
+    components it raises sklearn's ValueError, and with objects that do not
+    spread into the rows asked it draws NaN geometry and OpenCV raises. Both
+    leaked raw (batch quoted 'Found array with 1 sample(s)' as the reason)."""
+    img, mask = _row_of_discs(n)
+    with pytest.raises(RegionSpecError, match="auto_grid could not infer"):
+        build_regions(img, mask, nrows=nrows, ncols=ncols)
+    # Positive control: a layout the objects support (two objects at least —
+    # PlantCV's mixture needs two samples even for one column).
+    m = max(n, 2)
+    assert len(build_regions(*_row_of_discs(m), nrows=1, ncols=m).bboxes) == m
+
+
+def test_a_fragment_of_a_neighbours_object_is_not_a_plant():
+    """Two discs filling their 1x2 cells, mask inverted: PlantCV hands cell 1
+    the whole 400x200 background (exceeds its cell) and cell 0 a 544-px
+    outline of the same object, 195x195 — inside the exceeds ratio, above the
+    floor, and it measured as a plant with area 544."""
+    img = np.full((200, 400, 3), 200, np.uint8)
+    mask = np.full((200, 400), 255, np.uint8)
+    cv2.circle(mask, (100, 100), 96, 0, -1)
+    cv2.circle(mask, (300, 100), 96, 0, -1)
+    grid = {
+        "mode": "rect_grid",
+        "nrows": 1,
+        "ncols": 2,
+        "coord": (0, 0),
+        "height": 200,
+        "width": 200,
+        "spacing": (200, 0),
+    }
+    rows = measure_regions(img, mask, build_regions(img, mask, **grid))
+    # Interactive measure_regions keeps the exceeding row beside the numbered
+    # overlay (batch withholds it); the fragment is refused outright.
+    assert [r["measured"] for r in rows] == [False, True]
+    assert "object_exceeds_region" in [w["code"] for w in rows[1]["warnings"]]
+    fragment = rows[0]
+    assert "object_claimed_by_neighbour" in fragment["reason"]
+    assert "544 of the" in fragment["reason"]
+    assert "region 1" in fragment["reason"]
+    # Positive control: the discs themselves, each filling its cell.
+    rows = measure_regions(img, 255 - mask, build_regions(img, 255 - mask, **grid))
+    assert [r["measured"] for r in rows] == [True, True]
+    assert all(r["traits"]["area"]["value"] > 28000 for r in rows)

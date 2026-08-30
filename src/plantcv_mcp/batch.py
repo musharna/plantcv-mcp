@@ -18,6 +18,7 @@ That is weaker than a human looking at a mask, and it is stated here so nobody
 mistakes it for the same thing.
 """
 
+import os
 import time
 from collections import Counter
 from dataclasses import dataclass, field
@@ -27,7 +28,14 @@ from plantcv import plantcv as pcv
 
 from . import plantcv_version
 from .color import correct_color
-from .diagnostics import BLOCKING_CODES, Advisory, analyze_mask, segmentation_warnings
+from .diagnostics import (
+    BLOCKING_CODES,
+    NOISE_EXPLAINED_PER_CELL,
+    Advisory,
+    analyze_mask,
+    grid_explains_components,
+    segmentation_warnings,
+)
 from .imaging import load_image
 from .measurement import ANALYSES, UnknownAnalysisError, measure_traits
 from .regions import (
@@ -196,6 +204,29 @@ def measure_batch(
             "batch, or narrow the selection."
         )
     grid: dict[str, Any] | None = None
+    if nrows is None and ncols is None:
+        # Every one of these ran a whole-frame measurement with no error
+        # before: the validator only looked at grid arguments once a grid
+        # was given, so mode='rect_grid' with full geometry measured the
+        # tray as one plant.
+        given = [
+            name
+            for name, value in (
+                ("mode", mode if mode != "auto_grid" else None),
+                ("coord", coord),
+                ("height", height),
+                ("width", width),
+                ("spacing", spacing),
+                ("radius", radius),
+            )
+            if value is not None
+        ]
+        if given:
+            raise ValueError(
+                f"{', '.join(given)} given without nrows/ncols. A grid needs "
+                "both; without them the image is measured as one plant and "
+                "these arguments would be ignored."
+            )
     if nrows is not None or ncols is not None:
         grid = {
             "mode": mode,
@@ -210,10 +241,15 @@ def measure_batch(
     _validate_recipe(channel, method, object_type, analyses, max_seconds, grid)
 
     # The same file twice is measured once; the summary says what was dropped.
+    # Compared by the file, not the spelling: ./a.png, a symlink and the
+    # absolute path were three measurements of one image.
     unique: list[str] = []
     duplicates: list[str] = []
+    seen: set[str] = set()
     for path in image_paths:
-        (duplicates if path in unique else unique).append(path)
+        key = os.path.realpath(path)
+        (duplicates if key in seen else unique).append(path)
+        seen.add(key)
 
     started = time.perf_counter()
     entries: list[BatchEntry] = []
@@ -269,13 +305,31 @@ def measure_batch(
             continue
 
         blocking = [w for w in warnings if w.code in BLOCKING_CODES]
+        unexplained = ""
         if grid is not None:
+            cells = grid["nrows"] * grid["ncols"]
             # "Noisy" is judged on the whole mask: a 96-well plate with ten
             # germinated wells and 86 late ones is 90 minor components, which
-            # reads as texture until the grid says each is a well. With a
-            # grid the per-cell degeneracy floor guards each cell, so the
-            # advisory travels with the rows instead of withholding them.
-            blocking = [w for w in blocking if w.code != "noisy_segmentation"]
+            # reads as texture until the grid says each is a well. The grid
+            # explains that only when there are about as many objects as
+            # cells; 61 specks under a 1x2 grid were measured as two plants
+            # of 1,620 and 2,592 px, because the per-cell floor catches only
+            # near-empty cells.
+            if grid_explains_components(diag.component_count, cells):
+                blocking = [w for w in blocking if w.code != "noisy_segmentation"]
+            elif any(w.code == "noisy_segmentation" for w in blocking):
+                unexplained = (
+                    f" A {grid['nrows']}x{grid['ncols']} grid does not explain "
+                    f"{diag.component_count} components (at most "
+                    f"{NOISE_EXPLAINED_PER_CELL} per cell)."
+                )
+            if cells >= 2:
+                # Two discs filling their 1x2 cells are 72% of the frame and
+                # were refused as inverted. With two or more cells the grid
+                # itself catches an inverted mask: the background is one
+                # object spanning every cell, so no row measures and the
+                # image is refused below with the per-cell reasons.
+                blocking = [w for w in blocking if w.code != "implausible_coverage"]
         if blocking:
             entries.append(
                 BatchEntry(
@@ -288,6 +342,7 @@ def measure_batch(
                         f"{', '.join(w.code for w in blocking)} — traits withheld "
                         "because the mask probably does not describe the plant. "
                         "Inspect this image with segment() and look at the overlay."
+                        + unexplained
                     ),
                     seconds=time.perf_counter() - t0,
                 )
@@ -349,6 +404,33 @@ def measure_batch(
                     component_count=diag.component_count,
                     warnings=warnings,
                     refused_because=f"{type(exc).__name__}: {exc}",
+                    seconds=time.perf_counter() - t0,
+                )
+            )
+            continue
+
+        if regions is not None and not any(r["measured"] for r in regions):
+            # Nobody looks at a batch: an image with no measured row was
+            # counted as measured, and an inverted tray (every cell
+            # object_exceeds_region) never reached the review list.
+            reasons = Counter(
+                (r.get("reason") or "").split(" — ")[0].split(":")[0] for r in regions
+            )
+            entries.append(
+                BatchEntry(
+                    image_path=path,
+                    measured=False,
+                    mask_fraction=diag.mask_fraction,
+                    component_count=diag.component_count,
+                    warnings=warnings,
+                    regions=regions,
+                    refused_because=(
+                        f"no_region_measured — 0 of {len(regions)} cells "
+                        "measured: "
+                        + ", ".join(f"{n} {why}" for why, n in reasons.most_common())
+                        + ". Inspect this image with segment() and "
+                        "measure_regions() and look at the numbered overlay."
+                    ),
                     seconds=time.perf_counter() - t0,
                 )
             )
