@@ -27,7 +27,7 @@ from typing import Any
 from plantcv import plantcv as pcv
 
 from . import plantcv_version
-from .color import correct_color
+from .color import color_card_excluded_advisory, correct_color, exclude_card
 from .diagnostics import (
     BLOCKING_CODES,
     NOISE_EXPLAINED_PER_CELL,
@@ -272,11 +272,12 @@ def measure_batch(
         t0 = time.perf_counter()
         try:
             img = load_image(path)
+            card = None
             if color_correct:
                 # Raises ColorCardNotFoundError without a card; caught below and
                 # reported per-image, so the run continues and the image is
                 # refused rather than measured uncorrected.
-                img = correct_color(img)
+                img, card = correct_color(img)
             pre_fill = threshold_mask(
                 img,
                 channel,
@@ -285,11 +286,19 @@ def measure_batch(
                 ksize=ksize,
                 offset=offset,
             )
+            card_note = None
+            if card is not None:
+                # Same rule as segment(): the card the correction just located
+                # is the instrument, never a specimen.
+                pre_fill, removed = exclude_card(pre_fill, card)
+                card_note = color_card_excluded_advisory(removed, card)
             mask = pcv.fill(bin_img=pre_fill, size=fill_size)
             diag = analyze_mask(mask)
             warnings = segmentation_warnings(
                 mask, diag, analyze_mask(pre_fill), fill_size
             )
+            if card_note is not None:
+                warnings.append(card_note)
         except Exception as exc:  # noqa: BLE001 — see below
             # Deliberately blind: one unreadable or unsegmentable file must not
             # abort a 200-image run. The failure is reported per-image with its

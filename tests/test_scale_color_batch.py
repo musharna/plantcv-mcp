@@ -115,7 +115,7 @@ def test_correction_moves_a_distorted_image_back_toward_the_original():
         base.astype(np.float32) * np.array([0.75, 1.0, 1.30]), 0, 255
     ).astype(np.uint8)
 
-    corrected = correct_color(distorted)
+    corrected, _card = correct_color(distorted)
 
     before = _mean_abs_diff(distorted, base)
     after = _mean_abs_diff(corrected, base)
@@ -131,7 +131,19 @@ def test_missing_color_card_raises_instead_of_returning_the_image_unchanged():
     with pytest.raises(ColorCardNotFoundError):
         correct_color(plain)
     # Positive control in the same test: an image WITH a card still corrects.
-    assert correct_color(_color_card()) is not None
+    assert correct_color(_color_card())[0] is not None
+
+
+def test_correction_reports_where_the_card_is():
+    """The card's location is the by-product that makes exclusion possible:
+    correction that discards it leaves the card to be measured as a plant."""
+    _corrected, card = correct_color(_color_card())
+    x0, y0, x1, y1 = card
+    # The fixture draws its chip grid at x 40-440, y 40-304; the reported
+    # region must cover all of it and stay inside the frame.
+    assert x0 <= 40 and y0 <= 40
+    assert x1 >= 440 and y1 >= 304
+    assert 0 <= x0 < x1 <= 760 and 0 <= y0 < y1 <= 560
 
 
 # --------------------------------------------------------------------------
@@ -746,3 +758,48 @@ def test_a_tray_with_an_empty_cell_is_still_measured(tmp_path):
     assert [r["measured"] for r in row["regions"]] == [True, False]
     assert out["summary"]["measured"] == 1
     assert out["summary"]["needs_review"] == 0
+
+
+# --- scale+colour dogfood (2026-08-30): the colour card is not a specimen ---
+
+
+def _card_and_two_plants():
+    """A colour card above two red 'plants' on a light bench. On the real
+    beans photo the card's warm chips merged into the largest object in the
+    scene, suppressed multi_specimen (major_object_count=1), and dominated
+    the group traits — with only frame_clipping warned."""
+    img = np.full((900, 760, 3), 200, np.uint8)
+    img[:560] = _color_card()
+    cv2.circle(img, (220, 730), 45, (40, 40, 200), -1)
+    cv2.circle(img, (520, 730), 45, (40, 40, 200), -1)
+    return img
+
+
+def test_the_colour_card_is_excluded_from_the_measured_mask(tmp_path):
+    """color_correct=true just DETECTED the card; measuring its chips as
+    plant material afterwards is measuring the instrument."""
+    p = _write(tmp_path, "card_plants.png", _card_and_two_plants())
+    out = measure_batch(
+        [p], channel="a", method="otsu", object_type="light", color_correct=True
+    )
+    row = out["results"][0]
+    assert row["measured"] is True
+    codes = [w["code"] for w in row["warnings"]]
+    assert "color_card_excluded" in codes
+    # The traits describe the two discs (~6.3k px each), not disc + chips.
+    assert row["traits"]["area"]["value"] < 15000
+    assert row["component_count"] == 2
+
+
+def test_a_card_only_image_refuses_after_exclusion(tmp_path):
+    """Everything the threshold selected was card: that is an empty
+    measurement, not a specimen with plausible traits."""
+    p = _write(tmp_path, "card_only.png", _color_card())
+    out = measure_batch(
+        [p], channel="a", method="otsu", object_type="light", color_correct=True
+    )
+    row = out["results"][0]
+    assert row["measured"] is False
+    codes = [w["code"] for w in row["warnings"]]
+    assert "color_card_excluded" in codes
+    assert "empty_mask" in codes
