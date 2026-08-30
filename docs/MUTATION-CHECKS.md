@@ -260,3 +260,31 @@ that its area is its own object rather than the intruder's.
 elsewhere in the same message satisfies, so the actionable sentence could be
 reworded away. The test now matches the sentence ("crop the photo", "under
 half"), not the word. 306 tests.
+
+
+## Round 9 — the 1.6.0 card-exclusion and clipping guards (2026-08-30)
+
+The guards from the scale+colour dogfood, disabled one at a time the day they
+shipped (310 tests, ~2 min each). Predictions were logged before the run:
+`server_exclusion_off` was expected GREEN (both new exclusion tests drive
+`measure_batch`) and `card_pad_zero` uncertain.
+
+| mutant                        | change                                                   | result |
+| ----------------------------- | -------------------------------------------------------- | ------ |
+| server exclusion off          | `if card is not None:` → `if False:` (segment path)      | RED    |
+| batch exclusion off           | same, batch path                                         | RED (3) |
+| advisory suppressed           | `if not removed:` → `if True:`                           | RED (2) |
+| exclusion counts, zeroes nothing | `if removed:` → `if False:` in exclude_card           | RED (2) |
+| card padding zero             | `pad = int(np.median(extents))` → `pad = 0`              | RED (3) |
+| clipping for any component    | `and area >= 0.25 * largest` → `and True`                | RED    |
+| clipping never                | `if not touching_major:` → `if True:`                    | RED (7) |
+| clipping bar 10× largest      | `0.25 * largest` → `10 * largest`                        | RED (7) |
+
+Eight of eight red — the first fully-red round, and both pre-logged green
+predictions were wrong in the right direction. The server-path exclusion is
+held by an existing tool-layer test
+(`test_measure_images_honours_color_correct_and_refuses_cardless_images`),
+and zero padding fails the bbox-coverage assert in
+`test_correction_reports_where_the_card_is` twice over: the sample-circle
+extent stops short of the chip grid, and the un-excluded chip edges survive
+`fill_size` to break the component count. Nothing to pin; no code changed.
