@@ -6,6 +6,76 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-08-30
+
+Findings from an independent panel audit of 1.6.0 (six judges in full with a
+rebuttal round; one lost to our harness), every one reproduced against the code
+— and the central one on the real beans photo — before it was fixed.
+
+### Fixed
+
+- **The card exclusion missed the card.** 1.6.0 padded the detected chip
+  region by "the median chip extent" — which was PlantCV's fixed 20-px sample
+  circle, ~41 px whatever the chips measure. On the real beans photo (chips
+  ~200 px) 32,093 px of chip material lay outside the exclusion and five card
+  components of up to 13,678 px were still measured as plant; the 1.6.0
+  "eleven major objects" included one of them. The region is now a rotated
+  rectangle around the detected chip lattice, one chip pitch (the median
+  centre-to-centre distance) beyond the outer chips: on the same photo the
+  residual is 0 px and no bean pixel is touched; the fixture card at 180-px
+  chips is covered; and a card rotated 30° no longer takes 18% bench with it
+  (an axis-aligned box zeroed a plant in its corner triangle).
+- **An incomplete card was accepted.** PlantCV verifies that every chip it
+  finds holds one grid centre, not that every centre has a chip, so erasing
+  one interior chip "corrected" the image with every pixel shifted by ~19
+  levels (max 127). `correct_color()` now runs the detect → sample → fit
+  pipeline itself (one detection instead of two, which also closes the
+  unwrapped second call) and reads each chip back against its reference
+  after the fit: a chip more than 0.45 (0–1 RGB units) off refuses the image,
+  naming the chip. Complete cards — the fixture, the CameraTrax card, the
+  maize photo's card, the booth X-Rite — read ≤ 0.3; the erased chip 0.6.
+- **`refine()` grew the plant back into the card.** The session kept only
+  `color_correct`; a `dilate(ksize=101)` on a plant beside the card put 5,990
+  px inside the card region and `measure()` sampled them as plant. Sessions
+  now carry the card polygon and the exclusion is an invariant: `refine()`
+  re-applies it (with a `color_card_excluded` note when an op grew into the
+  card) and `measure()` repeats the advisory the trait table had lost.
+- **Background islands measured as plants under a grid.** The ≥ 2-cell
+  coverage demotion assumed an inverted background is one object spanning
+  every cell; dark dividers cut it into one island per cell, 96% of the frame,
+  and both rows measured. A cell whose object fills ≥ `CELL_BACKGROUND_COVERAGE
+  = 0.85` of it, in a mask that covers most of the frame, is withheld as
+  `probable_background` (the fullest real cells are 0.19–0.51 of their cell,
+  the dense fixture 0.72; the islands 0.90–0.96).
+- **A fine grid laundered a noisy mask.** `components ≤ 4 × cells` scales with
+  the grid: the calibrated noisy scene, refused under 1×2 and 2×2, was measured
+  under 4×4 (13 "plants") and 10×10 (44). A cell holding several comparable
+  specks in a mask that is texture overall falsifies the grid's claim that
+  each cell is one plant: such cells are withheld as `noise_cluster` and the
+  image is refused as `noisy_segmentation`. The late-germination plate and the
+  split-plants tray have no such cell and still measure.
+
+### Added
+
+- `exclude_color_card` on `segment()` and `measure_images()`: keep the card out
+  of the mask without correcting colours (raises when there is no card).
+  Excluding the instrument and calibrating colours are independent choices,
+  and an unattended batch that does not need comparable colours must not
+  measure the card either.
+
+### Documented, by design
+
+- `frame_clipping` still misses a clipped specimen under 0.25× the largest
+  interior one (and `multi_specimen` is silent for it too); the advisory is
+  about specimen-scale clipping. A second, differently sized card that
+  PlantCV's chip-size filter drops is not excluded. With neither flag the
+  server never looks for a card.
+
+### Tests
+
+Eight new, each watched red on the 1.6.0 code (one via the old tuple API);
+the card-region test now asserts a polygon. 319 tests.
+
 ## [1.6.0] — 2026-08-30
 
 Findings from the first real-photograph run of `calibrate_scale_from_marker`

@@ -33,6 +33,12 @@ class Session:
     # re-reads from disk, so it must re-apply the same transform or it would
     # measure different pixels than the ones the mask was drawn on.
     color_correct: bool = False
+    # The detected colour card's polygon, when one was excluded from the mask,
+    # and how many mask pixels it took. refine() re-applies the exclusion (a
+    # dilation grew a plant into the card and measure() sampled card pixels)
+    # and measure() re-emits the advisory the trait table would otherwise lose.
+    card_region: list[list[int]] | None = None
+    card_excluded_px: int = 0
     # How this mask was made, beyond the threshold: the refine() ops applied to
     # reach it, in order, cumulative across chained refinements. Echoed on every
     # trait table so a stored result can say what produced its mask.
@@ -72,6 +78,8 @@ class SessionStore:
         parent_id: str | None = None,
         kind: str = "rgb",
         extra: dict | None = None,
+        card_region: list[list[int]] | None = None,
+        card_excluded_px: int = 0,
     ) -> Session:
         if not digest:
             raise ValueError(
@@ -92,6 +100,8 @@ class SessionStore:
             shape=(int(mask.shape[0]), int(mask.shape[1])),
             digest=digest,
             color_correct=color_correct,
+            card_region=[list(p) for p in card_region] if card_region else None,
+            card_excluded_px=int(card_excluded_px),
             lineage=[dict(op) for op in (lineage or [])],
             parent_id=parent_id,
             kind=kind,
