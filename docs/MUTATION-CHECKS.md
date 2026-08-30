@@ -198,3 +198,65 @@ now pins both, on the success and the error path. The vertical-stem handler
 refits the stem before it swallows a `cv2.error`; nothing asserted that a
 *different* `cv2.error` still escapes, so the verification was removable —
 `test_a_cv2_error_that_is_not_the_vertical_stem_still_raises` does. 285 tests.
+
+
+## Round 8 — the 1.5.5 guards (2026-08-30)
+
+The seven guards from the panel-audit round, plus the *other half* of every
+rule that has one — the constants' values, not just their presence (302 tests,
+~90 s each). Runner: the round-6 shell loop of literal `sed` mutations.
+
+| mutant                          | change                                                              | result |
+| ------------------------------- | ------------------------------------------------------------------- | ------ |
+| grid always explains noise      | `if grid_explains_components(…):` → `if True:`                       | RED    |
+| grid never explains noise       | → `if False:`                                                        | RED (2) |
+| explained-per-cell budget = 1   | `NOISE_EXPLAINED_PER_CELL = 4` → `1`                                 | **GREEN → fixed** |
+| explained-per-cell budget = 100 | → `100`                                                              | RED    |
+| unexplained sentence lost       | `elif any(noisy in blocking):` → `elif False:`                       | RED    |
+| coverage demotion off           | `if cells >= 2:` → `if False:`                                       | RED    |
+| coverage demoted for 1×1 too    | → `if True:`                                                         | **GREEN → fixed** |
+| no_region_measured off          | `if … not any(measured):` → `if False:`                              | RED (2) |
+| refuses on ANY unmeasured row   | `not any(…)` → `not all(…)`                                          | **GREEN → fixed** |
+| grid args unchecked             | `if given:` → `if False:`                                            | RED (4) |
+| dedup by string                 | `key = os.path.realpath(path)` → `key = path`                        | RED    |
+| auto_grid unwrapped             | `except (ValueError, cv2.error)` → `except ()`                       | RED (5) |
+| auto_grid catches ValueError only | → `except (ValueError,)`                                           | RED (2) |
+| auto_grid catches cv2.error only  | → `except (cv2.error,)`                                            | RED (3) |
+| owned-material guard off        | `if in_cell and owned < 0.2 * in_cell:` → `if False:`                | RED (2) |
+| owned fraction 0.2 → 0.5        | `OWNED_MATERIAL_FRACTION = 0.2` → `0.5`                              | **GREEN → fixed** |
+| owned fraction 0.2 → 0.02       | → `0.02`                                                             | RED (2) |
+| in-cell material = whole frame  | `mask[y:y+h, x:x+w]` → `mask`                                        | RED (9) |
+| crop remedy reworded            | "crop the photo so the leaf" → "photograph it so the leaf"           | **GREEN → fixed** |
+
+Five of nineteen green, and four of the five are the same species: a calibrated
+threshold tested only from the side that fires. Every refusal had a test; no
+test stood on the *keep* side of the line, so each constant could drift to its
+strictest value and take the legitimate cases silently.
+
+**The per-cell budget of 4** exists for plants whose leaves are disconnected
+mask pieces; at 1 it survived because the late-germination plate is exactly one
+component per well. `test_a_grid_explains_plants_that_are_several_pieces_each`
+puts three pieces in every cell of a 6×6 tray (108 components, whole-mask
+noisy) and asserts the grid explains it — with a fixture-honesty check that the
+count sits in the band where the constant's value decides (36 < 108 ≤ 144).
+
+**The ≥2-cells condition** on coverage demotion survived `if True:` because no
+test gave a 1×1 grid an inverted mask — the one grid whose single cell cannot
+catch the background (it fits). `test_a_single_cell_grid_does_not_excuse_an_inverted_mask`
+pins it, with the right polarity measured under the same grid as the control.
+
+**`not any` vs `not all`** is the difference between "refuse the image nothing
+was measured in" and "refuse every partial tray". A late-germination tray with
+an empty well is the normal case, and nothing asserted it stays measured —
+`test_a_tray_with_an_empty_cell_is_still_measured` does.
+
+**The owned-material fraction** was calibrated on real trays (intruded-upon
+X-Rite cells own 0.35–0.39 and are kept; the fragment owned 0.049) but the
+keep side lived only in a scratch script. `test_an_intruded_upon_cell_keeps_its_own_plant`
+builds a cell that owns 0.32 of its material, asserts it stays measured, and
+that its area is its own object rather than the intruder's.
+
+**The crop remedy** was pinned by `match="crop"` — which "segment the crop"
+elsewhere in the same message satisfies, so the actionable sentence could be
+reworded away. The test now matches the sentence ("crop the photo", "under
+half"), not the word. 306 tests.

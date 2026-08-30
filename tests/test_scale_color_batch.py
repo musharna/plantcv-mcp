@@ -659,3 +659,90 @@ def test_batch_dedupes_the_same_file_under_different_spellings(tmp_path):
     assert len(out["results"]) == 1
     assert out["summary"]["unique"] == 1
     assert out["summary"]["duplicates_dropped"] == [dotted, link, p]
+
+
+# --- mutation round 8 (2026-08-30): the green mutants of the 1.5.5 guards ---
+
+
+def _split_plants_tray(tmp_path, name="pieces.png"):
+    """A 6x6 tray where every plant is in three mask pieces (one body, two
+    detached leaves): 108 components, 72 of them minor, largest 2% of the
+    mask. Whole-mask is_noisy says texture; a 6x6 grid explains three pieces
+    per cell — but only because the rule allows up to four per cell."""
+    tray = np.full((660, 660, 3), 200, np.uint8)
+    for r in range(6):
+        for c in range(6):
+            cx, cy = 55 + c * 110, 55 + r * 110
+            cv2.circle(tray, (cx, cy), 14, (30, 30, 30), -1)
+            cv2.circle(tray, (cx - 30, cy - 30), 6, (30, 30, 30), -1)
+            cv2.circle(tray, (cx + 30, cy + 30), 6, (30, 30, 30), -1)
+    return _write(tmp_path, name, tray)
+
+
+def test_a_grid_explains_plants_that_are_several_pieces_each(tmp_path):
+    """NOISE_EXPLAINED_PER_CELL exists for plants whose leaves are
+    disconnected mask pieces; at one component per cell this tray — every
+    cell a real plant — would be refused as unexplained noise."""
+    p = _split_plants_tray(tmp_path)
+    blocked = measure_batch([p], channel="l", method="otsu", fill_size=50)
+    assert blocked["results"][0]["measured"] is False
+    assert "noisy_segmentation" in blocked["results"][0]["refused_because"]
+    # Fixture honesty: more components than cells, but within four per cell —
+    # the range where the constant's value decides.
+    comps = blocked["results"][0]["component_count"]
+    assert 36 < comps <= 4 * 36
+    out = measure_batch([p], channel="l", method="otsu", fill_size=50, nrows=6, ncols=6)
+    row = out["results"][0]
+    assert row["measured"] is True
+    assert row["regions_measured"] == 36
+    assert all(r["measured"] for r in row["regions"])
+
+
+def test_a_single_cell_grid_does_not_excuse_an_inverted_mask(tmp_path):
+    """With two or more cells the grid itself catches an inverted mask (the
+    background spans every cell); with ONE cell it cannot — the background
+    fits its only cell — so implausible_coverage must keep blocking."""
+    p = _write(tmp_path, "disc1.png", _disc_image())
+    cells = {
+        "mode": "rect_grid",
+        "nrows": 1,
+        "ncols": 1,
+        "coord": (0, 0),
+        "height": 300,
+        "width": 300,
+        "spacing": (300, 300),
+    }
+    inv = measure_batch([p], channel="l", method="otsu", object_type="light", **cells)
+    assert inv["results"][0]["measured"] is False
+    assert "implausible_coverage" in inv["results"][0]["refused_because"]
+    # Positive control: the right polarity measures under the same grid.
+    out = measure_batch([p], channel="l", method="otsu", **cells)
+    assert out["results"][0]["measured"] is True
+    assert out["results"][0]["regions_measured"] == 1
+
+
+def test_a_tray_with_an_empty_cell_is_still_measured(tmp_path):
+    """no_region_measured refuses an image whose EVERY row was withheld; a
+    late-germination tray with empty wells is the normal case and must come
+    back measured, or every partial tray in a batch lands on review."""
+    img = np.full((200, 400, 3), 200, np.uint8)
+    cv2.circle(img, (100, 100), 40, (30, 30, 30), -1)  # cell 0; cell 1 empty
+    p = _write(tmp_path, "half.png", img)
+    out = measure_batch(
+        [p],
+        channel="l",
+        method="otsu",
+        mode="rect_grid",
+        nrows=1,
+        ncols=2,
+        coord=(0, 0),
+        height=200,
+        width=200,
+        spacing=(200, 0),
+    )
+    row = out["results"][0]
+    assert row["measured"] is True
+    assert row["regions_measured"] == 1
+    assert [r["measured"] for r in row["regions"]] == [True, False]
+    assert out["summary"]["measured"] == 1
+    assert out["summary"]["needs_review"] == 0

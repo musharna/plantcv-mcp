@@ -762,3 +762,35 @@ def test_a_fragment_of_a_neighbours_object_is_not_a_plant():
     rows = measure_regions(img, 255 - mask, build_regions(img, 255 - mask, **grid))
     assert [r["measured"] for r in rows] == [True, True]
     assert all(r["traits"]["area"]["value"] > 28000 for r in rows)
+
+
+def test_an_intruded_upon_cell_keeps_its_own_plant():
+    """The owned-material guard's other half: the misaligned X-Rite tray's
+    intruded-upon cells own 0.35-0.39 of the material in them and their own
+    object IS their plant. A cell in that band must stay measured, and its
+    traits must be its own object, not the intruder."""
+    img = np.full((200, 400, 3), 200, np.uint8)
+    mask = np.zeros((200, 400), np.uint8)
+    cv2.circle(mask, (60, 100), 30, 255, -1)  # cell 0's own plant
+    cv2.circle(mask, (300, 100), 60, 255, -1)  # cell 1's plant...
+    mask[40:160, 150:240] = 255  # ...with a lobe reaching into cell 0
+    own = int((mask[:, :150] > 0).sum())
+    in_cell0 = int((mask[:, :200] > 0).sum())
+    # Fixture honesty: between the shipped fraction and half, the band the
+    # real trays sit in — a stricter fraction would take this cell.
+    assert 0.2 < own / in_cell0 < 0.5
+    grid = {
+        "mode": "rect_grid",
+        "nrows": 1,
+        "ncols": 2,
+        "coord": (0, 0),
+        "height": 200,
+        "width": 200,
+        "spacing": (200, 0),
+    }
+    rows = measure_regions(img, mask, build_regions(img, mask, **grid))
+    assert [r["measured"] for r in rows] == [True, True]
+    assert "object_claimed_by_neighbour" not in (rows[0]["reason"] or "")
+    area = rows[0]["traits"]["area"]["value"]
+    assert own * 0.95 < area < own * 1.05  # its own disc, not the intruder
+    assert rows[1]["traits"]["area"]["value"] > 20000
