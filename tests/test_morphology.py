@@ -419,6 +419,8 @@ def test_the_inverted_mask_refusal_names_the_one_legitimate_case():
     user with a real full-frame leaf what to do instead of only 'fix the
     segmentation'."""
     img, plant = _plant()
-    with pytest.raises(MorphologyRefusedError, match="crop") as exc:
+    with pytest.raises(MorphologyRefusedError, match="crop the photo") as exc:
         measure_morphology(img, 255 - plant)
     assert "one leaf" in str(exc.value)
+    assert "under half" in str(exc.value)  # match="crop" alone was satisfied
+    # by "segment the crop" with the actionable sentence gone (round 8)
