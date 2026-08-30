@@ -6,6 +6,78 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.5.5] — 2026-08-30
+
+Findings from an independent panel audit of 1.5.4 (big-pickle and or-deepseek
+in full with a rebuttal round; codex timed out mid-run but its narration carried
+three reproduced counterexamples), each reproduced against the code before it
+was fixed, plus one crash class found while reproducing them.
+
+### Fixed
+
+- **A grid demoted `noisy_segmentation` unconditionally.** 1.5.2 let any grid
+  turn the block into an advisory on the premise that the per-cell floor guards
+  each cell; it guards near-empty cells only. The calibrated noisy scene (a
+  90-px plant and 60 specks) is refused with no grid, but under `nrows=1,
+ncols=2` came back as two measured plants of 1,620 and 2,592 px — clusters
+  of specks — with `measured: 1, needs_review: 0`. A grid now explains a
+  many-component mask only when it has about as many objects as cells (at
+  most `NOISE_EXPLAINED_PER_CELL = 4` per cell); the late-germination plate
+  (100 objects, 100 wells) still measures, and the refusal says which grid did
+  not explain how many components.
+- **A dense valid tray was refused for whole-frame coverage.** Two discs
+  filling their 1×2 `rect_grid` cells are 72% of the frame, and the
+  `implausible_coverage` block ran before the grid. With two or more cells it
+  is now an advisory: an inverted mask is caught per cell (the background is
+  one object spanning every cell), which needed the next two fixes to hold.
+- **A cell measured a fragment of its neighbour's object.** Under that
+  inverted tray PlantCV handed cell 1 the whole 400×200 background (caught as
+  exceeding) and cell 0 a 544-px OUTLINE of the same object, 195×195 — inside
+  the 1.25× ratio, above the floor, measured as a plant with `area=544`. A
+  cell whose own object is under `OWNED_MATERIAL_FRACTION = 0.2` of the mask
+  material inside it is refused as `object_claimed_by_neighbour`, naming the
+  region that owns the rest. Calibrated on the real trays: the clean
+  arabidopsis tray owns ≥ 0.999 of every cell; the misaligned X-Rite tray's
+  intruded-upon cells own 0.35–0.39 and their own object is their plant
+  (kept); the fragment owned 0.049.
+- **An image with no measured row counted as measured.** One ellipse spanning
+  both cells of a 1×2 grid: both rows `object_exceeds_region`, yet the entry
+  was `measured=true` and the summary said `measured 1, needs_review 0`. It is
+  now refused as `no_region_measured — 0 of N cells measured: …` with the
+  per-cell reasons, and lands on `review_paths`.
+- **`auto_grid` leaked sklearn and OpenCV errors.** It fits one mixture
+  component per row and per column: one object under any grid raised
+  `ValueError: Found array with 1 sample(s) … GaussianMixture` (the batch quoted
+  it as the reason), and objects that do not spread into the rows asked (four
+  discs in one row, 2×2 grid) gave NaN centres and `cv2.error` from
+  `drawing.cpp`. Both are now `RegionSpecError: auto_grid could not infer a
+RxC layout from the N object(s) …`, pointing at `rect_grid` or `measure()`.
+- **Grid arguments without `nrows`/`ncols` were silently ignored.**
+  `mode="rect_grid"`, `mode="bogus"`, `radius=-5` and full rectangle geometry
+  each ran a whole-frame measurement with no error, because the recipe
+  validator only looked at grid arguments once a grid was given. They are now
+  refused before any image runs.
+- **Batch duplicates were judged by the spelling.** `./a.png`, a symlink and
+  the absolute path were three measurements of one image; the key is now the
+  real path, and the summary still lists what was dropped as it was written.
+- **The morphology inverted-mask refusal names its one legitimate case.** A
+  macro shot of one leaf can genuinely fill the frame (the reason `measure()`
+  only warns); morphology keeps refusing — the background's skeleton costs
+  80 s and is never a plant — and now says to crop the photo.
+
+### Rejected with evidence
+
+- `vx == 0.0` in `_stem_line_leaves_int32` should be a tolerance (or-deepseek):
+  a near-zero `vx` falls through to the int32 overflow check and returns True
+  there; the proposed tolerance would only widen the swallow.
+
+### Tests
+
+- 15 new tests, each seen failing first — the owned-material guard by disabling
+  `OWNED_MATERIAL_FRACTION` — with positive controls inside the same test
+  (the late-germination tray, the dense tray upright, the X-Rite cells). 302
+  tests.
+
 ## [1.5.4] — 2026-08-29
 
 A remedy-convergence sweep over the leafy real photos (4 photos × 4 refine

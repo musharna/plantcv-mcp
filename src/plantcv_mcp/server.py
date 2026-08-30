@@ -1033,7 +1033,10 @@ def build_server() -> MCPServer:
         only nrows and ncols. mode='rect_grid' takes explicit geometry: coord
         [x, y] of the first cell, height and width of a cell, and spacing [x, y]
         between cell origins; use it when the mask is too sparse to infer a
-        layout or the cells must line up with physical pots.
+        layout or the cells must line up with physical pots. auto_grid needs at
+        least as many objects as rows and as columns, spread over both; a mask
+        that cannot support the layout is refused by name (a single plant is
+        measure(); a known layout is rect_grid).
 
         A region with no plant in it returns measured=false and a reason, NOT
         zeros: PlantCV reports a full trait set of zeros for an empty region,
@@ -1176,6 +1179,10 @@ def build_server() -> MCPServer:
         every image runs the SAME guards as segment(), and any image that trips a
         blocking guard is returned with NO traits and a reason to inspect it
         individually. A batch never returns a number the server could not validate.
+        With a grid, noisy_segmentation stops blocking only when the grid explains
+        the components (at most four per cell) and implausible_coverage only with
+        two or more cells; an image none of whose cells measured is refused as
+        no_region_measured with the per-cell reasons.
 
         Settle the recipe on one representative image with suggest_segmentation()
         and segment() first, looking at the overlay, then apply it here with the

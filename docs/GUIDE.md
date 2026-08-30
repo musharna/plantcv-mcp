@@ -211,7 +211,19 @@ neighbour says `object_claimed_by_neighbour` naming it; and under `auto_grid` bo
 raise `grid_misaligned`, pointing at `rect_grid`. A cell whose labelled object is several
 comparably-sized components carries `multi_specimen` — several plants share the cell, or one
 plant was split by the threshold; the overlay tells which. There is deliberately no per-cell
-coverage check: a plant filling a tight cell is the happy path, not an inverted mask.
+coverage check: a plant filling a tight cell is the happy path, not an inverted mask. What a
+cell CAN report wrongly is a fragment: an inverted tray under a 1×2 `rect_grid` handed one cell
+the whole background (≥1.25×, caught) and the other a 544-px outline of it, 195×195 — inside
+the ratio, above the floor, measured as a plant. A cell whose own object is under 20% of the
+mask material inside it is refused as `object_claimed_by_neighbour` (a clean real tray owns
+≥ 99.9% of every cell; the misaligned X-Rite tray's intruded-upon cells own 35–39% and their
+own object is their plant, so they stay measured).
+
+`auto_grid` fits one cluster per row and per column, so it needs at least that many objects,
+spread over the rows and columns asked; a mask that cannot support the layout (one object, or
+four objects in one row with two rows asked) is refused by name — before 1.5.5 it surfaced
+sklearn's "Found array with 1 sample(s)" or an OpenCV drawing error. A single plant is
+`measure()`; a known layout is `rect_grid`.
 
 ## Morphology: leaves, stem, branch points
 
@@ -266,10 +278,18 @@ overlays. So the overlay is replaced by the only honest substitute — **every i
 guards as `segment()`, and any image that trips a blocking guard comes back with no traits at
 all**, just a reason and an instruction to inspect it individually. Advisory warnings such as
 `multi_specimen` are attached to the traits rather than suppressing them. With a grid,
-`noisy_segmentation` stops blocking (a 96-well plate with ten germinated and 86 late wells is
-90 "minor" components until the grid says each is a well; the per-cell floor guards each cell)
-and rows whose object the guard has already called a merge (`object_exceeds_region`) are
-withheld — there is no overlay here to check them against.
+`noisy_segmentation` stops blocking **when the grid explains the components** — at most four
+per cell (a 96-well plate with ten germinated and 86 late wells is 100 objects in 100 cells;
+the calibrated noisy scene, 61 specks under a 1×2 grid, came back as two measured "plants"
+of 1,620 and 2,592 px before this rule). With two or more cells `implausible_coverage` stops
+blocking too (two discs filling their cells are 72% of the frame): an inverted mask is caught
+per cell instead — the background is one object spanning every cell — and an image with **no
+measured row** is refused as `no_region_measured` with the per-cell reasons, so it reaches the
+review list. Rows whose object the guard has already called a merge
+(`object_exceeds_region`) are withheld — there is no overlay here to check them against. Grid
+arguments (`mode`, `coord`, `radius`, …) without `nrows`/`ncols` are refused before any image
+runs rather than silently ignored, and duplicates are judged by the file, not the spelling
+(`./a.png`, a symlink and the absolute path are one image).
 
 | parameter                                                                           | default            | what it does                                                                                                           |
 | ----------------------------------------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
@@ -378,7 +398,7 @@ instead of a result.
 | `refine_large_change`                                               | `refine`                                               | mask changed > 25% — a different outline, not a cleanup                                          | —        |
 | `refine_dropped_object`                                             | `refine`                                               | an op removed a component ≥ 10% of the largest — a leaf, not a speck; names the op that split it | —        |
 | `object_exceeds_region`                                             | `measure_regions`                                      | a cell's object is ≥ 1.25× the cell — two plants, or a misaligned grid                           | —        |
-| `object_claimed_by_neighbour`                                       | `measure_regions`                                      | this cell's material was assigned whole to a neighbour                                           | —        |
+| `object_claimed_by_neighbour`                                       | `measure_regions`                                      | this cell's material was assigned whole to a neighbour, or its own object is < 20% of it         | —        |
 | `grid_misaligned`                                                   | `measure_regions` (`auto_grid`)                        | empty cells plus exceeded cells → use `rect_grid`                                                | —        |
 | `region_count_mismatch`                                             | `measure_regions` (`auto_grid`)                        | PlantCV built fewer regions than asked                                                           | —        |
 | `implausible_longest_path`                                          | `measure`, `measure_regions`                           | PlantCV's `longest_path` is shorter than the bounding box allows                                 | —        |

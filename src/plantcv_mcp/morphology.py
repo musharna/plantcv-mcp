@@ -174,7 +174,9 @@ def measure_morphology(
         # the frame); a skeleton of the frame's background has no such case.
         raise MorphologyRefusedError(
             f"implausible_coverage: {coverage.message} A skeleton of the "
-            "background is not a plant; fix the segmentation first."
+            "background is not a plant; fix the segmentation first. If this "
+            "really is one leaf filling the frame, crop the photo so the leaf "
+            "is under half of it and segment the crop."
         )
     if multi_specimen_warning(diag):
         raise MorphologyRefusedError(

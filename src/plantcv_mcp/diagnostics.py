@@ -249,6 +249,20 @@ NOISY_MINOR_COMPONENTS = 50
 NOISY_LARGEST_FRACTION = 0.5
 
 
+# A grid EXPLAINS a many-component mask only when there are about as many
+# objects as cells: the late-germination plate is 100 objects in 100 wells.
+# The calibrated noisy scene (61 objects) under a 1x2 grid came back as two
+# measured "plants" of 1,620 and 2,592 px — clusters of specks — because the
+# per-cell floor only catches near-empty cells. Four per cell leaves room for
+# a plant whose leaves are disconnected pieces in the mask.
+NOISE_EXPLAINED_PER_CELL = 4
+
+
+def grid_explains_components(component_count: int, cells: int) -> bool:
+    """True when a grid of `cells` regions accounts for the mask's components."""
+    return component_count <= NOISE_EXPLAINED_PER_CELL * cells
+
+
 def largest_fraction(diag: MaskDiagnostics) -> float:
     """Largest component's share of all masked pixels (0.0 for an empty mask)."""
     total = sum(diag.areas)

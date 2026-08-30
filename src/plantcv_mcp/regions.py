@@ -157,9 +157,25 @@ def build_regions(
                 "so there is no layout to infer. Re-run segment() first, or use "
                 "mode='rect_grid' to state the geometry explicitly."
             )
-        rois = pcv.roi.auto_grid(
-            mask=mask, nrows=nrows, ncols=ncols, radius=radius, img=img
-        )
+        try:
+            rois = pcv.roi.auto_grid(
+                mask=mask, nrows=nrows, ncols=ncols, radius=radius, img=img
+            )
+        except (ValueError, cv2.error) as exc:
+            # PlantCV fits one mixture component per row and per column:
+            # fewer objects than components is sklearn's "Found array with 1
+            # sample(s)" ValueError; objects that do not spread into the rows
+            # asked give it NaN centres, and OpenCV refuses to draw them.
+            # Both leaked raw — the batch quoted sklearn as its reason.
+            n_objects = int(cv2.connectedComponents((mask > 0).astype(np.uint8))[0]) - 1
+            raise RegionSpecError(
+                f"auto_grid could not infer a {nrows}x{ncols} layout from the "
+                f"{n_objects} object(s) in this mask. It fits one cluster per "
+                "row and per column, so it needs at least that many objects, "
+                "spread over the rows and columns asked. Give the geometry with "
+                "mode='rect_grid', or measure() a single plant. "
+                f"(PlantCV: {type(exc).__name__}: {str(exc).splitlines()[0][:120]})"
+            ) from exc
     else:
         missing = [
             name
@@ -260,6 +276,10 @@ def _read_group(index: int) -> dict[str, dict]:
         )
     return pcv.outputs.observations[key]
 
+
+OWNED_MATERIAL_FRACTION = 0.2
+"""Below this share of the cell's mask material, the cell's own object is a
+fragment of a neighbour's (see partition_regions)."""
 
 EXCEEDS_CELL_RATIO = 1.25
 """Object bbox / cell bbox above which the object is not this cell's plant.
@@ -433,6 +453,42 @@ def partition_regions(
             slots.append(
                 RegionSlot(
                     i, row, col, bbox, label, claimed_cov, False, reason, cell_warnings
+                )
+            )
+            continue
+
+        # A cell whose own object is a sliver of the material inside it is
+        # reporting a fragment of a neighbour's object: an inverted tray under
+        # a 1x2 rect_grid gave one cell the whole 400x200 background (caught
+        # as exceeding) and the other a 544-px OUTLINE of it, 195x195 —
+        # inside the exceeds ratio, above the floor, measured as a plant.
+        # Calibrated on real trays: a clean tray owns >= 0.999 of every cell;
+        # the misaligned X-Rite tray's intruded-upon cells own 0.35-0.39 and
+        # their own object IS their plant (kept); the fragment owned 0.049.
+        in_cell = int((mask[y : y + h, x : x + w] > 0).sum()) if w and h else 0
+        owned = int((cell == label).sum())
+        if in_cell and owned < OWNED_MATERIAL_FRACTION * in_cell:
+            takers = ", ".join(
+                f"region {c - 1}"
+                for c in sorted({int(v) for v in np.unique(cell)} - {0, label})
+            )
+            slots.append(
+                RegionSlot(
+                    i,
+                    row,
+                    col,
+                    bbox,
+                    label,
+                    coverage,
+                    False,
+                    "object_claimed_by_neighbour — traits withheld: this cell's "
+                    f"own object is {owned} of the {in_cell} px of plant material "
+                    f"in it; the rest belongs to the object {takers or 'a neighbour'} "
+                    "reports, and what is left here is a fragment PlantCV cut off "
+                    "at the cell edge, not a plant. Look at the numbered overlay; "
+                    "if the mask is the background, re-run segment() with the "
+                    "opposite object_type.",
+                    [],
                 )
             )
             continue
