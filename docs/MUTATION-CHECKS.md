@@ -288,3 +288,48 @@ and zero padding fails the bbox-coverage assert in
 `test_correction_reports_where_the_card_is` twice over: the sample-circle
 extent stops short of the chip grid, and the un-excluded chip edges survive
 `fill_size` to break the component count. Nothing to pin; no code changed.
+
+## Round 10 — the 1.7.0 card-region and per-cell guards (2026-08-31)
+
+The guards from the panel audit of 1.6.0, disabled one at a time (319 tests,
+~2 min each). Predictions were logged before the run: `sparse_lattice_ok`,
+`seg_exclude_flag_off`, `refine_erased_ok`, and `regrown_not_summed` were
+expected GREEN from visible test gaps; all four were, and were pinned.
+
+| mutant                    | change                                                        | result |
+| ------------------------- | ------------------------------------------------------------- | ------ |
+| pad zero                  | `pad = 2.0 * CARD_PAD_PITCHES * pitch` → `pad = 0.0`          | RED (6) |
+| pad fixed 41 px           | → `pad = 41.0` (the 1.6.0 bug resurrected)                    | RED (6) |
+| pitch fixed 20 px         | `pitch = median(NN distance)` → `pitch = 20.0`                | RED (6) |
+| axis-aligned regression   | `boxPoints(..., angle)` → `boxPoints(..., 0.0)`               | RED (2) |
+| sparse lattice accepted   | `if len(centres) < 2:` → `< 0:`                               | GREEN → pinned |
+| residual check off        | `> CARD_CHIP_RESIDUAL_MAX` → `> 1e9`                          | RED    |
+| residual loosened to 0.7  | `CARD_CHIP_RESIDUAL_MAX = 0.45` → `0.7` (erased chip is 0.6)  | RED    |
+| residual tightened to 0.05| → `0.05` (complete cards read up to 0.3)                      | RED    |
+| segment() exclude flag off| `elif exclude_color_card:` → `elif False:` (segment path)     | GREEN → pinned |
+| measure advisory off      | `if session.card_region is not None:` → `if False:` (measure) | RED    |
+| refine re-exclusion off   | same, refine path                                             | RED    |
+| refine-erased refusal off | `if regrown and not (mask > 0).any():` → `if False:`          | GREEN → pinned |
+| regrown advisory off      | `if regrown:` → `if False:`                                   | RED    |
+| regrown not accumulated   | `card_excluded_px + regrown` → `card_excluded_px`             | GREEN → pinned |
+| batch exclude flag off    | `elif exclude_color_card:` → `elif False:` (batch path)       | RED    |
+| probable_background never | `CELL_BACKGROUND_COVERAGE = 0.85` → `1.01`                    | RED    |
+| probable_background 0.5   | → `0.5` (dense fixture cells are 0.72)                        | RED (2) |
+| coverage 1×1 eligible     | `coverage_demoted = cells >= 2 and any(` → `any(`             | GREEN — EQUIVALENT |
+| noise_cluster cell off    | `elif noisy_demoted and any(` → `elif False and any(`         | RED (2) |
+| noisy image refusal off   | `if clusters:` → `if False:`                                  | RED (2) |
+
+Fifteen of twenty red. Four greens were the predicted test gaps, pinned by
+`test_a_lattice_of_one_chip_refuses_a_card_region` (one centre has no pitch;
+the mutant dies converting NaN to int instead of refusing),
+`test_segment_excludes_the_card_without_correction` (the only exclude-flag
+test drove `measure_batch`; under the mutant segment() measures the card and
+reports only `multi_specimen`), `test_a_session_inside_the_card_cannot_refine_to_nothing`
+(positive control inside the same test), and
+`test_the_card_debt_accumulates_across_refines` (under the mutant measure()
+reported 21,600 px where 21,600 + 3,267 were owed). The fifth green is an
+EQUIVALENT mutant, kept: at the per-cell loop `implausible_coverage` in
+`warnings` already implies `cells >= 2`, because the code is unconditionally
+in `BLOCKING_CODES` and the 1×1 path refuses upstream at the blocking gate —
+the conjunct is local documentation of the demotion trade, and no public-API
+test can distinguish it. 323 tests after pinning.

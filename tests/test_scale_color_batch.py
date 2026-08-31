@@ -1005,3 +1005,97 @@ def test_measure_carries_the_card_advisory(tmp_path):
     assert "color_card_excluded" in [w["code"] for w in seg["warnings"]]
     m = _measure_impl(seg["session_id"])
     assert "color_card_excluded" in [w["code"] for w in m["warnings"]]
+
+
+# --- mutation round 10 (2026-08-31): pinning the green mutants ---
+
+
+def test_a_lattice_of_one_chip_refuses_a_card_region():
+    """detect_color_card can hand back a single labelled blob; one centre has
+    no pitch and no lattice, so the region must be refused with the same error
+    correction raises — not computed from an infinite pad."""
+    from plantcv_mcp.color import _card_polygon
+
+    labeled = np.zeros((100, 100), np.uint8)
+    labeled[40:60, 40:60] = 1
+    with pytest.raises(ColorCardNotFoundError, match="chip"):
+        _card_polygon(labeled)
+
+
+def test_segment_excludes_the_card_without_correction(tmp_path):
+    """exclude_color_card on segment() itself, not just the batch: the batch
+    branch passing does not prove the interactive one exists."""
+    from plantcv_mcp.server import _segment_impl, _store
+
+    p = _write(tmp_path, "card_plants.png", _card_and_two_plants())
+    seg = _segment_impl(
+        p, channel="a", method="otsu", object_type="light", exclude_color_card=True
+    )
+    assert "color_card_excluded" in [w["code"] for w in seg["warnings"]]
+    sess = _store.get(seg["session_id"])
+    assert sess.card_region is not None
+    region = _polygon_mask(sess.card_region, sess.mask.shape)
+    assert int(((sess.mask > 0) & (region == 1)).sum()) == 0
+    # Asked to exclude a card that is not there: raises, never measures raw.
+    with pytest.raises(ColorCardNotFoundError):
+        _segment_impl(
+            FIXTURE,
+            channel="a",
+            method="otsu",
+            object_type="light",
+            exclude_color_card=True,
+        )
+
+
+def test_a_session_inside_the_card_cannot_refine_to_nothing(tmp_path):
+    """Re-excluding the card can empty a refined mask entirely; that must
+    refuse loudly, not hand back an empty session that measures nothing."""
+    from plantcv_mcp.color import detect_card_region
+    from plantcv_mcp.imaging import load_image_with_digest
+    from plantcv_mcp.refine import RefinementErasedMaskError
+    from plantcv_mcp.server import _refine_impl, _store
+
+    img = np.full((900, 760, 3), 200, np.uint8)
+    img[:560] = _color_card()
+    p = _write(tmp_path, "card_bench.png", img)
+    loaded, digest = load_image_with_digest(p)
+    card = detect_card_region(loaded)
+    inside = np.zeros(img.shape[:2], np.uint8)
+    cv2.circle(inside, (250, 170), 20, 255, -1)  # entirely within the card
+    sess = _store.create(p, inside, "a", "otsu", digest=digest, card_region=card)
+    with pytest.raises(RefinementErasedMaskError):
+        _refine_impl(sess.session_id, [{"op": "fill_holes"}])
+    # Positive control: the same op on a mask outside the card refines fine.
+    outside = np.zeros(img.shape[:2], np.uint8)
+    cv2.circle(outside, (380, 700), 40, 255, -1)
+    sess2 = _store.create(p, outside, "a", "otsu", digest=digest, card_region=card)
+    ref = _refine_impl(sess2.session_id, [{"op": "fill_holes"}])
+    assert (_store.get(ref["session_id"]).mask > 0).any()
+
+
+def test_the_card_debt_accumulates_across_refines(tmp_path):
+    """segment() cut E px of card out of the mask and a refine regrew R more;
+    measure() on the child must report E+R, not forget the regrowth."""
+    import re
+
+    from plantcv_mcp.server import _measure_impl, _refine_impl, _segment_impl
+
+    def px(warnings):
+        for w in warnings:
+            if w["code"] == "color_card_excluded":
+                return int(re.match(r"(\d+) px", w["message"]).group(1))
+        return 0
+
+    img = np.full((900, 760, 3), 200, np.uint8)
+    img[:560] = _color_card()
+    cv2.circle(img, (380, 400), 30, (40, 40, 200), -1)  # just under the card
+    p = _write(tmp_path, "card_plant.png", img)
+    seg = _segment_impl(
+        p, channel="a", method="otsu", object_type="light", color_correct=True
+    )
+    e0 = px(seg["warnings"])
+    ref = _refine_impl(seg["session_id"], [{"op": "dilate", "ksize": 101}])
+    r = px(ref["warnings"])
+    assert r > 0
+    m = _measure_impl(ref["session_id"])
+    assert px(m["warnings"]) == e0 + r
