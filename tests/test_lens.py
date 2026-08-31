@@ -80,9 +80,9 @@ def _view(offset, jiggle, size=(640, 480)):
     )
 
 
-def _write_frames(directory, n=len(POSES)):
+def _write_frames(directory, n=None):
     directory.mkdir(parents=True, exist_ok=True)
-    for i, (offset, jiggle) in enumerate(POSES[:n]):
+    for i, (offset, jiggle) in enumerate(POSES if n is None else POSES[:n]):
         cv2.imwrite(str(directory / f"view{i}.png"), _distort(_view(offset, jiggle)))
 
 
