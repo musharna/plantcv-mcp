@@ -1,4 +1,4 @@
-"""MCP server. Thirteen tools over a typed session store (rgb / hsi / thermal).
+"""MCP server. Fourteen tools over a typed session store (rgb / hsi / thermal).
 
 segment() mints a session and returns the overlay but NO traits; measure()
 requires that session. The split is deliberate: it forces the visual evidence
@@ -15,7 +15,10 @@ session store carries its own lock.
 """
 
 import functools
+import hashlib
 import json
+import os
+import threading
 from typing import Any, NotRequired
 
 import numpy as np
@@ -53,7 +56,9 @@ from .imaging import (
     load_image_with_digest,
     render_overlay,
     render_region_overlay,
+    write_image,
 )
+from .lens import LensCalibration, calibrate_lens, undistort_image
 from .measurement import ANALYSES, TraitValue, validate_analyses
 from .paths import check_readable, configured_roots, set_roots
 from .refine import (
@@ -110,6 +115,10 @@ plant. Trait tables carry `lineage`, the ops that produced their mask.
 
 Traits are in PIXELS unless you pass px_per_mm to measure(), and pixel sizes are
 not comparable between images taken at different distances or zoom levels.
+If the camera has visible lens distortion — straight edges bow, a fisheye rig —
+run correct_lens_distortion() FIRST and work on the corrected image: measured on
+a real fisheye photo, distortion inflated plant area 2.13x and the error is
+anisotropic, so no px_per_mm can compensate for it.
 
 Hyperspectral ENVI cubes and thermal frames have their own segmenters
 (segment_hyperspectral, segment_thermal) and their own measurers
@@ -892,6 +901,147 @@ def _measure_regions_impl(
     }
 
 
+# Calibrations are cached against the DIGEST of the checkerboard directory's
+# contents, not its path: a directory whose frames changed is a different
+# camera as far as the maths is concerned, and a stale calibration silently
+# mis-corrects every image it touches.
+_lens_cache: dict[tuple[str, int, int], LensCalibration] = {}
+_lens_cache_lock = threading.Lock()
+
+
+def _checkerboard_digest(directory: str) -> str:
+    digest = hashlib.sha256()
+    for name in sorted(os.listdir(directory)):
+        path = os.path.join(directory, name)
+        if not os.path.isfile(path):
+            continue
+        digest.update(name.encode())
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _lens_calibration(
+    checkerboard_dir: str, row_corners: int, col_corners: int
+) -> LensCalibration:
+    key = (
+        _checkerboard_digest(checkerboard_dir),
+        int(row_corners),
+        int(col_corners),
+    )
+    with _lens_cache_lock:
+        cached = _lens_cache.get(key)
+    if cached is not None:
+        return cached
+    calib = calibrate_lens(
+        checkerboard_dir, row_corners=row_corners, col_corners=col_corners
+    )
+    with _lens_cache_lock:
+        _lens_cache[key] = calib
+    return calib
+
+
+def _correct_lens_impl(
+    image_path: str,
+    checkerboard_dir: str,
+    row_corners: int,
+    col_corners: int,
+    output_path: str | None = None,
+) -> dict:
+    real_image = check_readable(image_path)
+    img, _ = load_image_with_digest(real_image)
+    calib = _lens_calibration(
+        check_readable(checkerboard_dir), row_corners, col_corners
+    )
+    corrected, info = undistort_image(img, calib)
+
+    if output_path is None:
+        # The derived name is this tool's own to overwrite (re-running with a
+        # better calibration is the normal workflow) ...
+        out = os.path.splitext(real_image)[0] + "_undistorted.png"
+    else:
+        # ... but a user-supplied path pointing at an existing file is not.
+        out = check_readable(output_path)
+        if os.path.exists(out):
+            raise FileExistsError(
+                f"output_path {output_path!r} already exists. Pass a new path, "
+                "or omit output_path to write (and overwrite) the derived "
+                "<image>_undistorted.png next to the input."
+            )
+    write_image(out, corrected)
+
+    warnings: list[dict] = []
+    crop_note = (
+        f"The corrected frame was cropped to the valid region — "
+        f"{info['crop_fraction']:.0%} of its pixels were remap voids, "
+        "fabricated black areas with no source data."
+        if info["crop_fraction"] > 0
+        else "No void crop was needed."
+    )
+    warnings.append(
+        {
+            "code": "lens_corrected",
+            "message": (
+                f"Lens distortion corrected from {len(calib.frames_used)} "
+                f"checkerboard frame(s), rms reprojection error "
+                f"{calib.rms:.2f} px. {crop_note} Segment and measure "
+                f"{out!r} from here on — and take any px_per_mm from "
+                "calibrate_scale_from_marker on the CORRECTED image. A scale "
+                "calibrated on the original mixes two geometries: distortion "
+                "is anisotropic, and no single number can compensate for it."
+            ),
+        }
+    )
+    if len(calib.frames_used) < 5:
+        warnings.append(
+            {
+                "code": "thin_calibration",
+                "message": (
+                    f"Only {len(calib.frames_used)} checkerboard frame(s) "
+                    "went into this calibration"
+                    + (
+                        f" ({len(calib.frames_skipped)} skipped: "
+                        f"{', '.join(calib.frames_skipped)})"
+                        if calib.frames_skipped
+                        else ""
+                    )
+                    + ". Ten or more views, tilted and spread across the "
+                    "frame, make a materially better model — the correction "
+                    "here may be partial."
+                ),
+            }
+        )
+    if info["roi_degenerate"]:
+        warnings.append(
+            {
+                "code": "distortion_voids_remain",
+                "message": (
+                    "No all-valid crop rectangle exists for this calibration, "
+                    "so the corrected image still contains fabricated black "
+                    "void pixels at its edges. A value/darkness threshold "
+                    "will select them as objects; segment on a channel where "
+                    "black is neutral (such as 'a'), and check the overlay."
+                ),
+            }
+        )
+
+    preview, scale = downscale(corrected)
+    png = encode_png(preview)
+    return {
+        "corrected_image_path": out,
+        "frames_used": len(calib.frames_used),
+        "frames_skipped": calib.frames_skipped,
+        "rms_reprojection_error": calib.rms,
+        "valid_roi": info["valid_roi"],
+        "crop_fraction": info["crop_fraction"],
+        "corrected_size": [int(corrected.shape[0]), int(corrected.shape[1])],
+        "overlay_scale": scale,
+        "warnings": warnings,
+        "_png": png,
+    }
+
+
 def _loud(fn):
     """Convert every exception into a ToolError carrying its text.
 
@@ -1205,6 +1355,53 @@ def build_server() -> MCPServer:
             "crop_fraction": est.crop_fraction,
             "warnings": [{"code": a.code, "message": a.message} for a in est.warnings],
         }
+
+    # The one tool that writes: a corrected copy of the input image, under a
+    # derived name it owns (an explicit output_path refuses to overwrite).
+    WRITES_A_FILE = ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    )
+
+    @mcp.tool(
+        title="Correct lens distortion (writes a corrected image)",
+        annotations=WRITES_A_FILE,
+    )
+    @_loud
+    def correct_lens_distortion(
+        image_path: str,
+        checkerboard_dir: str,
+        row_corners: int,
+        col_corners: int,
+        output_path: str | None = None,
+    ) -> list:
+        """Correct lens/fisheye distortion using checkerboard calibration photos,
+        write the corrected image next to the input as <image>_undistorted.png
+        (or to output_path, refused if it exists), and return its path plus a
+        preview. Segment, calibrate scale, and measure the CORRECTED file.
+
+        Use this FIRST when straight edges bow in the image: measured on a real
+        fisheye photo, distortion inflated plant area 2.13x and varied by
+        direction, so no px_per_mm can compensate — a marker and the plant it
+        scales distort differently. checkerboard_dir holds several photos of a
+        checkerboard taken with the SAME camera; row_corners/col_corners count
+        its INNER corners (a 10x7-square board has 9x6). Frames where no board
+        is detected are skipped and named; fewer than 3 detections is refused.
+        The corrected frame is cropped to the region where every pixel is real
+        (remap voids removed); calibration is cached on the directory's content,
+        so correcting a batch re-uses it.
+        """
+        result = _correct_lens_impl(
+            image_path,
+            checkerboard_dir,
+            row_corners=row_corners,
+            col_corners=col_corners,
+            output_path=output_path,
+        )
+        png = result.pop("_png")
+        return [json.dumps(result), Image(data=png, format="png")]
 
     @mcp.tool(title="Measure many images with one recipe", annotations=READ_ONLY)
     @_loud

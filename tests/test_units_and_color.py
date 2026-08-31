@@ -155,13 +155,23 @@ def test_server_publishes_instructions_that_state_the_discipline():
 
 def test_every_tool_publishes_annotations_and_a_title():
     tools = asyncio.run(build_server().list_tools())
-    assert len(tools) == 13
+    assert len(tools) == 14
     for t in tools:
         assert t.title, f"{t.name} has no title"
         assert t.annotations is not None, f"{t.name} has no annotations"
         # snake_case since mcp 2.x. camelCase survives as a pydantic ALIAS for
         # constructing annotations, but that does not extend to reading them.
-        assert t.annotations.read_only_hint is True, f"{t.name} not marked read-only"
+        if t.name == "correct_lens_distortion":
+            # The one tool that writes (the corrected image). Claiming
+            # read-only here would be lying to every client that trusts the
+            # hint to skip a confirmation.
+            assert t.annotations.read_only_hint is False
+            assert t.annotations.destructive_hint is False
+            assert t.annotations.idempotent_hint is True
+        else:
+            assert t.annotations.read_only_hint is True, (
+                f"{t.name} not marked read-only"
+            )
         assert t.annotations.open_world_hint is False, (
             f"{t.name} not marked closed-world"
         )
@@ -197,6 +207,7 @@ def test_every_structured_tool_publishes_an_output_schema():
         "measure_morphology",
         "segment_hyperspectral",
         "segment_thermal",
+        "correct_lens_distortion",
     }
     # measure_regions joined this set when per-region measurement shipped: it
     # returns the labelled overlay alongside the rows, because per-region

@@ -82,6 +82,7 @@ To confine reads to your imagery: `plantcv-mcp --root /data/phenotyping`.
 | `refine(session_id, ops)`                                               | a NEW session with a cleaned-up mask, plus its overlay                                                       |
 | `measure(session_id, analyses, px_per_mm, ...)`                         | traits, or a raised error on a degenerate mask                                                               |
 | `calibrate_scale_from_marker(image_path, x, y, w, h, marker_length_mm)` | `px_per_mm` from a marker of known real size                                                                 |
+| `correct_lens_distortion(image_path, checkerboard_dir, ...)`            | a fisheye/wide-angle image undistorted via checkerboard calibration, written next to the input               |
 | `measure_regions(session_id, nrows, ncols, ...)`                        | one row per plant in a tray (RGB traits, thermal temperatures or HSI index stats), plus the numbered overlay |
 | `measure_morphology(session_id, prune_size, tangent_size, ...)`         | leaf/stem skeleton traits + the numbered-segment overlay                                                     |
 | `measure_images(image_paths, channel, method, ...)`                     | one recipe across many images (per plant with a grid); traits only where valid; time-budgeted                |
@@ -137,7 +138,7 @@ guards withhold numbers; advisories travel with them.
   ROI method; a thermal session handed to an RGB measurer; an image edited after
   segmentation. Each is refused naming the right tool.
 
-All 26 warning codes, every tool's parameters, and the measured facts behind each guard:
+All 33 warning codes, every tool's parameters, and the measured facts behind each guard:
 **[docs/GUIDE.md](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md)** — [segmenting](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#segmenting) · [traits and units](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#what-it-measures) ·
 [polarity](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#getting-the-polarity-right) · [refining](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#refining-a-mask) ·
 [trays](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#measuring-a-tray) · [morphology](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#morphology-leaves-stem-branch-points) ·

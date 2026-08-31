@@ -131,7 +131,11 @@ def calibrate_scale(
                     "usually means the polarity is wrong and the BACKGROUND was "
                     "selected, which would rescale every later trait. Try the "
                     "opposite object_type, or draw the region with a margin around "
-                    "the marker."
+                    "the marker. If instead the object simply continues beyond the "
+                    "crop — a pot contiguous with its soil and plant is ONE object "
+                    "— there is no isolatable marker in this scene, and any crop "
+                    "yields a different scale: leave the traits in pixels rather "
+                    "than trusting this one."
                 ),
             )
         )
