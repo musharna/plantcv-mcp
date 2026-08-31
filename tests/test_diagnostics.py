@@ -327,3 +327,63 @@ def test_frame_clipping_ignores_a_minor_sliver_at_the_edge():
     mostly_out[80:120, 197:200] = 255
     warn = frame_clipping_warning(mostly_out)
     assert warn is not None and warn.code == "frame_clipping"
+
+
+# --- fisheye dogfood 2026-08-31: minor components inflating extent traits ---
+
+
+def test_a_far_minor_component_inflates_extent_and_is_named():
+    """The fisheye photo's failure shape: a 458k-px plant plus a 1,886-px sliver
+    at the opposite corner made measure() report width 2040 px (true 940) with
+    no warning at all. The union-vs-major-extent gap needs its own advisory."""
+    from plantcv_mcp.diagnostics import minor_extent_inflation_warning
+
+    mask = np.zeros((200, 300), np.uint8)
+    mask[80:140, 40:100] = 255  # the plant
+    mask[0:8, 292:300] = 255  # far corner sliver, well below major threshold
+    w = minor_extent_inflation_warning(mask, analyze_mask(mask))
+    assert w is not None
+    assert w.code == "minor_components_inflate_extent"
+    assert "keep_largest" in w.message  # the remedy
+    assert "64" in w.message  # the offender's area is named
+    # Positive control: the same plant alone earns nothing.
+    clean = np.zeros((200, 300), np.uint8)
+    clean[80:140, 40:100] = 255
+    assert minor_extent_inflation_warning(clean, analyze_mask(clean)) is None
+
+
+def test_a_speck_beside_the_plant_does_not_warn():
+    """Specks adjacent to the plant barely move the union extent; warning on
+    them would fire on nearly every real segmentation."""
+    from plantcv_mcp.diagnostics import minor_extent_inflation_warning
+
+    mask = np.zeros((200, 300), np.uint8)
+    mask[80:140, 40:100] = 255
+    mask[100:106, 104:110] = 255  # touching-distance speck
+    assert minor_extent_inflation_warning(mask, analyze_mask(mask)) is None
+
+
+def test_two_majors_apart_are_multi_specimen_territory_not_extent_inflation():
+    """Two comparably-sized objects far apart are a multi_specimen case: both
+    belong to the measurement question, so the union extent is not 'inflated'
+    by noise and this advisory must stay silent."""
+    from plantcv_mcp.diagnostics import minor_extent_inflation_warning
+
+    mask = np.zeros((200, 300), np.uint8)
+    mask[80:140, 20:80] = 255
+    mask[80:140, 220:280] = 255
+    diag = analyze_mask(mask)
+    assert diag.major_object_count == 2
+    assert minor_extent_inflation_warning(mask, diag) is None
+
+
+def test_mask_warnings_carries_extent_inflation_to_segment_and_measure():
+    """mask_warnings is the shared segment-time/measure-time reporter; the
+    advisory must ride it so the overlay and the trait table agree."""
+    from plantcv_mcp.diagnostics import mask_warnings
+
+    mask = np.zeros((200, 300), np.uint8)
+    mask[80:140, 40:100] = 255
+    mask[0:8, 292:300] = 255
+    codes = [w.code for w in mask_warnings(mask, analyze_mask(mask))]
+    assert "minor_components_inflate_extent" in codes

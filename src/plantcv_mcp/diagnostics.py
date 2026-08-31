@@ -337,6 +337,10 @@ def mask_warnings(
     if multi:
         warnings.append(multi)
 
+    inflation = minor_extent_inflation_warning(mask, diag)
+    if inflation:
+        warnings.append(inflation)
+
     # frame_clipping asserts that size traits are a LOWER BOUND, which presumes the
     # mask IS the plant. On an implausibly large (probably inverted) mask that claim
     # actively misleads, so it is withheld rather than stacked on top.
@@ -413,6 +417,80 @@ def implausible_longest_path_warning(traits: dict) -> "Advisory | None":
             f"{w}x{h} bounding box. A path through the object cannot be that "
             "short; this happens on fragmented masks and is an artefact, not a "
             "measurement — ignore this trait for this object."
+        ),
+    )
+
+
+# Calibrated on the real fisheye photo that found the gap: a 1,886-px sliver at
+# the opposite corner from a 458,078-px plant (union diagonal 1.68x the plant's
+# own) reported width 2040 px against a true 940 with no warning at all. The
+# near-miss case — specks beside the plant — lands around 1.05-1.09 on real
+# segmentations, so 1.10 separates "material far from the plant" from "the
+# usual crumbs around it".
+EXTENT_INFLATION_RATIO = 1.10
+
+
+def minor_extent_inflation_warning(
+    mask: np.ndarray,
+    diag: MaskDiagnostics,
+    major_threshold: float = 0.25,
+    ratio: float = EXTENT_INFLATION_RATIO,
+) -> "Advisory | None":
+    """Warn when NON-major components stretch the union extent traits.
+
+    Extent-family traits (width, height, longest_path, ellipse, convex hull,
+    in_bounds) are computed over the union of every component in the mask, so a
+    speck far from the plant corrupts them all while every other guard stays
+    correctly silent: multi_specimen needs a comparably-sized object,
+    frame_clipping deliberately ignores minor slivers, and noisy_segmentation
+    needs dozens of them. Two majors far apart are NOT this case — both belong
+    to the measurement question and multi_specimen owns it — so the baseline
+    extent is the union of the MAJOR components, and only minor material
+    stretching beyond it warns.
+    """
+    if diag.component_count < 2 or diag.largest_area == 0:
+        return None
+    binary = (mask > 0).astype(np.uint8)
+    _, _, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    rows = stats[1:]
+    largest = int(rows[:, cv2.CC_STAT_AREA].max())
+    is_major = rows[:, cv2.CC_STAT_AREA] >= major_threshold * largest
+    if bool(is_major.all()):
+        return None
+
+    def _extent(r: np.ndarray) -> tuple[float, tuple[int, int, int, int]]:
+        x0 = int(r[:, cv2.CC_STAT_LEFT].min())
+        y0 = int(r[:, cv2.CC_STAT_TOP].min())
+        x1 = int((r[:, cv2.CC_STAT_LEFT] + r[:, cv2.CC_STAT_WIDTH]).max())
+        y1 = int((r[:, cv2.CC_STAT_TOP] + r[:, cv2.CC_STAT_HEIGHT]).max())
+        return float(np.hypot(x1 - x0, y1 - y0)), (x0, y0, x1, y1)
+
+    major_diag, (mx0, my0, mx1, my1) = _extent(rows[is_major])
+    union_diag, _ = _extent(rows)
+    if major_diag <= 0 or union_diag <= ratio * major_diag:
+        return None
+    outside = [
+        r
+        for r in rows[~is_major]
+        if r[cv2.CC_STAT_LEFT] < mx0
+        or r[cv2.CC_STAT_TOP] < my0
+        or r[cv2.CC_STAT_LEFT] + r[cv2.CC_STAT_WIDTH] > mx1
+        or r[cv2.CC_STAT_TOP] + r[cv2.CC_STAT_HEIGHT] > my1
+    ]
+    worst = max(outside, key=lambda r: int(r[cv2.CC_STAT_AREA]))
+    area = int(worst[cv2.CC_STAT_AREA])
+    return Advisory(
+        code="minor_components_inflate_extent",
+        message=(
+            f"A component of {area} px at "
+            f"({int(worst[cv2.CC_STAT_LEFT])}, {int(worst[cv2.CC_STAT_TOP])}), "
+            "far from the main object, stretches the measured extent: width, "
+            "height, longest_path, ellipse and convex-hull traits describe the "
+            f"span across ALL {diag.component_count} components "
+            f"({union_diag / major_diag:.1f}x the main object's own extent), "
+            "not the plant. Check the overlay: if that material is not part of "
+            "the specimen, refine() with keep_largest (or re-segment with "
+            f"fill_size above {area}) and measure the refined session."
         ),
     )
 

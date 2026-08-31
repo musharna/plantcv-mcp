@@ -214,6 +214,7 @@ async def test_server_registers_exactly_the_expected_tools():
         "measure_morphology",
         "measure_regions",
         "calibrate_scale_from_marker",
+        "correct_lens_distortion",
         "measure_images",
         "segment_hyperspectral",
         "measure_spectral",

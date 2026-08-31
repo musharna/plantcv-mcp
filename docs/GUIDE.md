@@ -118,7 +118,37 @@ The region is cropped before thresholding, so nothing outside your box can be se
 PlantCV's own `report_size_marker_area` takes an ROI instead, and measured against a disc of
 known 80 px diameter it returns 348 with a tight ROI — a silent 4.35× error. If the detected
 object reaches the crop edge you get a `marker_touches_crop_edge` warning, which usually means
-the polarity is wrong and the background was measured.
+the polarity is wrong and the background was measured — or that the candidate object simply
+continues beyond the crop (a pot contiguous with its soil and plant is ONE dark object), in
+which case there is no isolatable marker in the scene and traits should stay in pixels: on a
+real photo, four plausible crops of the same pot returned px_per_mm from 10.8 to 18.1.
+
+## Correcting lens distortion
+
+A wide-angle or fisheye lens makes `px_per_mm` a fiction: the scale varies across the frame
+and by direction. Measured on the PlantCV fisheye tutorial photo, distortion inflated the
+centre-frame plant's area **2.13×** (width 1.69×, height 1.22×), shifted shape traits
+(eccentricity 0.56 → 0.76), and scaled the same pot's rim, face height and base by
+1.73×/1.31×/1.59× — three different pixel scales on one object, so no marker calibration can
+compensate: a scale taken from the rim mis-sizes area by −29%, one from the face height by
++24%. If straight edges bow in your images, correct first and do everything else on the
+corrected file:
+
+```
+correct_lens_distortion(image_path, checkerboard_dir, row_corners=13, col_corners=19)
+  -> corrected_image_path ".../img_undistorted.png", frames_used 9, rms 13.0,
+     crop_fraction 0.58, warnings [lens_corrected]
+```
+
+`checkerboard_dir` holds several photos of a checkerboard taken with the **same camera**;
+the corner counts are the board's INNER corners. Frames where no board is detected are
+skipped and named; fewer than three detections is refused (PlantCV's own
+`checkerboard_calib` crashes on that directory, and would happily "calibrate" from one
+frame). The corrected image is cropped to the region where every pixel is real — the remap
+otherwise fabricates black voids that a value threshold would measure as objects — and the
+calibration is cached on the directory's content, so batches re-use it. Segment the
+corrected file, and take `px_per_mm` from `calibrate_scale_from_marker` **on the corrected
+file**: a scale calibrated on the original belongs to a geometry that no longer exists.
 
 ## Getting the polarity right
 
@@ -420,41 +450,47 @@ attached to the numbers it qualifies. A **refusal** is an error with a named cla
 same kind of guidance (`WrongSessionKindError: … Use measure_thermal() for it`), raised
 instead of a result.
 
-| code                                                                | raised by                                              | meaning                                                                                          | batch    |
-| ------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | -------- |
-| `implausible_coverage`                                              | any segmenter, `measure`                               | mask covers > 50% of the frame — probably the background                                         | blocking |
-| `empty_mask`                                                        | any segmenter                                          | nothing selected                                                                                 | blocking |
-| `fill_erased_mask`                                                  | any segmenter                                          | thresholding found objects; `fill_size` deleted them all — names the size to use                 | blocking |
-| `noisy_segmentation`                                                | any segmenter, `suggest`                               | ≥50 non-major components and no dominant object — background texture                             | blocking |
-| `multi_specimen`                                                    | any segmenter, `measure`, `measure_regions` (per cell) | several comparably-sized objects; the number describes the group → `measure_regions`             | advisory |
-| `frame_clipping`                                                    | any segmenter, `measure`                               | a major object touches the frame edge; size traits are lower bounds (background slivers at the edge do not count) | advisory |
-| `color_card_excluded`                                               | `segment`, `refine`, `measure`, `measure_images`       | the detected colour card's region was removed from the mask — the card is the instrument         | advisory |
-| `probable_background` (per cell)                                    | `measure_images` with a grid                            | in a mask covering most of the frame, this cell's object fills ≥ 85% of it: background between dividers, not a plant | withheld |
-| `noise_cluster` (per cell)                                          | `measure_images` with a grid                            | several comparable specks in one cell of a mask that is texture overall; the image is refused as `noisy_segmentation` | refused  |
-| `threshold_outside_range`                                           | `segment_hyperspectral`, `segment_thermal`             | the threshold or band lies past the data's range; selects everything or nothing                  | advisory |
-| `uncalibrated_cube`                                                 | `segment_hyperspectral`                                | integer counts cast to float; indices are relative                                               | advisory |
-| `nan_pixels`                                                        | thermal and spectral measurers                         | non-finite values excluded from statistics; counts given                                         | advisory |
-| `refine_large_change`                                               | `refine`                                               | mask changed > 25% — a different outline, not a cleanup                                          | —        |
-| `refine_dropped_object`                                             | `refine`                                               | an op removed a component ≥ 10% of the largest — a leaf, not a speck; names the op that split it | —        |
-| `object_exceeds_region`                                             | `measure_regions`                                      | a cell's object is ≥ 1.25× the cell — two plants, or a misaligned grid                           | —        |
-| `object_claimed_by_neighbour`                                       | `measure_regions`                                      | this cell's material was assigned whole to a neighbour, or its own object is < 20% of it         | —        |
-| `grid_misaligned`                                                   | `measure_regions` (`auto_grid`)                        | empty cells plus exceeded cells → use `rect_grid`                                                | —        |
-| `region_count_mismatch`                                             | `measure_regions` (`auto_grid`)                        | PlantCV built fewer regions than asked                                                           | —        |
-| `implausible_longest_path`                                          | `measure`, `measure_regions`                           | PlantCV's `longest_path` is shorter than the bounding box allows                                 | —        |
-| `stem_angle_undefined`                                              | `measure_morphology`                                   | a vertical stem; PlantCV's angle is not an angle → `null`                                        | —        |
-| `insertion_angle_undefined`                                         | `measure_morphology`                                   | a vertical stem; the stem line cannot be drawn, every `insertion_angle` → `null`                 | —        |
-| `tangent_window_exceeds_segment`                                    | `measure_morphology`                                   | `tangent_size` longer than half a segment; its angles collapse to 0                              | —        |
-| `prune_size_sensitive`                                              | `measure_morphology`                                   | segment count changes > 30% at 2× `prune_size`                                                   | —        |
-| `skeleton_has_cycles`, `no_leaf_segments`, `no_stem_segment`        | `measure_morphology`                                   | skeleton topology PlantCV's leaf/stem split cannot use                                           | —        |
-| `marker_touches_crop_edge`, `marker_not_round`, `marker_fills_crop` | `calibrate_scale_from_marker`                          | the detected marker is probably not the marker                                                   | —        |
+| code                                                                | raised by                                              | meaning                                                                                                               | batch    |
+| ------------------------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | -------- |
+| `implausible_coverage`                                              | any segmenter, `measure`                               | mask covers > 50% of the frame — probably the background                                                              | blocking |
+| `empty_mask`                                                        | any segmenter                                          | nothing selected                                                                                                      | blocking |
+| `fill_erased_mask`                                                  | any segmenter                                          | thresholding found objects; `fill_size` deleted them all — names the size to use                                      | blocking |
+| `noisy_segmentation`                                                | any segmenter, `suggest`                               | ≥50 non-major components and no dominant object — background texture                                                  | blocking |
+| `multi_specimen`                                                    | any segmenter, `measure`, `measure_regions` (per cell) | several comparably-sized objects; the number describes the group → `measure_regions`                                  | advisory |
+| `frame_clipping`                                                    | any segmenter, `measure`                               | a major object touches the frame edge; size traits are lower bounds (background slivers at the edge do not count)     | advisory |
+| `color_card_excluded`                                               | `segment`, `refine`, `measure`, `measure_images`       | the detected colour card's region was removed from the mask — the card is the instrument                              | advisory |
+| `probable_background` (per cell)                                    | `measure_images` with a grid                           | in a mask covering most of the frame, this cell's object fills ≥ 85% of it: background between dividers, not a plant  | withheld |
+| `noise_cluster` (per cell)                                          | `measure_images` with a grid                           | several comparable specks in one cell of a mask that is texture overall; the image is refused as `noisy_segmentation` | refused  |
+| `threshold_outside_range`                                           | `segment_hyperspectral`, `segment_thermal`             | the threshold or band lies past the data's range; selects everything or nothing                                       | advisory |
+| `uncalibrated_cube`                                                 | `segment_hyperspectral`                                | integer counts cast to float; indices are relative                                                                    | advisory |
+| `nan_pixels`                                                        | thermal and spectral measurers                         | non-finite values excluded from statistics; counts given                                                              | advisory |
+| `refine_large_change`                                               | `refine`                                               | mask changed > 25% — a different outline, not a cleanup                                                               | —        |
+| `refine_dropped_object`                                             | `refine`                                               | an op removed a component ≥ 10% of the largest — a leaf, not a speck; names the op that split it                      | —        |
+| `object_exceeds_region`                                             | `measure_regions`                                      | a cell's object is ≥ 1.25× the cell — two plants, or a misaligned grid                                                | —        |
+| `object_claimed_by_neighbour`                                       | `measure_regions`                                      | this cell's material was assigned whole to a neighbour, or its own object is < 20% of it                              | —        |
+| `grid_misaligned`                                                   | `measure_regions` (`auto_grid`)                        | empty cells plus exceeded cells → use `rect_grid`                                                                     | —        |
+| `region_count_mismatch`                                             | `measure_regions` (`auto_grid`)                        | PlantCV built fewer regions than asked                                                                                | —        |
+| `implausible_longest_path`                                          | `measure`, `measure_regions`                           | PlantCV's `longest_path` is shorter than the bounding box allows                                                      | —        |
+| `stem_angle_undefined`                                              | `measure_morphology`                                   | a vertical stem; PlantCV's angle is not an angle → `null`                                                             | —        |
+| `insertion_angle_undefined`                                         | `measure_morphology`                                   | a vertical stem; the stem line cannot be drawn, every `insertion_angle` → `null`                                      | —        |
+| `tangent_window_exceeds_segment`                                    | `measure_morphology`                                   | `tangent_size` longer than half a segment; its angles collapse to 0                                                   | —        |
+| `prune_size_sensitive`                                              | `measure_morphology`                                   | segment count changes > 30% at 2× `prune_size`                                                                        | —        |
+| `skeleton_has_cycles`, `no_leaf_segments`, `no_stem_segment`        | `measure_morphology`                                   | skeleton topology PlantCV's leaf/stem split cannot use                                                                | —        |
+| `marker_touches_crop_edge`, `marker_not_round`, `marker_fills_crop` | `calibrate_scale_from_marker`                          | the detected marker is probably not the marker                                                                        | —        |
+| `minor_components_inflate_extent`                                   | any segmenter, `measure`                               | material far from the main object stretches width/height/ellipse/hull traits; names it and the `keep_largest` remedy  | advisory |
+| `lens_corrected`                                                    | `correct_lens_distortion`                              | which file to measure from here on; re-calibrate any scale on it                                                      | —        |
+| `thin_calibration`                                                  | `correct_lens_distortion`                              | fewer than 5 checkerboard frames went into the calibration                                                            | —        |
+| `distortion_voids_remain`                                           | `correct_lens_distortion`                              | no all-valid crop exists; fabricated black pixels remain at the edges                                                 | —        |
 
 Refusals you will meet: a degenerate mask at `measure` (`DegenerateMaskError`), a refinement
 that erases the plant (`RefinementErasedMaskError`) or an invalid op list (`RefineSpecError`,
 nothing applied), a skeleton PlantCV cannot analyse (`MorphologyRefusedError`, with counts),
 the wrong session kind (`WrongSessionKindError`), a file that changed since segmentation
 (`ImageChangedSinceSegmentationError`, SHA-256), a grayscale or undecodable file
-(`NotColorImageError`), no colour card when one was asked for (`ColorCardNotFoundError`), and
-unknown channel / method / index / analysis names, each listing the valid ones.
+(`NotColorImageError`), no colour card when one was asked for (`ColorCardNotFoundError`), a
+checkerboard directory with fewer than three detectable boards (`LensCalibrationError`, with
+the per-frame accounting), and unknown channel / method / index / analysis names, each
+listing the valid ones.
 
 ## Crash containment: the analysis worker
 

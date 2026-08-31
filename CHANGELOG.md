@@ -6,6 +6,55 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-08-31
+
+Findings from the first lens-distortion dogfood: the released pipeline run on
+the real PlantCV fisheye tutorial photo, then compared against the same photo
+undistorted through PlantCV's own checkerboard calibration.
+
+### Added
+
+- **`correct_lens_distortion` — the fourteenth tool, and the first that
+  writes.** Measured on the fisheye photo, distortion inflated the
+  centre-frame plant's area 2.13x (width 1.69x, height 1.22x), shifted shape
+  traits (eccentricity 0.56 → 0.76), and gave the same pot three different
+  pixel scales (rim 1.73x, face height 1.31x, base 1.59x) — an anisotropic
+  error no `px_per_mm` can compensate, whatever it is calibrated on. The tool
+  builds a calibration from a directory of checkerboard photos and writes
+  `<image>_undistorted.png` next to the input (an explicit `output_path`
+  refuses to overwrite an existing file). It reports what
+  `pcv.transform.checkerboard_calib` computes and discards: every frame as
+  used or skipped by name, the rms reprojection error, and the valid-pixel
+  ROI — the corrected image is cropped to it, because the remap otherwise
+  fabricates black voids that a value threshold measures as objects. Fewer
+  than three detectable boards is a typed `LensCalibrationError` (PlantCV
+  crashes with a raw cv2 error on that directory, and "calibrates" from one
+  frame without comment). Calibrations are cached on the directory's content
+  digest, so a batch re-uses them. Advisories: `lens_corrected` (measure the
+  corrected file; re-calibrate any scale on it), `thin_calibration` (<5
+  frames), `distortion_voids_remain` (no valid crop exists).
+
+### Fixed
+
+- **A far-away speck silently corrupted the extent traits.** On the fisheye
+  photo, a 1,818-px sliver in the opposite corner from a 458,078-px plant
+  made `measure()` report width 2040 px (the true plant: 940), with
+  longest_path, ellipse and convex-hull traits equally wrong — and
+  `warnings: []`: `multi_specimen` needs a comparably-sized object,
+  `frame_clipping` deliberately ignores minor slivers (1.6.0), and
+  `noisy_segmentation` needs dozens of specks. New
+  `minor_components_inflate_extent` advisory on every segmenter and measurer
+  when non-major components stretch the union extent >10% beyond the major
+  components' own, naming the offender and the `keep_largest`/`fill_size`
+  remedy. Judged against the MAJOR union, so a genuine second plant
+  (multi_specimen territory) does not trip it.
+- **`marker_touches_crop_edge` only suspected polarity.** On a scene with no
+  dedicated marker, the pot+soil+plant is one contiguous dark object; every
+  crop through it touched the crop edge, and four plausible pot crops
+  returned px_per_mm from 10.8 to 18.1. The warning now also names this
+  case: when the object continues beyond the crop there is no isolatable
+  marker, and traits should stay in pixels.
+
 ## [1.7.0] — 2026-08-30
 
 Findings from an independent panel audit of 1.6.0 (six judges in full with a
@@ -44,7 +93,7 @@ rebuttal round; one lost to our harness), every one reproduced against the code
   coverage demotion assumed an inverted background is one object spanning
   every cell; dark dividers cut it into one island per cell, 96% of the frame,
   and both rows measured. A cell whose object fills ≥ `CELL_BACKGROUND_COVERAGE
-  = 0.85` of it, in a mask that covers most of the frame, is withheld as
+= 0.85` of it, in a mask that covers most of the frame, is withheld as
   `probable_background` (the fullest real cells are 0.19–0.51 of their cell,
   the dense fixture 0.72; the islands 0.90–0.96).
 - **A fine grid laundered a noisy mask.** `components ≤ 4 × cells` scales with

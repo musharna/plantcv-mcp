@@ -96,6 +96,12 @@ def load_image(path: str) -> np.ndarray:
     return load_image_with_digest(path)[0]
 
 
+def write_image(path: str, img: np.ndarray) -> None:
+    """Write an image, raising instead of cv2.imwrite's silent False."""
+    if not cv2.imwrite(path, img):
+        raise OSError(f"Could not write image to {path!r}")
+
+
 def downscale(
     img: np.ndarray, max_edge: int = 1024, min_edge: int = 256
 ) -> tuple[np.ndarray, float]:

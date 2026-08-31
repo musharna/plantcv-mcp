@@ -1099,3 +1099,25 @@ def test_the_card_debt_accumulates_across_refines(tmp_path):
     assert r > 0
     m = _measure_impl(ref["session_id"])
     assert px(m["warnings"]) == e0 + r
+
+
+# --- fisheye dogfood 2026-08-31: the no-isolatable-marker case ---
+
+
+def test_edge_contact_names_the_contiguous_object_case():
+    """On the real fisheye photo the pot+soil+plant is one dark blob, so every
+    crop through it trips edge contact — but four plausible crops returned four
+    px_per_mm values (10.8-18.1) and the message only suspected polarity. It
+    must also name the other cause: the candidate object continues beyond the
+    crop, so there is no isolatable marker and traits should stay in px."""
+    img = np.full((200, 200, 3), 240, np.uint8)
+    img[100:200, :] = (60, 60, 60)  # a dark object wider than any crop
+    est = calibrate_scale(img, x=50, y=90, w=100, h=80, marker_length_mm=50.0)
+    msg = next(w.message for w in est.warnings if w.code == "marker_touches_crop_edge")
+    assert "contiguous" in msg
+    assert "pixels" in msg  # the leave-traits-in-px remedy
+    # Positive control: an isolated disc still calibrates with no warnings.
+    est2 = calibrate_scale(
+        _disc_image(80), x=100, y=100, w=100, h=100, marker_length_mm=20.0
+    )
+    assert not est2.warnings

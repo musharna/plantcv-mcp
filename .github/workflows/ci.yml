@@ -102,6 +102,7 @@ jobs:
               names = sorted(t.name for t in tools.tools)
               expected = [
                   "calibrate_scale_from_marker",
+                  "correct_lens_distortion",
                   "list_methods",
                   "measure",
                   "measure_images",
