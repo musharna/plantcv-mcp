@@ -423,3 +423,83 @@ count only on the degenerate path (`lens.py:283`), so for any info the
 tool produces `residual_void_px > 0` implies `roi_degenerate`; the `or`
 conjunct is defensive documentation and no public-API test can distinguish
 it. 360 tests after pinning.
+
+## Round 12 — the 1.9.0 calibration, containment, and offender guards (2026-09-01)
+
+The guards from the panel audit of 1.8.2, disabled one at a time (371 tests,
+`pytest -x` per mutant). Predictions logged before the run: five greens
+expected (`L6`, `S7`, `I3`, `I4`, `D3`); ten survived — the other five
+(`L4`, `S5`, `I1`, `D1`, `D2`) were real gaps the predictions missed.
+
+| mutant                              | change                                                                  | result |
+| ----------------------------------- | ----------------------------------------------------------------------- | ------ |
+| L1 minimum orientations 1           | `MIN_DISTINCT_ORIENTATIONS = 3` → `1`                                   | RED    |
+| L2 minimum orientations 2           | → `2`                                                                   | RED    |
+| L3 minimum orientations 4           | → `4`                                                                   | RED    |
+| L4 cluster angle 0.05°              | `ORIENTATION_DISTINCT_DEG = 5.0` → `0.05`                               | GREEN → pinned |
+| L5 cluster angle 60°                | → `60.0`                                                                | RED    |
+| L6 normal sign not folded           | `abs(dot)` → `dot` in `_distinct_orientations`                          | GREEN — EQUIVALENT |
+| L7 k3 free                          | `flags=cv2.CALIB_FIX_K3` removed                                        | RED    |
+| L8 rms gate off                     | `MAX_CALIBRATION_RMS_FRACTION = 0.03` → `1e12`                          | RED    |
+| L9 rms gate 1e-6                    | → `1e-6`                                                                | RED    |
+| L10 fraction is pixels              | `rms_fraction` → `return rms`                                           | RED    |
+| L11 EXIF-honouring decode           | `IMREAD_UNCHANGED` → `IMREAD_GRAYSCALE`                                 | RED    |
+| L12 coverage always 1.0             | `coverage=float(hull.mean())` → `1.0`                                   | RED    |
+| L13 orientation gate `<=`           | `if orientations < MIN` → `<=`                                          | RED    |
+| S1 high-rms advisory never          | `HIGH_REPROJECTION_FRACTION = 0.0015` → `1.0`                           | RED    |
+| S2 high-rms advisory always         | → `1e-9`                                                                | RED    |
+| S3 coverage advisory never          | `MIN_CALIBRATION_COVERAGE = 0.4` → `0.0`                                | RED    |
+| S4 coverage advisory always         | → `0.99`                                                                | RED    |
+| S5 member open by original name     | `os.open(real, …)` → `os.open(path, …)`                                 | GREEN → pinned |
+| S6 member open follows links        | `O_NOFOLLOW` removed from the member open                               | RED    |
+| S7 board_coverage not reported      | result key removed                                                      | GREEN → pinned |
+| I1 symlink refusal branch off       | `if stat.S_ISLNK(...)` → `if False`                                     | GREEN → pinned |
+| I2 hard-link refusal off            | `if st.st_nlink > 1` → `if False`                                       | RED    |
+| I3 exclusive path via replace       | `os.link(tmp, path)` → `os.replace(tmp, path)`                          | GREEN — EQUIVALENT by race |
+| I4 partial file left behind         | `finally: os.unlink(tmp)` removed                                       | GREEN → pinned |
+| D1 width axis gate forced on        | `if over_w:` → `if True:`                                               | GREEN → pinned |
+| D2 height axis gate forced on       | `if over_h:` → `if True:`                                               | GREEN → pinned |
+| D3 absolute overhang                | `/ major_w` removed from the width score                                | GREEN → pinned |
+| D4 trigger `and` not `or`           | `if not (over_w or over_h)` → `and`                                     | RED    |
+
+Eighteen of twenty-eight red. Eight greens pinned, each watched red under
+its own mutant on live code first:
+
+- `test_one_tilt_slid_around_the_frame_is_one_orientation` (L4): a board at
+  one tilt slid to eight positions reads as ONE orientation at 5° and at
+  0.5°, but as SIX at 0.05° — its recovered normals jitter by tenths of a
+  degree — and calibrates to fx 354. Positive control: eight tilts about
+  one axis calibrate to the true camera.
+- `test_a_symlinked_member_inside_the_roots_is_read_not_skipped` (S5): the
+  swap test starts from a regular file, so `real == path` and `O_NOFOLLOW`
+  catches the swap either way; what the resolved path buys is a LEGITIMATE
+  symlink to a frame inside the roots being read rather than skipped.
+- `test_board_coverage_is_reported_in_the_result` (S7).
+- `test_a_symlink_at_the_derived_output_is_refused` now matches "is a
+  symlink" (I1): the old `match="symlink"` was satisfied by the tmp PATH —
+  pytest names it after the test — so the mutant's "not a regular file"
+  message passed. The refusal mechanism (`not S_ISREG`) survived the mutant;
+  only the message was unpinned.
+- `test_no_partial_file_is_left_beside_the_output` (I4): after `os.replace`
+  the temp name is gone anyway; the explicit-path `os.link` branch leaves
+  `.partial` behind without the cleanup.
+- `test_the_offender_is_on_the_triggering_axis_even_when_another_overhangs_more`
+  (D1, D2): relative scoring makes the axis gate redundant for a single
+  extender (a non-triggering axis's extender is always under 0.25), but not
+  when the trigger comes from two sides at 0.15 each — a 2-px blob at 0.20
+  on the silent axis would be named. The first fixture catches the height
+  gate (D2), its transpose the width gate (D1). A first draft placed the
+  blob adjacent to the plant and it merged under 8-connectivity — three
+  components, not four; the gap is one pixel.
+- `test_offender_overhang_is_relative_to_each_axis_extent` (D3): with both
+  axes over threshold, 300 px on a 1000-px width (0.30) must not outrank
+  8 px on a 10-px height (0.80).
+
+Two greens are EQUIVALENT and kept: L6 — every board normal in the fixture,
+the all-mirrored and the half-mirrored sets has z-sign +1 (an opaque board
+never presents a flipped normal), so folding the sign cannot change a
+count on any physical input; the `abs()` stays as a guard against a
+numerically flipped Rodrigues axis. I3 — `write_image` refuses any existing
+name by `lstat` before staging, so `os.link`'s EEXIST atomicity is
+observable only in the race between that check and the link; no
+single-process test can distinguish it. 377 tests after pinning.
