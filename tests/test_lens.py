@@ -34,12 +34,13 @@ def _board(square=48):
     return board
 
 
-def _distort(img):
-    """Apply MTX/DIST to an ideal pinhole image (remap via undistortPoints)."""
+def _distort(img, mtx=MTX, dist=DIST):
+    """Apply the camera's distortion to an ideal pinhole image (remap via
+    undistortPoints)."""
     h, w = img.shape[:2]
     xs, ys = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
     pts = np.stack([xs.ravel(), ys.ravel()], axis=1).reshape(-1, 1, 2)
-    und = cv2.undistortPoints(pts, MTX, DIST, P=MTX).reshape(h, w, 2)
+    und = cv2.undistortPoints(pts, mtx, dist, P=mtx).reshape(h, w, 2)
     return cv2.remap(
         img,
         und[..., 0],
@@ -56,21 +57,30 @@ def _distort(img):
 # fixture calibrated to fx=217, cx=386, so every "against a true 400" claim was
 # measured against a camera that did not exist. Deterministic on purpose — a
 # flaky calibration test would teach nothing. The first pose is the most
-# tilted (its corner rows bend 4.6 px under DIST); it is the scene and the
-# thumbnail source too.
+# tilted of the centre views (its corner rows bend 4.6 px under DIST); it is
+# the scene and the thumbnail source too. The set is spread to the frame's
+# corners on purpose: the 1.8.2 poses covered 24% of the frame and the
+# recovered model, exact where boards had been, was off by up to 659 px at
+# the corners (panel audit of 1.8.2). These cover 48%.
 POSES = [
     ((0.00, 0.35, 0.10), (-5.5, -2.5, 12.5)),
-    ((0.00, 0.00, 0.00), (-4.5, -3.2, 12.0)),
-    ((0.35, 0.00, 0.00), (-4.0, -3.0, 13.0)),
-    ((-0.30, 0.20, 0.00), (-3.0, -3.8, 14.0)),
-    ((0.20, -0.35, -0.15), (-6.0, -3.5, 13.5)),
-    ((-0.25, -0.25, 0.20), (-4.8, -1.8, 15.0)),
-    ((0.40, 0.25, 0.00), (-3.5, -2.2, 12.5)),
-    ((-0.15, 0.40, -0.10), (-5.2, -4.0, 14.5)),
+    ((0.20, 0.15, 0.00), (-8.6, -6.3, 11.0)),
+    ((0.20, -0.15, 0.00), (-1.6, -6.3, 11.0)),
+    ((-0.20, 0.15, 0.00), (-8.4, -1.2, 11.0)),
+    ((0.15, 0.10, 0.00), (-11.0, -8.2, 14.0)),
+    ((0.15, -0.10, 0.00), (0.8, -8.2, 14.0)),
+    ((-0.15, 0.10, 0.00), (-11.0, 1.0, 14.0)),
+    ((-0.15, -0.10, 0.00), (0.8, 1.0, 14.0)),
+    ((-0.20, -0.15, 0.10), (-1.6, -0.7, 11.0)),
+    ((0.35, 0.25, 0.00), (-4.5, -3.0, 10.0)),
+    ((-0.35, -0.20, -0.15), (-4.0, -3.5, 10.5)),
+    ((0.00, 0.00, 0.00), (-5.0, -3.5, 11.0)),
+    ((0.10, 0.40, 0.20), (-7.0, -3.5, 12.0)),
+    ((-0.15, -0.40, -0.20), (-2.5, -3.0, 12.0)),
 ]
 
 
-def _view(rvec, tvec, size=(640, 480)):
+def _view(rvec, tvec, size=(640, 480), mtx=MTX):
     """Render the flat board at a rigid pose through the PINHOLE part of MTX.
 
     The board plane is z=0 with one unit per square; its four corners are
@@ -83,7 +93,7 @@ def _view(rvec, tvec, size=(640, 480)):
     square = bh / (ROWS + 1)
     base = np.float32([[0, 0], [bw, 0], [bw, bh], [0, bh]])
     world = np.float32([[0, 0, 0], [bw, 0, 0], [bw, bh, 0], [0, bh, 0]]) / square
-    pts, _ = cv2.projectPoints(world, np.float32(rvec), np.float32(tvec), MTX, None)
+    pts, _ = cv2.projectPoints(world, np.float32(rvec), np.float32(tvec), mtx, None)
     hom = cv2.getPerspectiveTransform(base, pts.reshape(4, 2).astype(np.float32))
     return cv2.warpPerspective(
         board,
@@ -287,9 +297,9 @@ def test_the_crop_contains_no_fabricated_pixels():
 
 def test_ten_copies_of_one_pose_are_refused(tmp_path):
     """Panel 3: ten duplicates 'calibrate' to a LOW rms with wrong intrinsics
-    — measured with this gate disabled on the true-camera fixture: rms 0.19,
-    fx=252 and k1=-0.24 against 400 and -0.50 — so only a pose-diversity
-    gate can catch it."""
+    — measured with the gate disabled on the true-camera fixture: rms 0.19,
+    fx=252 and k1=-0.24 against 400 and -0.50. Copies are ONE board
+    orientation, the degenerate end of the orientation-count refusal."""
     from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
 
     d = tmp_path / "dups"
@@ -297,7 +307,7 @@ def test_ten_copies_of_one_pose_are_refused(tmp_path):
     one = _distort(_view(*POSES[0]))
     for i in range(10):
         cv2.imwrite(str(d / f"dup{i}.png"), one)
-    with pytest.raises(LensCalibrationError, match="pose"):
+    with pytest.raises(LensCalibrationError, match="orientation"):
         calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
     # Positive control: the distinct-pose set calibrates through the same path.
     d2 = tmp_path / "distinct"
@@ -698,26 +708,279 @@ def test_calibration_recovers_the_synthetic_camera(calibration):
     assert abs(fx - MTX[0, 0]) < 0.02 * MTX[0, 0]
     assert abs(fy - MTX[1, 1]) < 0.02 * MTX[1, 1]
     assert abs(cx - MTX[0, 2]) < 3.0 and abs(cy - MTX[1, 2]) < 3.0
-    assert abs(float(calibration.dist.ravel()[0]) - DIST[0]) < 0.1 * abs(DIST[0])
-    assert calibration.rms < 0.5
+    d = calibration.dist.ravel()
+    assert abs(float(d[0]) - DIST[0]) < 0.1 * abs(DIST[0])
+    assert abs(float(d[1]) - DIST[1]) < 0.1  # measured 0.200 vs 0.20
+    assert calibration.rms < 1.0  # measured 0.48; asserted, not pinned
 
 
-def test_mirrored_views_calibrate_the_same_camera(tmp_path):
-    """Mirroring is a symmetry of a centred camera: a mirrored checkerboard is
-    the same board seen from behind, and findChessboardCorners canonicalises
-    corner order, so all-mirrored and half-mirrored sets recover the same
-    intrinsics. Pinned so nobody adds a 'mirrored frame' guard for a defect
-    that only the old homography fixture (off-centre implied cx) exhibited."""
+def _forward_map_error(calib):
+    """Pixel error of the correction FIELD the tool applies (initUndistort-
+    RectifyMap, the same map cv2.undistort builds) against the declared
+    camera, over the whole frame — not just where boards were."""
+    h, w = calib.shape
+    newm, _ = cv2.getOptimalNewCameraMatrix(MTX, DIST, (w, h), 1, (w, h))
+    tx, ty = cv2.initUndistortRectifyMap(MTX, DIST, None, newm, (w, h), cv2.CV_32FC1)
+    rx, ry = cv2.initUndistortRectifyMap(
+        calib.mtx, calib.dist, None, newm, (w, h), cv2.CV_32FC1
+    )
+    return np.hypot(tx - rx, ty - ry)
+
+
+def test_the_recovered_correction_field_holds_across_the_whole_frame(calibration):
+    """Panel of 1.8.2 (codex, reproduced): the recovery test checked k1 and
+    the intrinsics, and the model was exact where the boards had been — and
+    off by up to 659 px at the frame corners, because a free k3 (-0.16) folded
+    the polynomial over outside the 24% of the frame the boards covered. On
+    the spread fixture the free fit is worse still (fx 655, k3 -5.4, map error
+    31,000 px); fixing k3 recovers k1/k2 to the second decimal with the map
+    within 10 px everywhere (measured 9.7 max, 4.8 at the 95th percentile).
+    The correction is a FIELD; the oracle must look at the whole of it."""
+    err = _forward_map_error(calibration)
+    assert float(np.percentile(err, 95)) < 10.0
+    assert float(err.max()) < 25.0
+    assert float(calibration.dist.ravel()[4]) == 0.0  # k3 is not fitted
+
+
+def test_mirrored_frames_are_a_documented_limit_not_a_symmetry(tmp_path):
+    """1.8.2 claimed mirrored sets recover the same camera; the panel showed
+    that held only because the fixture is centred with no tangential term.
+    For a camera with cx=285 and p2=0.012: all-mirrored frames recover the
+    REFLECTED camera (cx ≈ 639-285, p2 sign flipped — consistent, so a
+    mirrored scene corrects correctly), while a set with SOME frames mirrored
+    returns a camera that is neither, at a low rms, and nothing in the
+    calibration can tell. Pinned as the limit it is."""
     from plantcv_mcp.lens import calibrate_lens
 
-    for label, pick in (("all", lambda i: True), ("half", lambda i: i % 2 == 1)):
+    mtx = np.array([[400.0, 0.0, 285.0], [0.0, 400.0, 240.0], [0.0, 0.0, 1.0]])
+    dist = np.array([-0.5, 0.2, 0.0, 0.012, 0.0])
+    views = [_distort(_view(r, t, mtx=mtx), mtx, dist) for r, t in POSES]
+    results = {}
+    for label, pick in (
+        ("plain", lambda i: False),
+        ("all", lambda i: True),
+        ("half", lambda i: i % 2 == 1),
+    ):
         d = tmp_path / label
         d.mkdir()
-        for i, (r, t) in enumerate(POSES):
-            img = _distort(_view(r, t))
+        for i, img in enumerate(views):
             if pick(i):
                 img = np.ascontiguousarray(img[:, ::-1])
             cv2.imwrite(str(d / f"view{i}.png"), img)
-        calib = calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
-        assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0], label
-        assert abs(calib.mtx[0, 2] - MTX[0, 2]) < 3.0, label
+        results[label] = calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    plain, allm, half = results["plain"], results["all"], results["half"]
+    assert abs(plain.mtx[0, 2] - 285.0) < 3.0
+    assert abs(allm.mtx[0, 2] - (639.0 - 285.0)) < 3.0
+    assert abs(float(allm.dist.ravel()[3]) + 0.012) < 0.003
+    # The mixed set: a principal point belonging to neither camera, low rms.
+    assert abs(half.mtx[0, 2] - 285.0) > 20.0 and abs(half.mtx[0, 2] - 354.0) > 20.0
+    assert half.rms < 1.0
+
+
+# --- panel audit of 1.8.2 (2026-09-01): pinning the confirmed findings ---
+
+
+def _write_pose_set(directory, poses):
+    directory.mkdir(parents=True, exist_ok=True)
+    for i, (r, t) in enumerate(poses):
+        cv2.imwrite(str(directory / f"view{i}.png"), _distort(_view(r, t)))
+
+
+def test_frontal_views_at_different_positions_are_refused(tmp_path):
+    """Panel 1 (3/3 judges; reproduced): eight translations of a fronto-
+    parallel board pass a corner-displacement gate and calibrate to fx=228
+    (true 400) at rms 0.19; depth changes to 333; in-plane rotations to 314 at
+    rms 0.074. Zhang's method needs distinct board ORIENTATIONS; translation
+    supplies none. Refuse, naming the orientation count."""
+    from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
+
+    frontal = [
+        ((0.0, 0.0, 0.0), (-4.5 + dx, -3.2 + dy, 12.0))
+        for dx, dy in [
+            (0, 0),
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (-1, -1),
+            (1.5, -0.5),
+        ]
+    ]
+    _write_pose_set(tmp_path / "frontal", frontal)
+    with pytest.raises(LensCalibrationError, match="orientation") as err:
+        calibrate_lens(str(tmp_path / "frontal"), row_corners=ROWS, col_corners=COLS)
+    assert "1 distinct" in str(err.value)
+    # Positive control: the same eight positions with the board tilted
+    # differently at each calibrate to the true camera.
+    _write_pose_set(tmp_path / "tilted", POSES[:8])
+    calib = calibrate_lens(str(tmp_path / "tilted"), row_corners=ROWS, col_corners=COLS)
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0]
+
+
+def test_two_orientations_however_many_frames_are_refused(tmp_path):
+    """Panel 1 (codex's reproduction): four copies each of two poses pass the
+    displacement gate and 'calibrate' to fx=883 with k1=-3.6 at rms 0.59.
+    Two orientations leave the intrinsics undetermined; three is the floor."""
+    from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
+
+    _write_pose_set(tmp_path / "two", [POSES[1]] * 4 + [POSES[9]] * 4)
+    with pytest.raises(LensCalibrationError, match="2 distinct"):
+        calibrate_lens(str(tmp_path / "two"), row_corners=ROWS, col_corners=COLS)
+    # Positive control: three orientations, three copies each, calibrate.
+    _write_pose_set(tmp_path / "three", [POSES[0], POSES[1], POSES[9]] * 3)
+    calib = calibrate_lens(str(tmp_path / "three"), row_corners=ROWS, col_corners=COLS)
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.03 * MTX[0, 0]
+
+
+def test_exif_rotated_frames_and_scenes_decode_alike(tmp_path):
+    """Panel 4 (codex; reproduced): identical EXIF-orientation-6 JPEG bytes
+    decoded to 640x480 through the calibration path (IMREAD_GRAYSCALE honours
+    EXIF) and 480x640 through the scene path (IMREAD_UNCHANGED ignores it), so
+    a camera's own frames were refused as a resolution mismatch. Both paths
+    must read the stored raster the same way."""
+    import io
+
+    from PIL import Image
+
+    from plantcv_mcp.imaging import decode_image
+    from plantcv_mcp.lens import calibrate_lens_from_frames
+
+    frames = []
+    for i, (r, t) in enumerate(POSES):
+        gray = _distort(_view(r, t))
+        im = Image.fromarray(cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB))
+        exif = Image.Exif()
+        exif[0x0112] = 6
+        buf = io.BytesIO()
+        im.save(buf, format="JPEG", quality=95, exif=exif.tobytes())
+        frames.append((f"view{i}.jpg", buf.getvalue()))
+    scene = decode_image(frames[0][1], "view0.jpg")
+    calib = calibrate_lens_from_frames(frames, row_corners=ROWS, col_corners=COLS)
+    assert calib.shape == scene.shape[:2]
+    assert len(calib.frames_used) == len(POSES)
+
+
+def test_fit_thresholds_are_fractions_of_the_frame_not_pixels():
+    """Panel 5 (3/3 judges): the same geometric fit scaled 8x crossed the 5-px
+    advisory and the 100-px refusal on resolution alone; the real 2880-px set
+    fits at 13 px (0.45% of width). Thresholds are fractions of the frame
+    diagonal, so one fit means one thing at any resolution."""
+    from plantcv_mcp.lens import LensCalibration
+    from plantcv_mcp.server import _lens_advisories
+
+    info = {
+        "valid_roi": [0, 0, 1, 1],
+        "crop_fraction": 0.1,
+        "roi_degenerate": False,
+        "residual_void_px": 0,
+    }
+
+    def codes(rms, shape):
+        calib = LensCalibration(
+            mtx=MTX,
+            dist=DIST,
+            rms=rms,
+            frames_used=["a"] * 9,
+            frames_skipped=[],
+            shape=shape,
+            coverage=0.7,
+        )
+        return [w["code"] for w in _lens_advisories(calib, info, "/tmp/x.png")]
+
+    assert "high_reprojection_error" in codes(3.0, (480, 640))
+    assert "high_reprojection_error" not in codes(3.0, (1920, 2880))
+    assert "high_reprojection_error" in codes(13.0, (1920, 2880))  # the real set
+
+
+def test_low_board_coverage_earns_an_advisory(tmp_path, calibration):
+    """Panel 3 (codex; reproduced): a calibration is exact where boards were
+    and extrapolated everywhere else — 24% coverage left the model 31 px off
+    at the corners even with k3 fixed. The tool reports the covered fraction
+    and says so below 40%."""
+    from plantcv_mcp.lens import calibrate_lens
+    from plantcv_mcp.server import _lens_advisories
+
+    info = {
+        "valid_roi": [0, 0, 1, 1],
+        "crop_fraction": 0.1,
+        "roi_degenerate": False,
+        "residual_void_px": 0,
+    }
+    assert calibration.coverage >= 0.4
+    assert "low_calibration_coverage" not in [
+        w["code"] for w in _lens_advisories(calibration, info, "/tmp/x.png")
+    ]
+    _write_pose_set(tmp_path / "centre", POSES[:1] + POSES[9:12])
+    centre = calibrate_lens(
+        str(tmp_path / "centre"), row_corners=ROWS, col_corners=COLS
+    )
+    assert centre.coverage < 0.4
+    warnings = _lens_advisories(centre, info, "/tmp/x.png")
+    low = next(w for w in warnings if w["code"] == "low_calibration_coverage")
+    assert f"{centre.coverage:.0%}" in low["message"]
+
+
+def test_a_member_swapped_for_a_symlink_after_the_check_is_not_read(
+    tmp_path, monkeypatch
+):
+    """Panel 6 (codex; security): check_readable's resolved path was discarded
+    and the original spelling reopened, so a member replaced by an outside
+    symlink between the check and the open was read and calibrated. The open
+    must bind to the checked path and never follow a link."""
+    from plantcv_mcp import server
+    from plantcv_mcp.server import _load_checkerboard_frames
+
+    outside = tmp_path / "outside"
+    _write_frames(outside)
+    calib = tmp_path / "calib"
+    _write_frames(calib)
+    target = calib / "view0.png"
+    real_check = server.check_readable
+
+    def swap_after_check(path):
+        real = real_check(path)
+        if os.path.basename(path) == "view0.png":
+            os.unlink(target)
+            os.symlink(str(outside / "view3.png"), str(target))
+        return real
+
+    monkeypatch.setattr(server, "check_readable", swap_after_check)
+    frames, _ = _load_checkerboard_frames(str(calib))
+    by_name = dict(frames)
+    assert by_name["view0.png"] != (outside / "view3.png").read_bytes()
+    assert by_name["view0.png"] == b""  # skipped, not followed
+    # Positive control: the untouched members were read normally.
+    assert by_name["view1.png"] == (calib / "view1.png").read_bytes()
+
+
+def test_a_hard_link_at_the_derived_output_leaves_the_linked_file_intact(
+    tmp_path, calib_dir
+):
+    """Panel 7 (codex; destructive): O_NOFOLLOW guards a symlink at the name,
+    not a hard link — a hard-linked scene_undistorted.png was opened and
+    truncated (800 -> 79 bytes). The write must never open an existing inode:
+    it goes to a fresh sibling and replaces the directory entry."""
+    from plantcv_mcp.server import _correct_lens_impl
+
+    scene = tmp_path / "scene.png"
+    cv2.imwrite(
+        str(scene), _distort(cv2.cvtColor(_view(*POSES[0]), cv2.COLOR_GRAY2BGR))
+    )
+    victim = tmp_path / "victim.bin"
+    victim.write_bytes(b"precious" * 100)
+    os.link(str(victim), str(tmp_path / "scene_undistorted.png"))
+    with pytest.raises(OSError, match="hard link"):
+        _correct_lens_impl(
+            str(scene), str(calib_dir), row_corners=ROWS, col_corners=COLS
+        )
+    assert victim.read_bytes() == b"precious" * 100
+    # Positive control: with the squatter gone, the derived name is written
+    # and a re-run overwrites it (the tool's own file) without complaint.
+    os.unlink(str(tmp_path / "scene_undistorted.png"))
+    for _ in range(2):
+        res = _correct_lens_impl(
+            str(scene), str(calib_dir), row_corners=ROWS, col_corners=COLS
+        )
+    assert cv2.imread(res["corrected_image_path"]) is not None
+    assert victim.read_bytes() == b"precious" * 100

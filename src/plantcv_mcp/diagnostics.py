@@ -472,20 +472,33 @@ def minor_extent_inflation_warning(
     union_w, union_h = ux1 - ux0, uy1 - uy0
     if major_w <= 0 or major_h <= 0:
         return None
-    if union_w <= ratio * major_w and union_h <= ratio * major_h:
+    over_w = union_w > ratio * major_w
+    over_h = union_h > ratio * major_h
+    if not (over_w or over_h):
         return None
 
-    def _overhang(r: np.ndarray) -> int:
-        return max(
-            mx0 - int(r[cv2.CC_STAT_LEFT]),
-            int(r[cv2.CC_STAT_LEFT] + r[cv2.CC_STAT_WIDTH]) - mx1,
-            my0 - int(r[cv2.CC_STAT_TOP]),
-            int(r[cv2.CC_STAT_TOP] + r[cv2.CC_STAT_HEIGHT]) - my1,
-        )
+    def _overhang(r: np.ndarray) -> float:
+        # Overhang along each axis that actually crossed the threshold, as a
+        # fraction of that axis's major extent. A component that only
+        # stretches an axis which stayed within tolerance is not the driver,
+        # however far it sits: measured, a 1-px speck 199 px off the WIDTH of
+        # a 1000x10 plant (1.20x, silent) outranked the 16-px blob that took
+        # its HEIGHT to 1.7x, and the remedy it prescribed could not clear the
+        # warning (panel audit of 1.8.2).
+        scores = []
+        if over_w:
+            left = int(r[cv2.CC_STAT_LEFT])
+            right = left + int(r[cv2.CC_STAT_WIDTH])
+            scores.append(max(mx0 - left, right - mx1) / major_w)
+        if over_h:
+            top = int(r[cv2.CC_STAT_TOP])
+            bottom = top + int(r[cv2.CC_STAT_HEIGHT])
+            scores.append(max(my0 - top, bottom - my1) / major_h)
+        return max(scores)
 
-    # The named offender is the component that STRETCHES the extent furthest,
-    # not the biggest bystander: a large blob just past the bbox edge must not
-    # outrank the far speck actually responsible for the corrupted width.
+    # The named offender is the component that STRETCHES the triggering axis
+    # furthest, not the biggest bystander: a large blob just past the bbox
+    # edge must not outrank the far speck actually responsible.
     worst = max(rows[~is_major], key=_overhang)
     area = int(worst[cv2.CC_STAT_AREA])
     majors = int(is_major.sum())
