@@ -497,3 +497,48 @@ def test_the_named_offender_is_on_the_axis_that_crossed_the_threshold():
     assert "16 px" in w.message
     assert "fill_size above 16" in w.message
     assert "1 px" not in w.message
+
+
+def test_offender_overhang_is_relative_to_each_axis_extent():
+    """Round 12: with BOTH axes over threshold, a 300-px overhang on a
+    1000-px width (0.3x) must not outrank an 8-px overhang on a 10-px
+    height (0.8x) — the second is the larger corruption. Both blobs are 16
+    px, so only the position tells them apart."""
+    from plantcv_mcp.diagnostics import minor_extent_inflation_warning
+
+    mask = np.zeros((60, 1500), np.uint8)
+    mask[20:30, 100:1100] = 255  # the plant, 1000 x 10
+    mask[24:28, 1396:1400] = 255  # width to 1.30x: overhang 300 px = 0.30 of 1000
+    mask[34:38, 600:604] = 255  # height to 2.2x: overhang 8 px = 0.80 of 10
+    w = minor_extent_inflation_warning(mask, analyze_mask(mask))
+    assert w is not None
+    assert "(600, 34)" in w.message
+    assert "(1396" not in w.message
+
+
+def test_the_offender_is_on_the_triggering_axis_even_when_another_overhangs_more():
+    """Round 12: relative scoring alone makes the axis gate redundant for a
+    single extender (a non-triggering axis's extender is always under 0.25).
+    It is NOT redundant when the trigger comes from two sides: two 150-px
+    width extenders (0.15 each, union 1.30x) trigger while a 2-px height blob
+    (0.20, union 1.2x) does not — the blob must not be named."""
+    from plantcv_mcp.diagnostics import minor_extent_inflation_warning
+
+    mask = np.zeros((60, 1500), np.uint8)
+    mask[20:30, 250:1250] = 255  # the plant, 1000 x 10
+    mask[24:28, 96:100] = 255  # 150 px past the left edge
+    mask[24:28, 1400:1404] = 255  # 150 px past the right edge
+    mask[31:32, 700:704] = 255  # 1 px below a 1-px gap: height 12/10, silent
+    w = minor_extent_inflation_warning(mask, analyze_mask(mask))
+    assert w is not None
+    assert "(700, 31)" not in w.message
+    assert "(96, 24)" in w.message or "(1400, 24)" in w.message
+    # Transposed: two height extenders trigger, one width blob stays silent.
+    tall = np.zeros((1500, 60), np.uint8)
+    tall[250:1250, 20:30] = 255
+    tall[96:100, 24:28] = 255
+    tall[1400:1404, 24:28] = 255
+    tall[700:704, 31:32] = 255
+    w2 = minor_extent_inflation_warning(tall, analyze_mask(tall))
+    assert w2 is not None
+    assert "(31, 700)" not in w2.message

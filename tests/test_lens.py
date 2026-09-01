@@ -387,7 +387,7 @@ def test_a_symlink_at_the_derived_output_is_refused(tmp_path, calib_dir):
     victim = tmp_path / "victim.png"
     victim.write_bytes(b"PRECIOUS")
     os.symlink(str(victim), str(tmp_path / "scene_undistorted.png"))
-    with pytest.raises(OSError, match="symlink"):
+    with pytest.raises(OSError, match="is a symlink"):  # the message, not the tmp path
         _correct_lens_impl(
             str(scene), str(calib_dir), row_corners=ROWS, col_corners=COLS
         )
@@ -984,3 +984,108 @@ def test_a_hard_link_at_the_derived_output_leaves_the_linked_file_intact(
         )
     assert cv2.imread(res["corrected_image_path"]) is not None
     assert victim.read_bytes() == b"precious" * 100
+
+
+# --- mutation round 12 (2026-09-01): pinning the 1.9.0 guards the suite missed ---
+
+
+def test_board_coverage_is_reported_in_the_result(tmp_path, calib_dir, calibration):
+    """Round 12: the advisory read calib.coverage but nothing pinned the
+    result field a caller would use to decide whether to reshoot."""
+    from plantcv_mcp.server import _correct_lens_impl
+
+    scene = tmp_path / "scene.png"
+    cv2.imwrite(
+        str(scene), _distort(cv2.cvtColor(_view(*POSES[0]), cv2.COLOR_GRAY2BGR))
+    )
+    res = _correct_lens_impl(
+        str(scene), str(calib_dir), row_corners=ROWS, col_corners=COLS
+    )
+    assert abs(res["board_coverage"] - calibration.coverage) < 1e-9
+    assert 0.4 <= res["board_coverage"] <= 1.0
+
+
+def test_no_partial_file_is_left_beside_the_output(tmp_path, calib_dir):
+    """Round 12: write_image stages the bytes in a sibling `.partial` file;
+    a leftover would be a stray file in the user's image directory on every
+    call. Both the derived and the explicit path must leave exactly the
+    output behind."""
+    from plantcv_mcp.server import _correct_lens_impl
+
+    d = tmp_path / "shots"
+    d.mkdir()
+    scene = d / "scene.png"
+    cv2.imwrite(
+        str(scene), _distort(cv2.cvtColor(_view(*POSES[0]), cv2.COLOR_GRAY2BGR))
+    )
+    _correct_lens_impl(str(scene), str(calib_dir), row_corners=ROWS, col_corners=COLS)
+    _correct_lens_impl(
+        str(scene),
+        str(calib_dir),
+        row_corners=ROWS,
+        col_corners=COLS,
+        output_path=str(d / "explicit.png"),
+    )
+    assert sorted(p.name for p in d.iterdir()) == [
+        "explicit.png",
+        "scene.png",
+        "scene_undistorted.png",
+    ]
+
+
+def test_one_tilt_slid_around_the_frame_is_one_orientation(tmp_path):
+    """Round 12: the 5° cluster angle's lower side was unpinned — at 0.05° a
+    board held at ONE tilt and slid to eight positions reads as six
+    orientations (its recovered normals jitter by a few tenths of a degree)
+    and calibrates to fx=354. It is one orientation and must be refused."""
+    from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
+
+    slid = [
+        ((0.3, 0.0, 0.0), (-4.5 + dx, -3.2 + dy, 12.5))
+        for dx, dy in [
+            (0, 0),
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (-1, -1),
+            (1.5, -0.5),
+        ]
+    ]
+    _write_pose_set(tmp_path / "slid", slid)
+    with pytest.raises(LensCalibrationError, match="1 distinct"):
+        calibrate_lens(str(tmp_path / "slid"), row_corners=ROWS, col_corners=COLS)
+    # Positive control: the same board tilted through eight angles about one
+    # axis is eight orientations and calibrates to the true camera.
+    tilted = [
+        ((a, 0.0, 0.0), (-4.5, -3.2, 12.5))
+        for a in (-0.4, -0.3, -0.2, -0.1, 0.1, 0.2, 0.3, 0.4)
+    ]
+    _write_pose_set(tmp_path / "tilted", tilted)
+    calib = calibrate_lens(str(tmp_path / "tilted"), row_corners=ROWS, col_corners=COLS)
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0]
+
+
+def test_a_symlinked_member_inside_the_roots_is_read_not_skipped(tmp_path):
+    """Round 12: the member open binds to the path check_readable resolved.
+    Opening the member's own name with O_NOFOLLOW instead would turn a
+    legitimate symlink to a frame INSIDE the roots into a silent skip. The
+    swap test could not see that (its member starts as a regular file)."""
+    from plantcv_mcp import paths
+    from plantcv_mcp.server import _load_checkerboard_frames
+
+    allowed = tmp_path / "allowed"
+    real = allowed / "real"
+    _write_frames(real)
+    linked = allowed / "linked"
+    linked.mkdir()
+    for i in range(len(POSES)):
+        os.symlink(str(real / f"view{i}.png"), str(linked / f"view{i}.png"))
+    paths.set_roots([str(allowed)])
+    try:
+        frames, _ = _load_checkerboard_frames(str(linked))
+    finally:
+        paths.set_roots(None)
+    assert len(frames) == len(POSES)
+    assert all(data == (real / name).read_bytes() for name, data in frames)
