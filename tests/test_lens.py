@@ -472,3 +472,196 @@ def test_the_degenerate_path_never_claims_no_crop_was_needed():
     assert "distortion_voids_remain" in codes
     lens_msg = next(w["message"] for w in warnings if w["code"] == "lens_corrected")
     assert "No void crop was needed" not in lens_msg
+
+
+# --- mutation round 11 (2026-09-01): pinning the 1.8.1 guards the suite missed ---
+
+
+def test_a_size_tie_goes_to_the_larger_frames(tmp_path):
+    """Round 11: `shape` breaks a majority tie to the LARGER frame — the
+    comment said so, and no fixture had a tie. Three thumbnails against
+    three full-resolution views must calibrate at full resolution."""
+    from plantcv_mcp.lens import calibrate_lens
+
+    d = tmp_path / "tied"
+    d.mkdir()
+    small = cv2.resize(_distort(_view(*POSES[0])), (320, 240))
+    for i in range(3):
+        cv2.imwrite(str(d / f"a_thumb{i}.png"), small)
+    _write_frames(d, n=3)
+    calib = calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    assert calib.shape == (480, 640)
+    assert sorted(calib.frames_used) == ["view0.png", "view1.png", "view2.png"]
+
+
+def test_two_views_are_refused_by_the_literal_minimum(tmp_path):
+    """Round 11: the existing too-few test derives its fixture from
+    MIN_CALIBRATION_FRAMES and survived the constant being set to 1 (it
+    wrote zero frames and matched the '1' in 'Only 0 of 1'). Pin the
+    number: two distinct views are refused, and the message says three."""
+    from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
+
+    d = tmp_path / "two"
+    _write_frames(d, n=2)
+    with pytest.raises(LensCalibrationError, match="at least 3"):
+        calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    # Positive control: three views is the floor and calibrates.
+    d3 = tmp_path / "three"
+    _write_frames(d3, n=3)
+    assert (
+        len(calibrate_lens(str(d3), row_corners=ROWS, col_corners=COLS).frames_used)
+        == 3
+    )
+
+
+@pytest.mark.parametrize("bad_rms", [float("inf"), float("nan"), 1e12])
+def test_a_meaningless_fit_is_refused(tmp_path, monkeypatch, bad_rms):
+    """Round 11: no frame set this suite can build reaches the rms gate (even
+    half-mirrored views fit at rms 1.7 with fx=131), so the optimiser is
+    stubbed to return the garbage the gate exists for — codex measured
+    5.95e10 on one duplicate-pose reproduction. The gate must refuse
+    non-finite and absurd fits by name."""
+    from plantcv_mcp import lens
+    from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
+
+    d = tmp_path / "frames"
+    _write_frames(d)
+    # Positive control first, on the real optimiser: this set calibrates.
+    assert 0.0 < calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS).rms < 2.0
+    real = lens.cv2.calibrateCamera
+
+    def garbage(*args, **kwargs):
+        _, mtx, dist, r, t = real(*args, **kwargs)
+        return bad_rms, mtx, dist, r, t
+
+    monkeypatch.setattr(lens.cv2, "calibrateCamera", garbage)
+    with pytest.raises(LensCalibrationError, match="meaningless"):
+        calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+
+
+def test_every_pixel_of_the_crop_is_real_source_data():
+    """Round 11: the no-fabricated-pixels test only forbids exactly-black
+    pixels; a validity mask of `> 0` instead of `== 255` keeps the
+    void-blended border (measured: minimum pixel 8 on an all-127 source, and
+    zero black pixels). Every pixel in the crop must be the source value."""
+    from plantcv_mcp.lens import LensCalibration, undistort_image
+
+    exact = LensCalibration(
+        mtx=MTX,
+        dist=DIST,
+        rms=0.5,
+        frames_used=["a"] * 8,
+        frames_skipped=[],
+        shape=(480, 640),
+    )
+    corrected, info = undistort_image(np.full((480, 640, 3), 127, np.uint8), exact)
+    assert int(corrected.min()) == 127 and int(corrected.max()) == 127
+    assert info["residual_void_px"] == 0
+    assert info["crop_fraction"] > 0.0
+
+
+def test_a_frame_too_small_to_crop_is_returned_whole_with_its_voids_counted():
+    """Round 11: the degenerate branch (no usable all-valid rectangle) was
+    exercised only through a hand-made info dict. A 30x30 frame under a
+    strong model has no 16-px valid rectangle: it must come back uncropped,
+    flagged degenerate, with residual_void_px equal to the black pixels
+    actually in it."""
+    from plantcv_mcp.lens import LensCalibration, undistort_image
+
+    n = 30
+    strong = LensCalibration(
+        mtx=np.array([[25.0, 0.0, 15.0], [0.0, 25.0, 15.0], [0.0, 0.0, 1.0]]),
+        dist=np.array([-0.8, 0.0, 0.0, 0.0, 0.0]),
+        rms=0.5,
+        frames_used=["a"] * 8,
+        frames_skipped=[],
+        shape=(n, n),
+    )
+    out, info = undistort_image(np.full((n, n, 3), 127, np.uint8), strong)
+    assert info["roi_degenerate"] is True
+    assert out.shape[:2] == (n, n)
+    black = int((out == 0).all(axis=2).sum())
+    assert black > 0
+    assert info["residual_void_px"] == black
+    assert info["crop_fraction"] == 0.0
+
+
+def test_an_explicit_output_path_outside_the_roots_is_refused(tmp_path, calib_dir):
+    """Round 11: output_path went through check_readable, and nothing pinned
+    it — dropping the call lets a caller write outside the configured roots.
+    Inside the roots the same call writes normally."""
+    from plantcv_mcp import paths
+    from plantcv_mcp.paths import PathOutsideRootsError
+    from plantcv_mcp.server import _correct_lens_impl
+
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    scene = allowed / "scene.png"
+    cv2.imwrite(
+        str(scene), _distort(cv2.cvtColor(_view(*POSES[0]), cv2.COLOR_GRAY2BGR))
+    )
+    calib_copy = allowed / "calib"
+    _write_frames(calib_copy)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    paths.set_roots([str(allowed)])
+    try:
+        with pytest.raises(PathOutsideRootsError):
+            _correct_lens_impl(
+                str(scene),
+                str(calib_copy),
+                row_corners=ROWS,
+                col_corners=COLS,
+                output_path=str(elsewhere / "out.png"),
+            )
+        assert not (elsewhere / "out.png").exists()
+        # Positive control: an explicit path inside the roots is written.
+        inside = allowed / "out.png"
+        res = _correct_lens_impl(
+            str(scene),
+            str(calib_copy),
+            row_corners=ROWS,
+            col_corners=COLS,
+            output_path=str(inside),
+        )
+        assert res["corrected_image_path"] == str(inside)
+        assert inside.exists()
+    finally:
+        paths.set_roots(None)
+
+
+def test_a_cropped_frame_says_so():
+    """Round 11: the three-way crop note's middle branch had no assertion; a
+    cropped frame must not be described as needing no crop."""
+    from plantcv_mcp.lens import LensCalibration
+    from plantcv_mcp.server import _lens_advisories
+
+    calib = LensCalibration(
+        mtx=MTX,
+        dist=DIST,
+        rms=0.5,
+        frames_used=["a"] * 9,
+        frames_skipped=[],
+        shape=(480, 640),
+    )
+    cropped = {
+        "valid_roi": [23, 24, 594, 431],
+        "crop_fraction": 0.17,
+        "roi_degenerate": False,
+        "residual_void_px": 0,
+    }
+    msg = next(
+        w
+        for w in _lens_advisories(calib, cropped, "/tmp/x.png")
+        if w["code"] == "lens_corrected"
+    )["message"]
+    assert "cropped" in msg and "17%" in msg
+    assert "No void crop was needed" not in msg
+    # Positive control: an uncropped, void-free frame says exactly that.
+    whole = dict(cropped, valid_roi=[0, 0, 640, 480], crop_fraction=0.0)
+    msg2 = next(
+        w
+        for w in _lens_advisories(calib, whole, "/tmp/x.png")
+        if w["code"] == "lens_corrected"
+    )["message"]
+    assert "No void crop was needed" in msg2

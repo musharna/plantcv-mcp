@@ -333,3 +333,93 @@ EQUIVALENT mutant, kept: at the per-cell loop `implausible_coverage` in
 in `BLOCKING_CODES` and the 1×1 path refuses upstream at the blocking gate —
 the conjunct is local documentation of the demotion trade, and no public-API
 test can distinguish it. 323 tests after pinning.
+
+## Round 11 — the 1.8.1 lens, containment, and per-axis guards (2026-09-01)
+
+The guards from the panel audit of 1.8.0, disabled one at a time (349 tests,
+`pytest -x` per mutant so reds return in under a minute). Predictions were
+logged before the run: ten mutants were expected GREEN from visible test
+gaps — `L2`, `L3`, `L6`, `L10`, `L12`, `L13`, `S7`, `S10`, `S11`, `D4`,
+`D6` minus the one judged equivalent — and exactly those ten were; no
+unpredicted green, no predicted green went red.
+
+| mutant                          | change                                                                 | result |
+| ------------------------------- | ---------------------------------------------------------------------- | ------ |
+| L1 shape = first decoded        | majority `Counter` → `decoded[0][1].shape`                             | RED    |
+| L2 size tie → smaller           | tie-break key `s[0] * s[1]` → `-s[0] * s[1]`                           | GREEN → pinned |
+| L3 minimum views 1              | `MIN_CALIBRATION_FRAMES = 3` → `1`                                     | GREEN → pinned |
+| L4 pose-diversity off           | `if spread < POSE_DIVERSITY_MIN_PX:` → `< 0.0`                         | RED    |
+| L5 pose-diversity 1000 px       | `POSE_DIVERSITY_MIN_PX = 1.0` → `1000.0`                               | RED    |
+| L6 rms gate off                 | `if not isfinite(rms) or rms > MAX:` → `if False:`                     | GREEN → pinned |
+| L7 rms gate 0.01                | `MAX_CALIBRATION_RMS = 100.0` → `0.01`                                 | RED    |
+| L8 resolution refusal off       | `if (h, w) != calib.shape:` → `if False:`                              | RED    |
+| L9 stored shape swapped         | `shape=(shape[0], shape[1])` → `(shape[1], shape[0])`                  | RED    |
+| L10 validity `> 0`              | white-frame remap `== 255` → `> 0`                                     | GREEN → pinned |
+| L11 no crop                     | `rect = _largest_valid_rectangle(valid)` → `(0, 0, w, h)`              | RED    |
+| L12 degenerate edge 0           | `_MIN_CROP_EDGE = 16` → `0`                                            | GREEN → pinned |
+| L13 degenerate voids 0          | `"residual_void_px": int((~valid).sum())` → `0`                        | GREEN → pinned |
+| L14 crop_fraction 0             | `1.0 - (rw * rh) / (w * h)` → `0.0`                                    | RED    |
+| S1 member containment off       | per-member `check_readable(path)` removed                              | RED    |
+| S2 unreadable member raises     | `except OSError: data = b""` → `raise`                                 | RED    |
+| S3 digest unprefixed            | length-prefix `update`s removed (bare name‖bytes)                      | RED    |
+| S4 cache key ignores digest     | `key = (digest, rows, cols)` → `("", rows, cols)`                      | RED    |
+| S5 O_NOFOLLOW off               | `flags \|= O_NOFOLLOW` removed (imaging.write_image)                   | RED    |
+| S6 O_EXCL off                   | `(O_EXCL if exclusive else O_TRUNC)` → `O_TRUNC`                       | RED    |
+| S7 output_path uncontained      | `out = check_readable(output_path)` → `out = output_path`              | GREEN → pinned |
+| S8 high_reprojection_error off  | `HIGH_REPROJECTION_RMS = 5.0` → `1e9`                                  | RED    |
+| S9 thin_calibration off         | `if len(frames_used) < 5:` → `< 0`                                     | RED    |
+| S10 voids advisory: degenerate only | `if roi_degenerate or residual_void_px > 0:` → `if roi_degenerate:` | GREEN — EQUIVALENT |
+| S11 crop note never "cropped"   | `elif info["crop_fraction"] > 0:` → `elif False:`                      | GREEN → pinned |
+| D1 diagonal regression          | per-axis `and` test → union/major diagonal ratio                       | RED    |
+| D2 axes `or`                    | `union_w <= … and union_h <= …` → `or`                                 | RED    |
+| D3 ratio 1.10                   | `EXTENT_INFLATION_RATIO = 1.25` → `1.10`                               | RED    |
+| D4 ratio 2.0                    | → `2.0` (the real photo's sliver was 2.17x)                            | GREEN → pinned |
+| D5 major threshold 0            | `major_threshold=0.25` → `0.0`                                         | RED    |
+| D6 baseline = largest only      | `_extent(rows[is_major])` → extent of the single largest component     | GREEN → pinned |
+| D7 offender by area             | `max(rows[~is_major], key=_overhang)` → key = area                     | RED    |
+| D8 remedy ignores majors        | `if majors >= 2:` → `if False:`                                        | RED    |
+| D9 mask_warnings wiring off     | `inflation = minor_extent_inflation_warning(mask, diag)` → `None`      | RED    |
+| D10 refine wiring off           | same, in `refinement_warnings`                                         | RED    |
+| C1 contiguous-object sentence   | `marker_touches_crop_edge` message truncated at "the marker."          | RED    |
+
+Twenty-five of thirty-five red. Nine greens pinned, each watched red under
+its own mutant on live code first:
+
+- `test_a_size_tie_goes_to_the_larger_frames` (three thumbnails vs three
+  full views; under the mutant the thumbnails win and are refused as one
+  pose).
+- `test_two_views_are_refused_by_the_literal_minimum` — the existing
+  too-few test derives its fixture size AND its match string from
+  `MIN_CALIBRATION_FRAMES`, so `= 1` wrote zero frames and matched the "1"
+  in "Only 0 of 1". The pin says "at least 3" in so many words.
+- `test_a_meaningless_fit_is_refused[inf|nan|1e12]` — no frame set the
+  suite can build reaches the rms gate: half-MIRRORED views calibrate at
+  rms 1.67 with fx=131 (true 400), another low-rms wrong model. The
+  optimiser is stubbed to return the garbage the gate exists for (the one
+  mock in this file), after a real-optimiser positive control.
+- `test_every_pixel_of_the_crop_is_real_source_data` — `> 0` keeps the
+  void-blended border: minimum pixel 8 on an all-127 source with zero
+  exactly-black pixels, which the no-fabricated-pixels test cannot see.
+- `test_a_frame_too_small_to_crop_is_returned_whole_with_its_voids_counted`
+  — pins L12 and L13 together. Eighteen extreme models on 640x480 all
+  keep a >=16-px rectangle (smallest 52x347); a 30x30 frame under f=25,
+  k1=-0.8 has none: returned uncropped, 889 voids == its black pixels.
+- `test_an_explicit_output_path_outside_the_roots_is_refused` (positive
+  control: an explicit path inside the roots is written).
+- `test_a_cropped_frame_says_so` — "cropped … 17%" and never "No void crop
+  was needed" on a cropped frame.
+- `test_material_half_a_plant_width_away_still_inflates_the_extent` —
+  every firing fixture inflated an axis >=2.3x, so the threshold could
+  drift to 2.0 unseen, past the real photo's 2.17x; a sliver 20 px past a
+  60-px plant (1.47x) now pins the upper side.
+- `test_a_crumb_beside_the_second_plant_is_measured_against_both_plants` —
+  two plants far apart plus a crumb at the second plant's edge is silent
+  against the major-union baseline and a 4x "inflation" against the
+  largest plant alone.
+
+S10 is an EQUIVALENT mutant, kept: `undistort_image` writes the literal
+`0` for `residual_void_px` on the crop path (`lens.py:291`) and the void
+count only on the degenerate path (`lens.py:283`), so for any info the
+tool produces `residual_void_px > 0` implies `roi_degenerate`; the `or`
+conjunct is defensive documentation and no public-API test can distinguish
+it. 360 tests after pinning.
