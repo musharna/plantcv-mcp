@@ -478,3 +478,22 @@ def test_a_crumb_beside_the_second_plant_is_measured_against_both_plants():
     far[100:106, 322:328] = 0
     far[0:6, 392:398] = 255
     assert minor_extent_inflation_warning(far, analyze_mask(far)) is not None
+
+
+def test_the_named_offender_is_on_the_axis_that_crossed_the_threshold():
+    """Panel audit of 1.8.2 (codex; reproduced): a 1000x10 plant, a 1-px speck
+    stretching WIDTH to 1.20x (below threshold) and a 4x4 blob stretching
+    HEIGHT to 1.7x (the trigger). Ranking by raw overhang named the 1-px
+    speck, and its remedy 'fill_size above 1' could not clear the warning. The
+    offender must be the component driving an axis that actually crossed."""
+    from plantcv_mcp.diagnostics import minor_extent_inflation_warning
+
+    mask = np.zeros((60, 1300), np.uint8)
+    mask[20:30, 100:1100] = 255  # the plant, 1000 x 10
+    mask[25:26, 1299:1300] = 255  # 1 px, 199 px past the right edge: width 1.20x
+    mask[33:37, 500:504] = 255  # 16 px, 7 px below: height 17/10 = 1.7x
+    w = minor_extent_inflation_warning(mask, analyze_mask(mask))
+    assert w is not None
+    assert "16 px" in w.message
+    assert "fill_size above 16" in w.message
+    assert "1 px" not in w.message

@@ -58,7 +58,12 @@ from .imaging import (
     render_region_overlay,
     write_image,
 )
-from .lens import LensCalibration, calibrate_lens_from_frames, undistort_image
+from .lens import (
+    LensCalibration,
+    calibrate_lens_from_frames,
+    rms_fraction,
+    undistort_image,
+)
 from .measurement import ANALYSES, TraitValue, validate_analyses
 from .paths import check_readable, configured_roots, set_roots
 from .refine import (
@@ -926,9 +931,13 @@ def _load_checkerboard_frames(directory: str) -> tuple[list[tuple[str, bytes]], 
         path = os.path.join(directory, name)
         if not os.path.isfile(path):
             continue
-        check_readable(path)
+        real = check_readable(path)
         try:
-            with open(path, "rb") as fh:
+            # The open is bound to the path that passed the check, and never
+            # follows a link: a member swapped for an outside symlink between
+            # the check and the open was read and calibrated (panel of 1.8.2).
+            fd = os.open(real, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            with os.fdopen(fd, "rb") as fh:
                 data = fh.read()
         except OSError:
             data = b""
@@ -962,15 +971,22 @@ def _lens_calibration(
     return calib
 
 
-# Above this the correction is only as good as the fit and deserves saying so:
-# the real fisheye tutorial set calibrates at rms 13 px — visibly helpful,
-# demonstrably imperfect.
-HIGH_REPROJECTION_RMS = 5.0
+# Above this the correction is only as good as the fit and deserves saying so.
+# A fraction of the frame diagonal, so one fit means one thing at every
+# resolution: the real fisheye tutorial set calibrates at rms 13 px of a
+# 3461-px diagonal (0.38%) — visibly helpful, demonstrably imperfect.
+HIGH_REPROJECTION_FRACTION = 0.0015
+
+# Below this the boards left most of the frame to extrapolation: measured on
+# the synthetic camera, 24% coverage put the frame corners 31 px wrong (k3
+# fixed) while 48% held them within 10 px; the real tutorial set covers 72%.
+MIN_CALIBRATION_COVERAGE = 0.4
 
 
 def _lens_advisories(calib: LensCalibration, info: dict, out: str) -> list[dict]:
     """The correction tool's warnings, assembled purely so they are testable."""
     warnings: list[dict] = []
+    fit = rms_fraction(calib.rms, calib.shape)
     if info["roi_degenerate"] or info["residual_void_px"] > 0:
         crop_note = (
             f"No usable fully-valid crop exists for this calibration; "
@@ -1018,16 +1034,33 @@ def _lens_advisories(calib: LensCalibration, info: dict, out: str) -> list[dict]
                 ),
             }
         )
-    if calib.rms > HIGH_REPROJECTION_RMS:
+    if fit > HIGH_REPROJECTION_FRACTION:
         warnings.append(
             {
                 "code": "high_reprojection_error",
                 "message": (
                     f"The calibration fits its own checkerboards only to "
-                    f"{calib.rms:.1f} px rms (good calibrations sit under "
-                    f"{HIGH_REPROJECTION_RMS:.0f}). The correction helps but "
-                    "is not exact — residual distortion of that order "
-                    "remains. Sharper, more varied board views tighten it."
+                    f"{calib.rms:.1f} px rms — {fit:.2%} of the frame diagonal "
+                    f"(good calibrations sit under "
+                    f"{HIGH_REPROJECTION_FRACTION:.2%}). That number is the "
+                    "fit at the detected corners, not a bound on the residual "
+                    "distortion elsewhere: the correction is only as good as "
+                    "the fit. Sharper, more varied board views tighten it."
+                ),
+            }
+        )
+    if calib.coverage < MIN_CALIBRATION_COVERAGE:
+        warnings.append(
+            {
+                "code": "low_calibration_coverage",
+                "message": (
+                    f"The detected checkerboards covered only "
+                    f"{calib.coverage:.0%} of the frame (under "
+                    f"{MIN_CALIBRATION_COVERAGE:.0%}). The model is fitted "
+                    "where boards were and extrapolated everywhere else, so "
+                    "the correction is least trustworthy toward the frame "
+                    "edges and corners. Add views with the board near each "
+                    "edge and corner."
                 ),
             }
         )
@@ -1036,10 +1069,12 @@ def _lens_advisories(calib: LensCalibration, info: dict, out: str) -> list[dict]
             {
                 "code": "distortion_voids_remain",
                 "message": (
-                    "The corrected image still contains fabricated black "
-                    "void pixels at its edges. A value/darkness threshold "
-                    "will select them as objects; segment on a channel where "
-                    "black is neutral (such as 'a'), and check the overlay."
+                    "The corrected image still contains fabricated pixels at "
+                    "its edges — black voids and the void-blended border "
+                    "around them (residual_void_px counts both). A "
+                    "value/darkness threshold will select them as objects; "
+                    "segment on a channel where black is neutral (such as "
+                    "'a'), and check the overlay."
                 ),
             }
         )
@@ -1091,6 +1126,7 @@ def _correct_lens_impl(
         "valid_roi": info["valid_roi"],
         "crop_fraction": info["crop_fraction"],
         "residual_void_px": info["residual_void_px"],
+        "board_coverage": calib.coverage,
         "corrected_size": [int(corrected.shape[0]), int(corrected.shape[1])],
         "overlay_scale": scale,
         "warnings": warnings,

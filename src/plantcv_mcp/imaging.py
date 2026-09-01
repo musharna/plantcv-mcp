@@ -3,6 +3,7 @@
 import errno
 import hashlib
 import os
+import stat
 
 import cv2
 import numpy as np
@@ -99,33 +100,64 @@ def load_image(path: str) -> np.ndarray:
 
 
 def write_image(path: str, img: np.ndarray, *, exclusive: bool = False) -> None:
-    """Write an image without ever following a symlink at `path`.
+    """Write an image without ever opening an existing inode for writing.
 
     cv2.imwrite follows symlinks: measured on the one writing tool, a
     pre-existing `<image>_undistorted.png` symlink sent the corrected image
-    into an unrelated victim file (a target outside the read roots included).
-    So the bytes are encoded here and written through os.open(O_NOFOLLOW);
-    `exclusive` adds O_EXCL, making refuse-if-exists atomic instead of an
-    exists()-then-write race.
+    into an unrelated victim file. O_NOFOLLOW on the name closed that and
+    left the next one open: a HARD link at the name shares the inode, so
+    truncating it truncated the linked file (measured: 800 bytes to 79). The
+    bytes therefore go to a fresh sibling file (O_EXCL, so it is provably
+    ours) and the directory entry at `path` is then linked or replaced —
+    operations on the NAME that never write into whatever inode sat there.
+    `exclusive` uses os.link, which fails atomically if anything already has
+    the name; otherwise os.replace swaps the entry. A symlink or hard link
+    squatting on the name is refused by name first, so the caller learns why.
     """
     ext = os.path.splitext(path)[1] or ".png"
     ok, buf = cv2.imencode(ext, img)
     if not ok:
         raise OSError(f"Could not encode image for {path!r}")
-    flags = os.O_WRONLY | os.O_CREAT | (os.O_EXCL if exclusive else os.O_TRUNC)
-    flags |= getattr(os, "O_NOFOLLOW", 0)
     try:
-        fd = os.open(path, flags, 0o644)
-    except OSError as exc:
-        if exc.errno == errno.ELOOP:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        st = None
+    if st is not None:
+        if stat.S_ISLNK(st.st_mode):
             raise OSError(
                 f"{path!r} is a symlink; images are written only to real "
                 "files, so the link's target was left untouched. Remove the "
                 "link or pass a different output_path."
-            ) from exc
-        raise
-    with os.fdopen(fd, "wb") as fh:
-        fh.write(buf.tobytes())
+            )
+        if exclusive:
+            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), path)
+        if not stat.S_ISREG(st.st_mode):
+            raise OSError(f"{path!r} exists and is not a regular file; not replaced.")
+        if st.st_nlink > 1:
+            raise OSError(
+                f"{path!r} is a hard link ({st.st_nlink} names share its "
+                "contents); writing here would overwrite the other name's "
+                "file too, so it was left untouched. Remove the link or pass "
+                "a different output_path."
+            )
+    tmp = f"{path}.{os.getpid()}.partial"
+    fd = os.open(
+        tmp,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+        0o644,
+    )
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(buf.tobytes())
+        if exclusive:
+            os.link(tmp, path)  # atomic: EEXIST if any name appeared meanwhile
+        else:
+            os.replace(tmp, path)  # swaps the entry; never follows a link
+    finally:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
 
 
 def downscale(

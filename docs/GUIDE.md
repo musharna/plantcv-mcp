@@ -136,29 +136,52 @@ corrected file:
 
 ```
 correct_lens_distortion(image_path, checkerboard_dir, row_corners=13, col_corners=19)
-  -> corrected_image_path ".../img_undistorted.png", frames_used 9, rms 13.0,
-     crop_fraction 0.39, residual_void_px 0,
+  -> corrected_image_path ".../img_undistorted.png", frames_used 9, rms 13.1,
+     crop_fraction 0.19, residual_void_px 0, board_coverage 0.72,
      warnings [lens_corrected, high_reprojection_error]
 ```
 
 `checkerboard_dir` holds several photos of a checkerboard taken with the **same camera at
-the same resolution**; the corner counts are the board's INNER corners. Frames where no
-board is detected, or that differ from the majority size, are skipped and named; fewer
-than three detections is refused (PlantCV's own `checkerboard_calib` crashes on that
-directory, and would happily "calibrate" from one frame), and so is a set of copies of one
-pose — measured with that refusal disabled on a synthetic camera of known intrinsics, ten
-duplicates "calibrated" to rms 0.19 with fx=252 against a true 400, a confidently wrong
-model no error metric could flag. (Mirrored frames are not a problem: a mirrored board is
-the same board seen from behind, and mirrored sets recover the same camera.) An image whose size differs
-from the calibration frames' is refused too (`CalibrationResolutionMismatchError`):
-intrinsics are in pixels at the calibration resolution, and measured, a 1280×960 image
-through a 640×480 calibration came back as a 49×127 crop.
+the same resolution**, the board **tilted differently in each**; the corner counts are the
+board's INNER corners. Frames where no board is detected, or that differ from the majority
+size, are skipped and named; fewer than three detections is refused (PlantCV's own
+`checkerboard_calib` crashes on that directory, and would happily "calibrate" from one
+frame). So is a set showing fewer than three distinct board **orientations**: a camera model
+is determined by the board's angles, not its positions, and copies of one photo, the board
+slid around the frame, moved nearer or farther, or turned in its own plane all count as ONE.
+Measured with that refusal disabled on a synthetic camera of known intrinsics, ten duplicates
+"calibrated" to fx=252 against a true 400 at rms 0.19, eight positions of a board facing the
+camera to fx=228, and two orientations repeated four times each to fx=883 — confidently wrong
+models no error metric could flag. Mirrored frames are a limit, not a check: a set that is
+_all_ mirrored calibrates the reflected camera consistently, but a set with _some_ frames
+mirrored returns a camera that is neither (measured with cx=285, the mixed set fitted cx=319
+at a low rms) and nothing can detect it — do not mix. Both the calibration frames and the
+image are read as stored, ignoring any EXIF orientation tag, so a camera's own frames never
+mismatch its scenes. An image whose size differs from the calibration frames' is refused
+(`CalibrationResolutionMismatchError`): intrinsics are in pixels at the calibration
+resolution, and measured, a 1280×960 image through a 640×480 calibration came back as a
+49×127 crop.
+
+The model is exact where boards were and **extrapolated everywhere else**. `board_coverage`
+reports the fraction of the frame the detected boards covered; under 40% the
+`low_calibration_coverage` warning says so (measured: 24% coverage left the frame corners
+31 px wrong; 48% held them within 10 px; the tutorial set covers 72%). The sixth-order
+radial term k3 is not fitted — left free, it is fitted from the boards' footprint alone and
+folds the correction over outside it (measured: 659 px at the corners from 24% coverage, and
+on the real fisheye set a k3 of −44 that turned a fifth of the frame into voids). Fit quality
+is reported as a fraction of the frame diagonal so it means the same at any resolution;
+`high_reprojection_error` fires above 0.15%. That number is the fit at the detected corners,
+not a bound on the residual distortion elsewhere — measured on the real set, two models that
+fit its boards at rms 13.0 and 13.1 px disagree by 34% on a centre plant's corrected area.
+A calibration that earns the warning corrects visibly and not exactly; sharper, more varied,
+wider-spread board views tighten it.
 
 The corrected image is cropped to the **largest rectangle of real pixels**, computed from
 an actual validity mask rather than OpenCV's approximate ROI (which, measured on the test
 camera model, retained 566 fabricated black pixels — and on the real fisheye photo
-over-cropped by half again as much as needed: 0.58 of the frame against the true 0.39).
-When no usable rectangle exists the frame is returned uncropped with the void count in
+over-cropped by half again as much as needed: 0.58 of the frame against the true 0.39 under
+the 1.8 model, 0.19 with k3 fixed). When no usable rectangle exists the frame is returned
+uncropped with the count of fabricated pixels — void and void-blended border alike — in
 `residual_void_px` and a `distortion_voids_remain` warning. The calibration is cached on
 the directory's content, so batches re-use it. Segment the corrected file, and take
 `px_per_mm` from `calibrate_scale_from_marker` **on the corrected file**: a scale
@@ -494,8 +517,9 @@ instead of a result.
 | `minor_components_inflate_extent`                                   | any segmenter, `refine`, `measure`                     | material far from the main object stretches width/height/ellipse/hull traits; names the extent driver and the remedy  | advisory |
 | `lens_corrected`                                                    | `correct_lens_distortion`                              | which file to measure from here on; re-calibrate any scale on it                                                      | —        |
 | `thin_calibration`                                                  | `correct_lens_distortion`                              | fewer than 5 checkerboard frames went into the calibration                                                            | —        |
-| `high_reprojection_error`                                           | `correct_lens_distortion`                              | the calibration fits its own boards worse than 5 px rms; residual distortion of that order remains                    | —        |
-| `distortion_voids_remain`                                           | `correct_lens_distortion`                              | no usable all-valid crop exists; fabricated black pixels remain (count in `residual_void_px`)                         | —        |
+| `high_reprojection_error`                                           | `correct_lens_distortion`                              | the calibration fits its own boards worse than 0.15% of the frame diagonal; the correction is only as good as the fit | —        |
+| `low_calibration_coverage`                                          | `correct_lens_distortion`                              | the boards covered under 40% of the frame; the correction is extrapolated toward the edges and corners                | —        |
+| `distortion_voids_remain`                                           | `correct_lens_distortion`                              | no usable all-valid crop exists; fabricated pixels remain (void and void-blended border, count in `residual_void_px`) | —        |
 
 Refusals you will meet: a degenerate mask at `measure` (`DegenerateMaskError`), a refinement
 that erases the plant (`RefinementErasedMaskError`) or an invalid op list (`RefineSpecError`,

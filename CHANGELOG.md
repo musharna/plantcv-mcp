@@ -6,6 +6,91 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.9.0] — 2026-09-01
+
+Findings from an independent panel audit of 1.8.2 (three judges answered
+across two runs, plus a rebuttal round), every load-bearing claim reproduced
+against the code before it was fixed. The theme, once more, was a guard or a
+test proving less than its name said.
+
+### Changed
+
+- **Calibration refuses fewer than three distinct board orientations.** The
+  1.8.1 pose gate measured corner displacement from the first frame, which
+  detects copies and nothing else. Measured on the synthetic camera with the
+  gate disabled: eight positions of a board facing the camera "calibrated" to
+  fx=228 (true 400) at rms 0.19, depth changes to 333, in-plane rotations to
+  314 at rms 0.074, and four copies each of two poses to fx=883 — every one a
+  plausible, wrong camera. Zhang's method is determined by the board's angles;
+  the calibration now counts distinct orientations from its own rotation
+  vectors (poses within 5° count as one) and refuses below three, the floor at
+  which every measured set recovered fx within 1%. Copies are the
+  one-orientation case, so the corner-spread gate is gone.
+- **k3 is no longer fitted.** The recovery test asserted fx, cx and k1 and
+  passed while the correction FIELD the tool applies was 659 px wrong at the
+  frame corners: a free k3 (−0.16) was fitted from the 24% of the frame the
+  boards covered and folded the polynomial over outside it, and a wider set
+  drove the free fit to fx 655, k3 −5.4. With k3 fixed the same sets recover
+  k1 and k2 to the second decimal and the field holds within 10 px
+  everywhere; the real fisheye set loses 0.1 px of rms and sheds a k3 of −44
+  that had turned a fifth of the frame into voids (crop 0.39 → 0.19). The
+  test now checks the whole field (`initUndistortRectifyMap` against the
+  declared camera), the fixture's boards cover 48% of the frame, and the
+  real photo's centre plant changed corrected area by 34% between the two
+  models — which is what `high_reprojection_error` has been trying to say.
+- **Fit thresholds are fractions of the frame diagonal.** The same geometric
+  fit scaled 8× crossed the 5-px advisory and the 100-px refusal on
+  resolution alone. `high_reprojection_error` now fires above 0.15% of the
+  diagonal and the meaningless-fit refusal above 3% (identical behaviour at
+  the tutorial set's resolution: 13 px of 3461 is 0.38%), and the message no
+  longer claims residual distortion "of that order remains" — reprojection
+  rms is the fit at the corners, not a bound elsewhere.
+- **`board_coverage` is reported, and `low_calibration_coverage` fires under
+  40%.** The model is exact where boards were and extrapolated everywhere
+  else; measured, 24% coverage left the corners 31 px wrong even with k3
+  fixed, 48% held them within 10 px, and the tutorial set covers 72%.
+
+### Fixed
+
+- **Mirrored frames were documented as harmless; they are a limit.** 1.8.2's
+  "mirrored sets recover the same camera" held only because the fixture is
+  centred with no tangential term. For a camera with cx=285 and p2=0.012, an
+  all-mirrored set recovers the reflected camera (consistent, so mirrored
+  scenes correct correctly), but a set with SOME frames mirrored returns
+  cx=319 — a camera that is neither — at rms 0.35, and nothing in the
+  calibration can tell. The docs say so and the test pins that, not the
+  symmetry.
+- **EXIF-oriented frames were refused as a resolution mismatch.** Calibration
+  decoded with `IMREAD_GRAYSCALE`, which honours the orientation tag; scenes
+  decode with `IMREAD_UNCHANGED`, which does not, so identical bytes were
+  640×480 on one path and 480×640 on the other. Both paths now read the
+  stored raster.
+- **Checkerboard members could be swapped after the containment check.**
+  `check_readable`'s resolved path was discarded and the original spelling
+  reopened; a member replaced by an outside symlink in between was read and
+  calibrated. The open is bound to the checked path and never follows a link
+  (a swapped member becomes a named skip).
+- **A hard link at the derived output was truncated.** `O_NOFOLLOW` guards a
+  symlink at the name, not a hard link sharing the inode: a hard-linked
+  `scene_undistorted.png` sent the correction into the linked file (800 →
+  79 bytes). Images are now written to a fresh sibling (`O_EXCL`) and the
+  directory entry is linked (explicit path; atomic refuse-if-exists) or
+  replaced (derived path) — operations on the name that never write into an
+  existing inode. Symlink and hard-link squatters are refused by name with
+  the reason.
+- **The extent advisory could name a bystander and prescribe a useless
+  remedy.** Offenders were ranked by raw overhang on any axis: a 1-px speck
+  stretching WIDTH to 1.20× (below threshold) outranked the 16-px blob that
+  took HEIGHT to 1.7×, and "fill_size above 1" could not clear the warning.
+  Candidates are now scored on the axis that actually crossed, relative to
+  that axis's extent.
+
+### Documentation
+
+- `residual_void_px` counts void and void-blended border pixels, not only
+  black ones; the guide and the `distortion_voids_remain` message say so.
+- The 1.8.2 entry's "rms 0.13" was a measurement; the test asserts < 1.0.
+
 ## [1.8.2] — 2026-09-01
 
 A correction to the record, found while closing a loose end from mutation
