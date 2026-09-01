@@ -59,19 +59,48 @@ MIN_CALIBRATION_FRAMES = 3
 # them fits a wrong camera perfectly (measured on the synthetic camera, gate
 # disabled: eight frontal translations fx 228 against 400 at rms 0.19; depth
 # changes 333; in-plane rotations 314 at rms 0.074; two orientations repeated
-# four times each fx 883). Three distinct orientations is the floor at which
-# every measured set recovered fx within 1%. Orientations are read from the
-# calibration's own rotation vectors; two count as one within this angle.
+# four times each fx 883). Fewer than three is refused as the interpretable
+# floor; it is NOT sufficient (see MAX_FOCAL_CONDITIONING). Orientations are
+# read from the calibration's own rotation vectors; two within this angle of
+# each other count as one, transitively, so the count does not depend on the
+# order the frames happen to sort in (panel audit of 1.9.0: greedy packing
+# counted 0/4/8/12/16° as three orientations or two by filename).
 MIN_DISTINCT_ORIENTATIONS = 3
 ORIENTATION_DISTINCT_DEG = 5.0
+
+# Three orientations is a proxy; what the fit needs is DATA THAT DETERMINE
+# THE FOCAL LENGTH. Measured (panel audit of 1.9.0, codex): a board tilted
+# -7/0/+7° about one axis at fourteen spread positions passed the count,
+# 48% coverage and an rms of 0.03% of the diagonal — and calibrated to fx 334
+# against 400, the applied correction 391 px wrong at the corners. The
+# statistic that separated every such set from every set that recovered the
+# camera is the calibration's own uncertainty on fx (cv2.calibrateCameraExtended)
+# per pixel of reprojection rms — the conditioning of the fit, invariant to
+# resolution: weak sets measured 28–52, sound synthetic sets 4–22 (a
+# fourteen-view fixture 3.9, five views 10.5, three views 14), the real
+# PlantCV tutorial set 3.5. Above this the focal length is a guess.
+MAX_FOCAL_CONDITIONING = 20.0
+
+# A frame whose own reprojection rms stands far above the others' is a bad
+# detection, not a bad camera, and the optimiser bends the camera to fit it:
+# on the real PlantCV tutorial set one frame at 37 px against a median of 4
+# moved fx by 13% (5169 → 4520) and the set's rms from 13.1 to 3.7; three
+# such frames in a synthetic one-sided set drove fx to 612 with the field
+# 2814 px wrong. A frame is an outlier above BOTH this multiple of the median
+# and this fraction of the diagonal (the fixture's own honest spread runs
+# 0.08–1.14 px, a 14× range, all under 0.15%); it is dropped by name and the
+# camera refitted.
+OUTLIER_VIEW_RATIO = 3.0
+OUTLIER_VIEW_FRACTION = 0.0025
 
 # A fit this bad is not a camera model. Reprojection rms is in pixels, so the
 # threshold is a fraction of the frame diagonal: the same geometric fit scaled
 # 8x would otherwise cross a pixel threshold on resolution alone. The real
-# (poor) tutorial calibration fits at 13 px of a 3461-px diagonal (0.38%) and
-# still visibly straightens; the duplicate-pose failure that motivated the
-# gate measured 5.95e10 in one reproduction. 3% separates "imperfect" from
-# "meaningless" with an order of magnitude to spare.
+# tutorial calibration fitted at 13 px of a 3461-px diagonal (0.38%) with its
+# one outlier frame in, 3.7 px without it, and visibly straightens either
+# way; the duplicate-pose failure that motivated the gate measured 5.95e10 in
+# one reproduction. 3% separates "imperfect" from "meaningless" with an order
+# of magnitude to spare.
 MAX_CALIBRATION_RMS_FRACTION = 0.03
 
 # The degenerate fallback: a valid rectangle smaller than this is a postage
@@ -99,12 +128,18 @@ class LensCalibration:
     # (height, width) of the calibration frames. The intrinsics are in pixels
     # at THIS resolution; undistort_image refuses any other.
     shape: tuple[int, int]
-    # Fraction of the frame covered by the union of the detected boards. The
-    # model is exact where boards were and extrapolated everywhere else
-    # (measured: 24% coverage left the corners 31 px wrong with k3 fixed).
-    # Defaulted only so hand-built calibrations in unit tests stay terse;
-    # calibrate_lens_from_frames always measures it.
+    # Fraction of the frame covered by the union of the detected corner
+    # grids. The model is FITTED where boards were and extrapolated
+    # everywhere else (measured: 24% coverage left the corners 31 px wrong
+    # with k3 fixed). Defaulted only so hand-built calibrations in unit tests
+    # stay terse; calibrate_lens_from_frames always measures it.
     coverage: float = 1.0
+    # Frames dropped as outliers, (name, per-view rms px), and the median
+    # per-view rms of the frames that were kept.
+    frames_outliers: tuple[tuple[str, float], ...] = ()
+    median_view_rms: float = 0.0
+    # fx uncertainty per pixel of rms (see MAX_FOCAL_CONDITIONING).
+    focal_conditioning: float = 0.0
 
 
 def rms_fraction(rms: float, shape: tuple[int, int]) -> float:
@@ -114,16 +149,41 @@ def rms_fraction(rms: float, shape: tuple[int, int]) -> float:
 
 
 def _distinct_orientations(rvecs, deg: float = ORIENTATION_DISTINCT_DEG) -> int:
-    """Count board orientations that differ by more than `deg` (greedy)."""
+    """Count board orientations, two within `deg` of each other counting as
+    one — transitively (single linkage), so the count is a property of the
+    set and not of the order the frames arrived in."""
     normals = [cv2.Rodrigues(np.asarray(r))[0][:, 2] for r in rvecs]
-    reps: list[np.ndarray] = []
-    for n in normals:
-        angles = [
-            math.degrees(math.acos(min(1.0, abs(float(np.dot(n, q)))))) for q in reps
-        ]
-        if all(a > deg for a in angles):
-            reps.append(n)
-    return len(reps)
+    parent = list(range(len(normals)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i, a in enumerate(normals):
+        for j in range(i + 1, len(normals)):
+            angle = math.degrees(math.acos(min(1.0, abs(float(np.dot(a, normals[j]))))))
+            if angle <= deg:
+                parent[find(i)] = find(j)
+    return len({find(i) for i in range(len(normals))})
+
+
+def _fit(objpoints, imgpoints, size):
+    """One calibrateCamera run with k3 fixed, plus the two things the plain
+    call throws away: the per-view reprojection rms and the intrinsics'
+    standard deviations."""
+    rms, mtx, dist, rvecs, _, sd_intrinsics, _, per_view = cv2.calibrateCameraExtended(
+        objpoints, imgpoints, size, None, None, flags=cv2.CALIB_FIX_K3
+    )
+    return (
+        float(rms),
+        mtx,
+        dist,
+        rvecs,
+        np.asarray(sd_intrinsics).ravel(),
+        np.asarray(per_view).ravel(),
+    )
 
 
 def calibrate_lens_from_frames(
@@ -204,28 +264,59 @@ def calibrate_lens_from_frames(
         )
 
     assert shape is not None
+    frame_shape = (int(shape[0]), int(shape[1]))
+    diagonal = math.hypot(*frame_shape)
+
+    def meaningless(rms: float, n: int) -> None:
+        if (
+            not math.isfinite(rms)
+            or rms_fraction(rms, frame_shape) > MAX_CALIBRATION_RMS_FRACTION
+        ):
+            raise LensCalibrationError(
+                f"The calibration fit is meaningless (rms reprojection error "
+                f"{rms:.3g} px, {rms_fraction(rms, frame_shape):.1%} of the "
+                f"frame diagonal, over {n} views). This happens when the views "
+                "do not constrain the model — motion blur, or wrong corner "
+                "counts. Re-shoot varied, sharp views."
+            )
+
     # k3 is fixed at zero. Left free, the sixth-order term is fitted from
     # the boards' footprint alone and folds the correction over outside it:
     # measured, k3=-0.16 put the frame corners 659 px wrong from boards
     # covering 24% of the frame, and a wider 48% set drove the free fit to
     # fx 655 with k3=-5.4 (31,000 px). Fixed, the same sets recover k1 and k2
     # to the second decimal; the real fisheye tutorial set loses 0.1 px rms.
-    rms, mtx, dist, rvecs, _ = cv2.calibrateCamera(
-        objpoints, imgpoints, shape[::-1], None, None, flags=cv2.CALIB_FIX_K3
+    # The price is a documented limit: a lens that truly needs k3 is
+    # corrected to fourth order only, the error growing toward the corners
+    # (measured, k3=0.1: rms 0.34 px with no advisory, 77 px at the corners),
+    # and nothing in the residuals can tell.
+    rms, mtx, dist, rvecs, sd, per_view = _fit(objpoints, imgpoints, shape[::-1])
+    meaningless(rms, len(used))
+
+    # A bad frame is a bad detection, not a bad camera: drop it and refit.
+    bar = max(
+        OUTLIER_VIEW_RATIO * float(np.median(per_view)),
+        OUTLIER_VIEW_FRACTION * diagonal,
     )
-    rms = float(rms)
-    frame_shape = (int(shape[0]), int(shape[1]))
-    if (
-        not math.isfinite(rms)
-        or rms_fraction(rms, frame_shape) > MAX_CALIBRATION_RMS_FRACTION
-    ):
-        raise LensCalibrationError(
-            f"The calibration fit is meaningless (rms reprojection error "
-            f"{rms:.3g} px, {rms_fraction(rms, frame_shape):.1%} of the frame "
-            f"diagonal, over {len(used)} views). This happens when the views "
-            "do not constrain the model — motion blur, or wrong corner counts. "
-            "Re-shoot varied, sharp views."
-        )
+    outliers = tuple((name, float(px)) for name, px in zip(used, per_view) if px > bar)
+    if outliers:
+        dropped = {name for name, _ in outliers}
+        if len(used) - len(dropped) < MIN_CALIBRATION_FRAMES:
+            raise LensCalibrationError(
+                f"{len(dropped)} of the {len(used)} detected views fit far "
+                "worse than the rest ("
+                + ", ".join(f"{n} at {px:.1f} px" for n, px in outliers)
+                + f", against a median of {float(np.median(per_view)):.1f} px) "
+                f"and fewer than {MIN_CALIBRATION_FRAMES} would remain without "
+                "them. Those frames are blurred, mis-detected or shot at a "
+                "different zoom; re-shoot or remove them."
+            )
+        keep = [i for i, name in enumerate(used) if name not in dropped]
+        used = [used[i] for i in keep]
+        objpoints = [objpoints[i] for i in keep]
+        imgpoints = [imgpoints[i] for i in keep]
+        rms, mtx, dist, rvecs, sd, per_view = _fit(objpoints, imgpoints, shape[::-1])
+        meaningless(rms, len(used))
 
     # The optimiser fits ONE camera to however many views; what it needs is
     # views of the board at different angles. Copies, translations, zooms and
@@ -244,6 +335,23 @@ def calibrate_lens_from_frames(
             "TILTED differently in each view."
         )
 
+    # Three orientations is the floor, not a guarantee: the fit's own
+    # uncertainty on fx says whether the views actually determined it.
+    # Either focal length undetermined is the same failure (they track each
+    # other on any square-pixel camera), so the larger uncertainty is judged.
+    conditioning = max(float(sd[0]), float(sd[1])) / rms if rms > 0 else 0.0
+    if conditioning > MAX_FOCAL_CONDITIONING:
+        raise LensCalibrationError(
+            f"The {len(used)} detected views leave the focal length "
+            f"undetermined: the fit's own uncertainty on it is {float(sd[0]):.0f} px "
+            f"per pixel of corner error ({conditioning:.0f}; usable "
+            f"calibrations sit under {MAX_FOCAL_CONDITIONING:.0f}). The board "
+            "was tilted too little, or only symmetrically about one axis — "
+            "measured, such a set 'calibrated' to a focal length 16% short at "
+            "a low rms with the correction 391 px wrong at the corners. Tilt "
+            "the board MORE, ten degrees and beyond, in different directions."
+        )
+
     hull = np.zeros(frame_shape, np.uint8)
     for pts in imgpoints:
         cv2.fillConvexPoly(
@@ -257,6 +365,9 @@ def calibrate_lens_from_frames(
         frames_skipped=skipped,
         shape=frame_shape,
         coverage=float(hull.mean()),
+        frames_outliers=outliers,
+        median_view_rms=float(np.median(per_view)),
+        focal_conditioning=conditioning,
     )
 
 

@@ -136,23 +136,41 @@ corrected file:
 
 ```
 correct_lens_distortion(image_path, checkerboard_dir, row_corners=13, col_corners=19)
-  -> corrected_image_path ".../img_undistorted.png", frames_used 9, rms 13.1,
-     crop_fraction 0.19, residual_void_px 0, board_coverage 0.72,
-     warnings [lens_corrected, high_reprojection_error]
+  -> corrected_image_path ".../img_undistorted.png", frames_used 8,
+     frames_skipped [bad_checkerboard.png],
+     frames_outliers [{checkerboard1.png, rms_px 37.2}], rms 3.7,
+     focal_conditioning 4.6, crop_fraction 0.19, residual_void_px 0,
+     board_coverage 0.71, warnings [lens_corrected, outlier_frames_dropped]
 ```
 
+(That is the PlantCV tutorial set as this release reads it: one frame does not detect,
+one fits at 37 px against a median of 2.8 and is left out, and the remaining eight fit at
+3.7 px — the 13 px that earlier releases quoted for this set was that one frame.)
+
 `checkerboard_dir` holds several photos of a checkerboard taken with the **same camera at
-the same resolution**, the board **tilted differently in each**; the corner counts are the
-board's INNER corners. Frames where no board is detected, or that differ from the majority
-size, are skipped and named; fewer than three detections is refused (PlantCV's own
-`checkerboard_calib` crashes on that directory, and would happily "calibrate" from one
-frame). So is a set showing fewer than three distinct board **orientations**: a camera model
-is determined by the board's angles, not its positions, and copies of one photo, the board
-slid around the frame, moved nearer or farther, or turned in its own plane all count as ONE.
-Measured with that refusal disabled on a synthetic camera of known intrinsics, ten duplicates
-"calibrated" to fx=252 against a true 400 at rms 0.19, eight positions of a board facing the
-camera to fx=228, and two orientations repeated four times each to fx=883 — confidently wrong
-models no error metric could flag. Mirrored frames are a limit, not a check: a set that is
+the same resolution**, the board **tilted differently in each — by ten degrees and more, in
+different directions**; the corner counts are the board's INNER corners. Frames where no
+board is detected, or that differ from the majority size, are skipped and named; fewer than
+three detections is refused (PlantCV's own `checkerboard_calib` crashes on that directory,
+and would happily "calibrate" from one frame). So is a set showing fewer than three distinct
+board **orientations**: a camera model is determined by the board's angles, not its
+positions, and copies of one photo, the board slid around the frame, moved nearer or farther,
+or turned in its own plane all count as ONE (frames within 5° of each other count as one,
+transitively, so the verdict does not depend on filenames). Measured with that refusal
+disabled on a synthetic camera of known intrinsics, ten duplicates "calibrated" to fx=252
+against a true 400 at rms 0.19, eight positions of a board facing the camera to fx=228, and
+two orientations repeated four times each to fx=883 — confidently wrong models no error
+metric could flag. Three orientations is a floor, not a guarantee: a board tilted only
+−7/0/+7° about one axis passes it and calibrated to fx=334 with the applied correction 391 px
+wrong at the corners, at an rms of 0.03% of the diagonal. What the fit needs is data that
+**determine the focal length**, so the calibration's own uncertainty on fx per pixel of
+reprojection error is measured and a set above 20 is refused, naming the number (weak sets
+measured 28–52; the PlantCV tutorial set 3.5; a sound three-view set 14). Separately, a frame
+whose own reprojection error stands above three times the median AND 0.25% of the diagonal
+is a bad detection, not a bad camera: it is dropped by name (`frames_outliers`, warning
+`outlier_frames_dropped`) and the camera refitted — on the PlantCV tutorial set one such frame
+at 37 px against a median of 4 moved fx by 13% and the set's rms from 13.1 to 3.7 px.
+Mirrored frames are a limit, not a check: a set that is
 _all_ mirrored calibrates the reflected camera consistently, but a set with _some_ frames
 mirrored returns a camera that is neither (measured with cx=285, the mixed set fitted cx=319
 at a low rms) and nothing can detect it — do not mix. Both the calibration frames and the
@@ -162,13 +180,18 @@ mismatch its scenes. An image whose size differs from the calibration frames' is
 resolution, and measured, a 1280×960 image through a 640×480 calibration came back as a
 49×127 crop.
 
-The model is exact where boards were and **extrapolated everywhere else**. `board_coverage`
-reports the fraction of the frame the detected boards covered; under 40% the
-`low_calibration_coverage` warning says so (measured: 24% coverage left the frame corners
-31 px wrong; 48% held them within 10 px; the tutorial set covers 72%). The sixth-order
-radial term k3 is not fitted — left free, it is fitted from the boards' footprint alone and
-folds the correction over outside it (measured: 659 px at the corners from 24% coverage, and
-on the real fisheye set a k3 of −44 that turned a fifth of the frame into voids). Fit quality
+The model is fitted where boards were and **extrapolated everywhere else**. `board_coverage`
+reports the fraction of the frame the detected corner grids covered (the board's outer ring
+of squares lies outside its inner corners, so a board covers a little more than the number
+says); under 40% the `low_calibration_coverage` warning says so (measured: 24% coverage left
+the frame corners 31 px wrong; 48% held them within 10 px at the 95th percentile and 25 px at
+the worst pixel; the tutorial set covers 71%). The sixth-order radial term k3 is not fitted —
+left free, it is fitted from the boards' footprint alone and folds the correction over
+outside it (measured: 659 px at the corners from 24% coverage, and on the real fisheye set a
+k3 of −44 that turned a fifth of the frame into voids). The price is a limit that nothing in
+the fit can detect: a lens whose distortion genuinely needs a sixth-order term is corrected
+to fourth order only, and the error grows toward the corners (measured with a true k3 of 0.1:
+rms 0.34 px, no warning, and the applied correction 77 px wrong at the corners). Fit quality
 is reported as a fraction of the frame diagonal so it means the same at any resolution;
 `high_reprojection_error` fires above 0.15%. That number is the fit at the detected corners,
 not a bound on the residual distortion elsewhere — measured on the real set, two models that
@@ -564,7 +587,16 @@ Every path argument — `segment`, `suggest_segmentation`,
 `.hdr` siblings, thermal files — is resolved with symlinks and `..` followed
 **first**, then checked against the roots; a symlink inside a root pointing outside
 is refused, and a batch with one stray path is refused whole before anything is
-read. `list_methods()` reports the policy as `read_roots`.
+read. `list_methods()` reports the policy as `read_roots`. The check on the name is
+the early, legible refusal; the binding one is made on the file that was actually
+opened — the descriptor is asked where it lives (Linux `/proc`, macOS `F_GETPATH`),
+so a directory renamed and replaced by an outside symlink between the check and the
+open is refused rather than followed, and only regular files are read (a FIFO planted
+at a member's name is a named skip, not a hang). Written files — the corrected image —
+go through a descriptor of their directory, opened once, so the same swap cannot
+redirect a write. Both require a POSIX platform that can report a descriptor's path:
+with read roots configured on any other platform the server refuses to read rather
+than read unverified.
 
 ## Security and trust boundary
 
@@ -588,7 +620,9 @@ Practical consequences:
   holding sensitive imagery.
 
 The read-root allow-list is the whole of the sandboxing; there is no network access,
-no writing, and no execution of anything but PlantCV.
+no execution of anything but PlantCV, and the only write is
+`correct_lens_distortion`'s corrected image — next to its input, or at an explicit
+`output_path` that must not already exist and must not be a symlink.
 
 ## Limitations
 
@@ -601,6 +635,11 @@ The batch is serial and in-process: real photographs take seconds each, which is
 
 Sessions are in-memory and capped (8 by default, LRU-evicted). They do not
 survive a server restart.
+
+The server is developed and tested on Linux and relies on POSIX file semantics
+(`O_NOFOLLOW`, directory descriptors, hard links, `/proc`): the containment guards
+around reading and writing files are inert on Windows, and read roots cannot be
+enforced there.
 
 Images on these pages are rendered from `tests/fixtures/multi_specimen.png`, an original render
 by the author, and regenerate from committed code.

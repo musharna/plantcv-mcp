@@ -37,20 +37,75 @@ def configured_roots() -> list[str] | None:
     return [os.path.realpath(r) for r in raw.split(os.pathsep) if r.strip()]
 
 
-def check_readable(path: str) -> str:
-    """Return the realpath of `path`, or raise PathOutsideRootsError."""
-    real = os.path.realpath(path)
-    roots = configured_roots()
-    if roots is None:
-        return real
+def _inside(real: str, roots: list[str]) -> bool:
     for root in roots:
         try:
             if os.path.commonpath([root, real]) == root:
-                return real
+                return True
         except ValueError:  # different drives on Windows
             continue
+    return False
+
+
+def check_readable(path: str) -> str:
+    """Return the realpath of `path`, or raise PathOutsideRootsError.
+
+    This judges a NAME, and a name can be re-pointed between the check and
+    the open (any ancestor directory swapped for a symlink — O_NOFOLLOW only
+    guards the last component). Readers therefore also call check_open_fd on
+    the descriptor they actually opened; this check is the early, named
+    refusal, that one is the binding.
+    """
+    real = os.path.realpath(path)
+    roots = configured_roots()
+    if roots is None or _inside(real, roots):
+        return real
     raise PathOutsideRootsError(
         f"{path!r} resolves to {real!r}, which is outside the configured read "
         f"roots {roots}. This server only reads under those directories "
         "(PLANTCV_MCP_ROOTS / --root)."
+    )
+
+
+def fd_path(fd: int) -> str:
+    """The current path of an OPEN descriptor, from the kernel — not from
+    any name the caller holds. Linux answers through /proc; macOS through
+    F_GETPATH. Anywhere else there is no way to ask, and a containment check
+    that cannot be made is refused rather than skipped."""
+    try:
+        return os.readlink(f"/proc/self/fd/{fd}")
+    except OSError:
+        pass
+    try:
+        import fcntl
+
+        getpath = fcntl.F_GETPATH  # macOS only
+    except (ImportError, AttributeError) as exc:
+        raise RuntimeError(
+            "This platform cannot report where an open file lives, so read "
+            "roots cannot be enforced on it (Linux and macOS can). Run without "
+            "PLANTCV_MCP_ROOTS / --root, or on a supported platform."
+        ) from exc
+    raw = fcntl.fcntl(fd, getpath, bytes(1024))
+    return os.fsdecode(raw.split(b"\0", 1)[0])
+
+
+def check_open_fd(fd: int, path: str) -> str:
+    """Check the file BEHIND `fd` against the roots; return its path.
+
+    Panel audit of 1.9.0: a member directory renamed and replaced by an
+    outside symlink between check_readable and os.open was followed — the
+    resolved pathname was re-resolved by the kernel, ancestors included.
+    The descriptor is the thing that was opened; ask the kernel where it is.
+    """
+    roots = configured_roots()
+    if roots is None:
+        return path
+    real = fd_path(fd)
+    if _inside(real, roots):
+        return real
+    raise PathOutsideRootsError(
+        f"{path!r} was opened as {real!r}, which is outside the configured "
+        f"read roots {roots} — the path changed between the check and the "
+        "open. Nothing was read."
     )

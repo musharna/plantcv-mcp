@@ -6,6 +6,97 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-09-01
+
+Findings from an independent panel audit of 1.9.0 (five judges, all
+answering, plus a rebuttal round), every load-bearing claim reproduced on the
+live code before it was fixed, and one finding made while reproducing them.
+The theme again: a guard or a test that proved less than its name said, and
+a check made on a name rather than on the thing the name pointed at.
+
+### Changed
+
+- **Calibration refuses views that leave the focal length undetermined.**
+  Three distinct orientations was the floor 1.9.0 required, and it is not
+  sufficient: a board tilted −7/0/+7° about one axis at fourteen spread
+  positions passed the count, 48% coverage and an rms of 0.03% of the
+  diagonal, and calibrated to fx 334 against 400 with the applied correction
+  391 px wrong at the corners. The statistic that separated every such set
+  from every set that recovered the camera is the calibration's own
+  uncertainty on fx per pixel of reprojection error (weak sets 28–52; sound
+  synthetic sets 4–22; the PlantCV tutorial set 3.5); above 20 the fit is
+  refused, naming the number. The 1.9.0 claim that three orientations was
+  "the floor at which every measured set recovered fx within 1%" is
+  withdrawn; `focal_conditioning` is reported.
+- **A frame that fits far worse than the others is dropped and named.** The
+  per-view reprojection errors the optimiser already computes were never
+  looked at. On PlantCV's own tutorial set one frame sits at 37 px against a
+  median of 4: it moved the focal length by 13% and the set's rms from 13.1
+  to 3.7 px — three releases described that set as "fitting at 13 px", and
+  it was one bad frame. A synthetic set with three such frames "calibrated"
+  to fx 612 with the field 2814 px wrong at rms 1.6 (generic advisory only).
+  Frames above three times the median AND 0.25% of the diagonal are dropped
+  by name (`frames_outliers`, warning `outlier_frames_dropped`) and the
+  camera refitted; dropping below three usable frames refuses, naming them.
+- **The orientation count is order-independent.** Greedy packing counted
+  the tilts 0/4/8/12/16° as three orientations or two depending on which
+  filename sorted first; "within 5° count as one" is now transitive, so the
+  verdict is a property of the set.
+- **The extent remedy's `fill_size` clears every far component.** It came
+  from the one named offender: a 100-px speck outranked a 400-px blob on the
+  same axis and "fill_size above 100" left the warning firing on the blob.
+  The threshold is now the largest component overhanging a triggering axis,
+  and the message says how many it removes.
+
+### Fixed
+
+- **Containment was checked on a name and the file was opened by name.**
+  `O_NOFOLLOW` guards the last path component only: renaming the
+  checkerboard directory and planting an outside symlink at its name between
+  the check and the open read outside bytes into the digest and the
+  calibration (reproduced), and the same swap on the output's directory sent
+  the corrected image over an outside file (800 → 79 bytes). Every read now
+  asks the kernel where the opened descriptor lives (`/proc/self/fd`, macOS
+  `F_GETPATH`) and checks THAT against the roots; every write is made
+  relative to a directory descriptor opened once and verified. 1.9.0's
+  "bound to the checked path, never follows a link" described the last
+  component only.
+- **A member replaced by a FIFO hung the server.** The open blocked inside
+  `open(2)` waiting for a writer, so the promised named skip never came.
+  Files are opened non-blocking and only a regular file is read.
+- **The whole-field oracle tested a field the tool does not apply.** Both
+  maps were built at the true camera's output matrix; `undistort_image`
+  builds it from the recovered calibration. On the weakly-conditioned set
+  above the oracle read 139 px where the applied field was 391. The test now
+  builds both maps at the recovered output camera and checks that camera
+  against the true one. Its docstring's "within 10 px everywhere" was the
+  95th percentile; the worst pixel is held to 25.
+- **Explicit `output_path` failed on filesystems without hard links.** The
+  exclusive write depended on `os.link`, which FAT/exFAT camera cards refuse
+  with a raw `EPERM`. Where no hard link can exist none can squat either:
+  the name is created exclusively instead.
+- **A stale temp file blocked every later write with the wrong message.**
+  The temp name was `<path>.<pid>.partial`; a crash residue met after PID
+  reuse failed `O_EXCL` and the server reported "output_path already
+  exists" about a file that did not. The temp name is random.
+- **A dangling symlink at `output_path` was followed.** The name was
+  resolved before `write_image` judged it, so the link's target was created
+  and reported. The caller's spelling is judged first.
+
+### Documentation
+
+- A lens whose distortion genuinely needs the sixth-order term k3 is
+  corrected to fourth order only, the error growing toward the corners
+  (measured: a true k3 of 0.1 calibrates at rms 0.34 px with no warning and
+  the applied correction 77 px wrong), and nothing in the residuals can tell.
+  The guide says so, and the test suite pins it as the limit it is.
+- "Exact where boards were" is now "fitted"; `board_coverage` is the corner
+  grids' footprint, a little less than the boards'. The guide names the
+  platform assumption: POSIX file semantics; with read roots configured on a
+  platform that cannot report a descriptor's path the server refuses to read
+  rather than read unverified. The security section no longer says "no
+  writing": the corrected image is the one write.
+
 ## [1.9.0] — 2026-09-01
 
 Findings from an independent panel audit of 1.8.2 (three judges answered
