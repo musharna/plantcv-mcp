@@ -6,6 +6,34 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.8.2] — 2026-09-01
+
+A correction to the record, found while closing a loose end from mutation
+round 11. No tool behaviour changed.
+
+### Fixed
+
+- **The lens test fixture had no camera, so "against a true 400" was never
+  true.** Checkerboard views were synthesised by arbitrary 2-D homographies,
+  and a set of homographies implies its own intrinsics: the pristine fixture
+  calibrated to fx=217, cx=386, not the fx=400, cx=320 its distortion model
+  used. The 1.8.1 entry's "fx=224 against a true 400" — repeated in the
+  `lens.py` docstring and the guide — compared against a camera that did not
+  exist (224 is roughly what a GOOD set returned). Views are now rigid poses
+  projected through the stated camera, the suite asserts the calibration
+  RECOVERS it (fx/fy within 2%, principal point within 3 px, k1 within 10%,
+  rms 0.13), and the duplicate-pose claim is re-measured against that truth:
+  with the refusal disabled, ten copies of one pose calibrate to rms 0.19
+  with fx=252 and k1=-0.24 — still a low-rms wrong model, so the refusal
+  stands, now with numbers that mean something.
+- **Mirrored checkerboard frames are documented as harmless, not guarded.**
+  Investigated as a candidate defect (half-mirrored views fit the OLD fixture
+  at fx=131): with a real camera, all- and half-mirrored sets recover the
+  same intrinsics, because a mirrored board is the same board seen from
+  behind and `findChessboardCorners` canonicalises corner order. The apparent
+  defect was the old fixture's off-centre implied principal point reflecting.
+  Pinned by a test so no mirrored-frame guard gets added for it.
+
 ## [1.8.1] — 2026-08-31
 
 Findings from an independent panel audit of 1.8.0 (five judges in full plus a

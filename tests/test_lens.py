@@ -50,26 +50,41 @@ def _distort(img):
     )
 
 
-# Fixed poses: offsets move the board around the frame, jiggles tilt it.
-# Deterministic on purpose — a flaky calibration test would teach nothing.
+# Fixed RIGID poses of the board (Rodrigues rotation, translation in square
+# units), projected through MTX. Earlier fixtures warped the board by arbitrary
+# 2-D homographies, and a set of homographies implies its own intrinsics: that
+# fixture calibrated to fx=217, cx=386, so every "against a true 400" claim was
+# measured against a camera that did not exist. Deterministic on purpose — a
+# flaky calibration test would teach nothing. The first pose is the most
+# tilted (its corner rows bend 4.6 px under DIST); it is the scene and the
+# thumbnail source too.
 POSES = [
-    ((30, 30), ((0, 0), (0, 0), (0, 0), (0, 0))),
-    ((150, 40), ((0, 10), (0, -10), (0, 10), (0, -10))),
-    ((40, 120), ((12, 0), (-12, 0), (-12, 0), (12, 0))),
-    ((120, 100), ((0, 0), (0, 14), (0, -14), (0, 0))),
-    ((60, 60), ((8, 8), (-8, -8), (8, 8), (-8, -8))),
-    ((100, 30), ((0, 0), (10, 0), (0, 10), (-10, 0))),
-    ((20, 80), ((-6, 0), (6, 4), (0, -8), (4, 6))),
-    ((90, 90), ((0, -10), (0, 10), (-10, 0), (10, 0))),
+    ((0.00, 0.35, 0.10), (-5.5, -2.5, 12.5)),
+    ((0.00, 0.00, 0.00), (-4.5, -3.2, 12.0)),
+    ((0.35, 0.00, 0.00), (-4.0, -3.0, 13.0)),
+    ((-0.30, 0.20, 0.00), (-3.0, -3.8, 14.0)),
+    ((0.20, -0.35, -0.15), (-6.0, -3.5, 13.5)),
+    ((-0.25, -0.25, 0.20), (-4.8, -1.8, 15.0)),
+    ((0.40, 0.25, 0.00), (-3.5, -2.2, 12.5)),
+    ((-0.15, 0.40, -0.10), (-5.2, -4.0, 14.5)),
 ]
 
 
-def _view(offset, jiggle, size=(640, 480)):
+def _view(rvec, tvec, size=(640, 480)):
+    """Render the flat board at a rigid pose through the PINHOLE part of MTX.
+
+    The board plane is z=0 with one unit per square; its four corners are
+    projected with cv2.projectPoints (no distortion — _distort applies DIST
+    afterwards through the same MTX), and the flat render is warped onto
+    those image points.
+    """
     board = _board()
     bh, bw = board.shape
+    square = bh / (ROWS + 1)
     base = np.float32([[0, 0], [bw, 0], [bw, bh], [0, bh]])
-    dst = base * 0.72 + np.float32(offset) + np.float32(jiggle)
-    hom = cv2.getPerspectiveTransform(base, dst)
+    world = np.float32([[0, 0, 0], [bw, 0, 0], [bw, bh, 0], [0, bh, 0]]) / square
+    pts, _ = cv2.projectPoints(world, np.float32(rvec), np.float32(tvec), MTX, None)
+    hom = cv2.getPerspectiveTransform(base, pts.reshape(4, 2).astype(np.float32))
     return cv2.warpPerspective(
         board,
         hom,
@@ -82,8 +97,8 @@ def _view(offset, jiggle, size=(640, 480)):
 
 def _write_frames(directory, n=None):
     directory.mkdir(parents=True, exist_ok=True)
-    for i, (offset, jiggle) in enumerate(POSES if n is None else POSES[:n]):
-        cv2.imwrite(str(directory / f"view{i}.png"), _distort(_view(offset, jiggle)))
+    for i, (rvec, tvec) in enumerate(POSES if n is None else POSES[:n]):
+        cv2.imwrite(str(directory / f"view{i}.png"), _distort(_view(rvec, tvec)))
 
 
 def _row_residual(gray):
@@ -271,9 +286,10 @@ def test_the_crop_contains_no_fabricated_pixels():
 
 
 def test_ten_copies_of_one_pose_are_refused(tmp_path):
-    """Panel 3: ten duplicates calibrated to rms 0.125 with fx=224 (true 400)
-    — a LOW-rms wrong calibration, so only a pose-diversity gate can catch
-    it."""
+    """Panel 3: ten duplicates 'calibrate' to a LOW rms with wrong intrinsics
+    — measured with this gate disabled on the true-camera fixture: rms 0.19,
+    fx=252 and k1=-0.24 against 400 and -0.50 — so only a pose-diversity
+    gate can catch it."""
     from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
 
     d = tmp_path / "dups"
@@ -516,11 +532,11 @@ def test_two_views_are_refused_by_the_literal_minimum(tmp_path):
 
 @pytest.mark.parametrize("bad_rms", [float("inf"), float("nan"), 1e12])
 def test_a_meaningless_fit_is_refused(tmp_path, monkeypatch, bad_rms):
-    """Round 11: no frame set this suite can build reaches the rms gate (even
-    half-mirrored views fit at rms 1.7 with fx=131), so the optimiser is
-    stubbed to return the garbage the gate exists for — codex measured
-    5.95e10 on one duplicate-pose reproduction. The gate must refuse
-    non-finite and absurd fits by name."""
+    """Round 11: no frame set this suite can build reaches the rms gate
+    (mirrored views calibrate cleanly; duplicates are refused upstream), so
+    the optimiser is stubbed to return the garbage the gate exists for —
+    codex measured 5.95e10 on one duplicate-pose reproduction. The gate must
+    refuse non-finite and absurd fits by name."""
     from plantcv_mcp import lens
     from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
 
@@ -586,7 +602,7 @@ def test_a_frame_too_small_to_crop_is_returned_whole_with_its_voids_counted():
     assert info["crop_fraction"] == 0.0
 
 
-def test_an_explicit_output_path_outside_the_roots_is_refused(tmp_path, calib_dir):
+def test_an_explicit_output_path_outside_the_roots_is_refused(tmp_path):
     """Round 11: output_path went through check_readable, and nothing pinned
     it — dropping the call lets a caller write outside the configured roots.
     Inside the roots the same call writes normally."""
@@ -665,3 +681,43 @@ def test_a_cropped_frame_says_so():
         if w["code"] == "lens_corrected"
     )["message"]
     assert "No void crop was needed" in msg2
+
+
+# --- 2026-09-01: the fixture must have a camera for "true" to mean anything ---
+
+
+def test_calibration_recovers_the_synthetic_camera(calibration):
+    """Every earlier 'fx=224 against a true 400' claim compared against a
+    truth that did not exist: views were built from arbitrary homographies,
+    which imply their own intrinsics (the pristine set calibrated to fx=217,
+    cx=386). Views are now rigid poses projected through MTX, so the
+    calibration must RECOVER MTX and DIST — the assertion that makes the
+    duplicate-pose and mirrored-view measurements meaningful."""
+    fx, fy = calibration.mtx[0, 0], calibration.mtx[1, 1]
+    cx, cy = calibration.mtx[0, 2], calibration.mtx[1, 2]
+    assert abs(fx - MTX[0, 0]) < 0.02 * MTX[0, 0]
+    assert abs(fy - MTX[1, 1]) < 0.02 * MTX[1, 1]
+    assert abs(cx - MTX[0, 2]) < 3.0 and abs(cy - MTX[1, 2]) < 3.0
+    assert abs(float(calibration.dist.ravel()[0]) - DIST[0]) < 0.1 * abs(DIST[0])
+    assert calibration.rms < 0.5
+
+
+def test_mirrored_views_calibrate_the_same_camera(tmp_path):
+    """Mirroring is a symmetry of a centred camera: a mirrored checkerboard is
+    the same board seen from behind, and findChessboardCorners canonicalises
+    corner order, so all-mirrored and half-mirrored sets recover the same
+    intrinsics. Pinned so nobody adds a 'mirrored frame' guard for a defect
+    that only the old homography fixture (off-centre implied cx) exhibited."""
+    from plantcv_mcp.lens import calibrate_lens
+
+    for label, pick in (("all", lambda i: True), ("half", lambda i: i % 2 == 1)):
+        d = tmp_path / label
+        d.mkdir()
+        for i, (r, t) in enumerate(POSES):
+            img = _distort(_view(r, t))
+            if pick(i):
+                img = np.ascontiguousarray(img[:, ::-1])
+            cv2.imwrite(str(d / f"view{i}.png"), img)
+        calib = calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+        assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0], label
+        assert abs(calib.mtx[0, 2] - MTX[0, 2]) < 3.0, label

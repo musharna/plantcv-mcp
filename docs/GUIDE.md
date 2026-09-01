@@ -146,8 +146,10 @@ the same resolution**; the corner counts are the board's INNER corners. Frames w
 board is detected, or that differ from the majority size, are skipped and named; fewer
 than three detections is refused (PlantCV's own `checkerboard_calib` crashes on that
 directory, and would happily "calibrate" from one frame), and so is a set of copies of one
-pose — measured, ten duplicates "calibrated" to a _low_ rms with fx=224 against a true
-400, a confidently wrong model no error metric could flag. An image whose size differs
+pose — measured with that refusal disabled on a synthetic camera of known intrinsics, ten
+duplicates "calibrated" to rms 0.19 with fx=252 against a true 400, a confidently wrong
+model no error metric could flag. (Mirrored frames are not a problem: a mirrored board is
+the same board seen from behind, and mirrored sets recover the same camera.) An image whose size differs
 from the calibration frames' is refused too (`CalibrationResolutionMismatchError`):
 intrinsics are in pixels at the calibration resolution, and measured, a 1280×960 image
 through a 640×480 calibration came back as a 49×127 crop.

@@ -8,9 +8,12 @@ with a garbage calibration and no warning. The loop here is the same algorithm
 (findChessboardCorners + cornerSubPix with the same criteria); what changes is
 the accounting and the refusals — every frame is reported as used or skipped
 by name, fewer than MIN_CALIBRATION_FRAMES detections refuses, and so do a set
-of duplicate poses (measured: ten copies of one view "calibrated" to rms 0.125
-with fx=224 against a true 400 — a LOW-rms wrong answer no error gate could
-catch) and a non-finite or absurd fit.
+of duplicate poses (measured with that refusal disabled, on a synthetic camera
+whose intrinsics are known: ten copies of one view "calibrated" to rms 0.19
+with fx=252 and k1=-0.24 against a true 400 and -0.50 — a LOW-rms wrong answer
+no error gate could catch) and a non-finite or absurd fit. Mirrored views, by
+contrast, are NOT a defect: a mirrored board is the same board seen from
+behind, and all- or half-mirrored sets recover the same camera.
 
 **Why the crop comes from a real validity mask, not OpenCV's ROI.**
 getOptimalNewCameraMatrix(alpha=1) fabricates black void pixels wherever the
