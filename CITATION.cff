@@ -23,8 +23,8 @@ repository-code: "https://github.com/musharna/plantcv-mcp"
 doi: 10.5281/zenodo.21713516
 url: "https://pypi.org/project/plantcv-mcp/"
 license: MIT
-version: 1.8.1
-date-released: "2026-08-31"
+version: 1.8.2
+date-released: "2026-09-01"
 keywords:
   - plantcv
   - phenotyping
