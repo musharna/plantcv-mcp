@@ -439,3 +439,42 @@ def test_the_named_offender_is_the_extent_driver_not_the_biggest():
     assert w is not None
     assert "64 px" in w.message
     assert "400 px" not in w.message
+
+
+# --- mutation round 11 (2026-09-01): pinning the per-axis advisory's calibration ---
+
+
+def test_material_half_a_plant_width_away_still_inflates_the_extent():
+    """Round 11: every firing fixture inflated an axis by 2.3x or more, so the
+    1.25 threshold could drift to 2.0 unnoticed — past the real fisheye
+    photo's 2.17x. A sliver one third of a plant-width past the plant
+    stretches width 1.47x: that is a corrupted width and must warn."""
+    from plantcv_mcp.diagnostics import minor_extent_inflation_warning
+
+    mask = np.zeros((200, 300), np.uint8)
+    mask[80:140, 40:100] = 255  # the plant, 60 px wide
+    mask[100:108, 120:128] = 255  # 64-px sliver 20 px past its edge (union 88/60)
+    w = minor_extent_inflation_warning(mask, analyze_mask(mask))
+    assert w is not None
+    assert "64" in w.message
+
+
+def test_a_crumb_beside_the_second_plant_is_measured_against_both_plants():
+    """Round 11: the baseline extent is the union of the MAJOR components, not
+    the largest one. With two plants far apart, a crumb touching the second
+    plant barely moves the major union (silent), while measured against the
+    largest plant alone it would read as a 4x width inflation."""
+    from plantcv_mcp.diagnostics import minor_extent_inflation_warning
+
+    mask = np.zeros((200, 400), np.uint8)
+    mask[80:140, 20:80] = 255  # plant A
+    mask[80:140, 260:320] = 255  # plant B
+    mask[100:106, 322:328] = 255  # crumb at B's edge
+    diag = analyze_mask(mask)
+    assert diag.major_object_count == 2
+    assert minor_extent_inflation_warning(mask, diag) is None
+    # Positive control: the same crumb far past BOTH plants does inflate.
+    far = mask.copy()
+    far[100:106, 322:328] = 0
+    far[0:6, 392:398] = 255
+    assert minor_extent_inflation_warning(far, analyze_mask(far)) is not None
