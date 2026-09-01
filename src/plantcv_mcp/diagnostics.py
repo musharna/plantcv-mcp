@@ -421,13 +421,14 @@ def implausible_longest_path_warning(traits: dict) -> "Advisory | None":
     )
 
 
-# Calibrated on the real fisheye photo that found the gap: a 1,886-px sliver at
-# the opposite corner from a 458,078-px plant (union diagonal 1.68x the plant's
-# own) reported width 2040 px against a true 940 with no warning at all. The
-# near-miss case — specks beside the plant — lands around 1.05-1.09 on real
-# segmentations, so 1.10 separates "material far from the plant" from "the
-# usual crumbs around it".
-EXTENT_INFLATION_RATIO = 1.10
+# Compared PER AXIS, not on the diagonal: a diagonal ratio is dominated by an
+# elongated plant's long side, and the panel's reproduction (a 10x1000 plant
+# plus a 1-px speck off the short axis) inflated width 20x while moving the
+# diagonal only 1.02x — the original silent-width failure, rotated. Calibrated
+# on the real fisheye photo (corner sliver: width 2040/940 = 2.17x, fires) and
+# the adjacent-speck case (70/60 = 1.17x, must stay silent): 1.25 sits between
+# "the usual crumbs around the plant" and "material far from it".
+EXTENT_INFLATION_RATIO = 1.25
 
 
 def minor_extent_inflation_warning(
@@ -458,27 +459,51 @@ def minor_extent_inflation_warning(
     if bool(is_major.all()):
         return None
 
-    def _extent(r: np.ndarray) -> tuple[float, tuple[int, int, int, int]]:
+    def _extent(r: np.ndarray) -> tuple[int, int, int, int]:
         x0 = int(r[:, cv2.CC_STAT_LEFT].min())
         y0 = int(r[:, cv2.CC_STAT_TOP].min())
         x1 = int((r[:, cv2.CC_STAT_LEFT] + r[:, cv2.CC_STAT_WIDTH]).max())
         y1 = int((r[:, cv2.CC_STAT_TOP] + r[:, cv2.CC_STAT_HEIGHT]).max())
-        return float(np.hypot(x1 - x0, y1 - y0)), (x0, y0, x1, y1)
+        return (x0, y0, x1, y1)
 
-    major_diag, (mx0, my0, mx1, my1) = _extent(rows[is_major])
-    union_diag, _ = _extent(rows)
-    if major_diag <= 0 or union_diag <= ratio * major_diag:
+    mx0, my0, mx1, my1 = _extent(rows[is_major])
+    ux0, uy0, ux1, uy1 = _extent(rows)
+    major_w, major_h = mx1 - mx0, my1 - my0
+    union_w, union_h = ux1 - ux0, uy1 - uy0
+    if major_w <= 0 or major_h <= 0:
         return None
-    outside = [
-        r
-        for r in rows[~is_major]
-        if r[cv2.CC_STAT_LEFT] < mx0
-        or r[cv2.CC_STAT_TOP] < my0
-        or r[cv2.CC_STAT_LEFT] + r[cv2.CC_STAT_WIDTH] > mx1
-        or r[cv2.CC_STAT_TOP] + r[cv2.CC_STAT_HEIGHT] > my1
-    ]
-    worst = max(outside, key=lambda r: int(r[cv2.CC_STAT_AREA]))
+    if union_w <= ratio * major_w and union_h <= ratio * major_h:
+        return None
+
+    def _overhang(r: np.ndarray) -> int:
+        return max(
+            mx0 - int(r[cv2.CC_STAT_LEFT]),
+            int(r[cv2.CC_STAT_LEFT] + r[cv2.CC_STAT_WIDTH]) - mx1,
+            my0 - int(r[cv2.CC_STAT_TOP]),
+            int(r[cv2.CC_STAT_TOP] + r[cv2.CC_STAT_HEIGHT]) - my1,
+        )
+
+    # The named offender is the component that STRETCHES the extent furthest,
+    # not the biggest bystander: a large blob just past the bbox edge must not
+    # outrank the far speck actually responsible for the corrupted width.
+    worst = max(rows[~is_major], key=_overhang)
     area = int(worst[cv2.CC_STAT_AREA])
+    majors = int(is_major.sum())
+    if majors >= 2:
+        remedy = (
+            "Check the overlay: several comparably-sized objects share this "
+            "mask (see multi_specimen), so keeping only the largest object "
+            "would discard a real plant — measure_regions() measures each "
+            f"separately, and re-segmenting with fill_size above {area} "
+            "removes the far material."
+        )
+    else:
+        remedy = (
+            "Check the overlay: if that material is not part of the specimen, "
+            "refine() with keep_largest (or re-segment with fill_size above "
+            f"{area}) and measure the refined session. A detached leaf at the "
+            "plant's own edge belongs in the measurement — keep it."
+        )
     return Advisory(
         code="minor_components_inflate_extent",
         message=(
@@ -487,10 +512,8 @@ def minor_extent_inflation_warning(
             "far from the main object, stretches the measured extent: width, "
             "height, longest_path, ellipse and convex-hull traits describe the "
             f"span across ALL {diag.component_count} components "
-            f"({union_diag / major_diag:.1f}x the main object's own extent), "
-            "not the plant. Check the overlay: if that material is not part of "
-            "the specimen, refine() with keep_largest (or re-segment with "
-            f"fill_size above {area}) and measure the refined session."
+            f"({union_w}x{union_h} px against the main material's "
+            f"{major_w}x{major_h}), not the plant. " + remedy
         ),
     )
 

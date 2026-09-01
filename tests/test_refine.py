@@ -291,3 +291,23 @@ def test_dropped_object_attribution_is_honest_about_which_split_it_names():
     msg = dropped_object_warning(dropped).message
     assert "last op that raised the component count" in msg
     assert "op 1 (opening)" in msg
+
+
+# --- panel audit of 1.8.0 (2026-08-31) ---
+
+
+def test_refinement_warnings_carry_extent_inflation():
+    """Panel 8: refinement_warnings inlines its guard list and never emitted
+    minor_components_inflate_extent, so the refined overlay said nothing and
+    measure() then 'suddenly' warned. The refine response must agree."""
+    import numpy as np
+
+    from plantcv_mcp.diagnostics import analyze_mask
+    from plantcv_mcp.refine import refinement_warnings
+
+    mask = np.zeros((200, 300), np.uint8)
+    mask[80:140, 40:100] = 255
+    mask[0:8, 292:300] = 255
+    diag = analyze_mask(mask)
+    codes = [w.code for w in refinement_warnings(mask, diag, diag)]
+    assert "minor_components_inflate_extent" in codes

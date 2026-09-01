@@ -1,6 +1,8 @@
 """Image I/O and rendering. The only module that touches the filesystem."""
 
+import errno
 import hashlib
+import os
 
 import cv2
 import numpy as np
@@ -96,10 +98,34 @@ def load_image(path: str) -> np.ndarray:
     return load_image_with_digest(path)[0]
 
 
-def write_image(path: str, img: np.ndarray) -> None:
-    """Write an image, raising instead of cv2.imwrite's silent False."""
-    if not cv2.imwrite(path, img):
-        raise OSError(f"Could not write image to {path!r}")
+def write_image(path: str, img: np.ndarray, *, exclusive: bool = False) -> None:
+    """Write an image without ever following a symlink at `path`.
+
+    cv2.imwrite follows symlinks: measured on the one writing tool, a
+    pre-existing `<image>_undistorted.png` symlink sent the corrected image
+    into an unrelated victim file (a target outside the read roots included).
+    So the bytes are encoded here and written through os.open(O_NOFOLLOW);
+    `exclusive` adds O_EXCL, making refuse-if-exists atomic instead of an
+    exists()-then-write race.
+    """
+    ext = os.path.splitext(path)[1] or ".png"
+    ok, buf = cv2.imencode(ext, img)
+    if not ok:
+        raise OSError(f"Could not encode image for {path!r}")
+    flags = os.O_WRONLY | os.O_CREAT | (os.O_EXCL if exclusive else os.O_TRUNC)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags, 0o644)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise OSError(
+                f"{path!r} is a symlink; images are written only to real "
+                "files, so the link's target was left untouched. Remove the "
+                "link or pass a different output_path."
+            ) from exc
+        raise
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(buf.tobytes())
 
 
 def downscale(

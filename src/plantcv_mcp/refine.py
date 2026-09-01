@@ -28,6 +28,7 @@ from .diagnostics import (
     assert_not_degenerate,
     frame_clipping_warning,
     implausible_coverage_warning,
+    minor_extent_inflation_warning,
     multi_specimen_warning,
 )
 
@@ -321,6 +322,13 @@ def refinement_warnings(
     multi = multi_specimen_warning(after)
     if multi:
         warnings.append(multi)
+    # An op can no more un-corrupt the extent traits than segmentation could:
+    # a far sliver that survives the refinement still owns the width. Found by
+    # the 1.8.0 panel: refine() said nothing and measure() then "suddenly"
+    # warned, because this list repeats guards instead of sharing them.
+    inflation = minor_extent_inflation_warning(mask, after)
+    if inflation:
+        warnings.append(inflation)
     if not coverage:
         clipping = frame_clipping_warning(mask)
         if clipping:
