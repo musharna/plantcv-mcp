@@ -6,6 +6,68 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.8.1] — 2026-08-31
+
+Findings from an independent panel audit of 1.8.0 (five judges in full plus a
+rebuttal round), every load-bearing claim reproduced against the code before
+it was fixed.
+
+### Fixed
+
+- **A wrong-resolution image was silently garbled.** Camera intrinsics are in
+  pixels at the calibration frames' resolution; a 1280x960 image through a
+  640x480 calibration came back as a 49x127 crop with no warning. The frame
+  shape is now part of `LensCalibration`, and a mismatched image is a typed
+  `CalibrationResolutionMismatchError` naming both sizes.
+- **The "all-valid" crop contained fabricated pixels.** OpenCV's alpha=1 ROI
+  is approximate: on the test camera model its crop retained 566 synthesized
+  black pixels, and on the real fisheye photo it also over-cropped (58% of
+  the frame removed where 39% suffices). The crop now comes from a real
+  validity mask — a white frame remapped through the identical transform —
+  cut to the largest fully-valid rectangle; `residual_void_px` reports any
+  remainder, and the degenerate path no longer claims "No void crop was
+  needed" while voids remain.
+- **Garbage calibrations were accepted.** Ten copies of one pose
+  "calibrated" — in one reproduction to rms 5.95e10, in another to rms 0.125
+  with fx=224 against a true 400 (a LOW-rms wrong model no error gate could
+  catch). Duplicate poses are now refused by a corner-spread check,
+  non-finite or absurd fits are refused outright, and an honest
+  `high_reprojection_error` advisory fires above 5 px rms (the real tutorial
+  set runs at 13 and now says so).
+- **Checkerboard members bypassed the read-root contract.** Only the
+  directory was containment-checked; member symlinks pointing outside the
+  configured roots were opened by the digest and the calibration, and one
+  unreadable file crashed the digest outright. Every member now passes
+  `check_readable`, unreadable files become named skipped frames, and the
+  same bytes feed the cache digest and the calibration — which also closes
+  the window where a directory mutated mid-call could cache one state's
+  calibration under another state's digest. The digest serialization is
+  length-prefixed: bare name||bytes concatenation had deterministic
+  collisions.
+- **The derived output path wrote through symlinks.** A pre-existing
+  `<image>_undistorted.png` symlink sent the corrected image into whatever
+  it pointed at (outside the roots included), and the explicit-path
+  overwrite refusal was an exists-then-write race. Images are now written
+  via `O_NOFOLLOW` (symlinks refused by name) and the explicit path via
+  `O_EXCL` (atomic refusal).
+- **The extent-inflation advisory missed elongated plants.** The union
+  diagonal is dominated by a long axis: a 10x1000 plant plus a 1-px speck
+  off its short axis inflated width 20x while moving the diagonal 1.02x —
+  the exact silent-width failure the advisory exists for, rotated. Width and
+  height are now compared separately (threshold 1.25, recalibrated so
+  adjacent crumbs at 1.17 stay silent). The named offender is the component
+  that stretches the extent furthest, not the biggest bystander; and with
+  two or more major objects the remedy defers to `measure_regions()` instead
+  of recommending `keep_largest`, which would have discarded a real plant.
+- **`refine()` did not emit the advisory.** Its inlined guard list predated
+  `minor_components_inflate_extent`, so the refined overlay said nothing and
+  `measure()` then "suddenly" warned. The refine response now agrees with
+  the trait table.
+- **In-directory shape selection was lexical.** The first detected frame
+  fixed the calibration size, so thumbnails sorting first hijacked it away
+  from the full-resolution majority. The majority shape now wins, ties to
+  the larger frame.
+
 ## [1.8.0] — 2026-08-31
 
 Findings from the first lens-distortion dogfood: the released pipeline run on

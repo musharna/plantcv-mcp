@@ -137,18 +137,30 @@ corrected file:
 ```
 correct_lens_distortion(image_path, checkerboard_dir, row_corners=13, col_corners=19)
   -> corrected_image_path ".../img_undistorted.png", frames_used 9, rms 13.0,
-     crop_fraction 0.58, warnings [lens_corrected]
+     crop_fraction 0.39, residual_void_px 0,
+     warnings [lens_corrected, high_reprojection_error]
 ```
 
-`checkerboard_dir` holds several photos of a checkerboard taken with the **same camera**;
-the corner counts are the board's INNER corners. Frames where no board is detected are
-skipped and named; fewer than three detections is refused (PlantCV's own
-`checkerboard_calib` crashes on that directory, and would happily "calibrate" from one
-frame). The corrected image is cropped to the region where every pixel is real — the remap
-otherwise fabricates black voids that a value threshold would measure as objects — and the
-calibration is cached on the directory's content, so batches re-use it. Segment the
-corrected file, and take `px_per_mm` from `calibrate_scale_from_marker` **on the corrected
-file**: a scale calibrated on the original belongs to a geometry that no longer exists.
+`checkerboard_dir` holds several photos of a checkerboard taken with the **same camera at
+the same resolution**; the corner counts are the board's INNER corners. Frames where no
+board is detected, or that differ from the majority size, are skipped and named; fewer
+than three detections is refused (PlantCV's own `checkerboard_calib` crashes on that
+directory, and would happily "calibrate" from one frame), and so is a set of copies of one
+pose — measured, ten duplicates "calibrated" to a _low_ rms with fx=224 against a true
+400, a confidently wrong model no error metric could flag. An image whose size differs
+from the calibration frames' is refused too (`CalibrationResolutionMismatchError`):
+intrinsics are in pixels at the calibration resolution, and measured, a 1280×960 image
+through a 640×480 calibration came back as a 49×127 crop.
+
+The corrected image is cropped to the **largest rectangle of real pixels**, computed from
+an actual validity mask rather than OpenCV's approximate ROI (which, measured on the test
+camera model, retained 566 fabricated black pixels — and on the real fisheye photo
+over-cropped by half again as much as needed: 0.58 of the frame against the true 0.39).
+When no usable rectangle exists the frame is returned uncropped with the void count in
+`residual_void_px` and a `distortion_voids_remain` warning. The calibration is cached on
+the directory's content, so batches re-use it. Segment the corrected file, and take
+`px_per_mm` from `calibrate_scale_from_marker` **on the corrected file**: a scale
+calibrated on the original belongs to a geometry that no longer exists.
 
 ## Getting the polarity right
 
@@ -477,10 +489,11 @@ instead of a result.
 | `prune_size_sensitive`                                              | `measure_morphology`                                   | segment count changes > 30% at 2× `prune_size`                                                                        | —        |
 | `skeleton_has_cycles`, `no_leaf_segments`, `no_stem_segment`        | `measure_morphology`                                   | skeleton topology PlantCV's leaf/stem split cannot use                                                                | —        |
 | `marker_touches_crop_edge`, `marker_not_round`, `marker_fills_crop` | `calibrate_scale_from_marker`                          | the detected marker is probably not the marker                                                                        | —        |
-| `minor_components_inflate_extent`                                   | any segmenter, `measure`                               | material far from the main object stretches width/height/ellipse/hull traits; names it and the `keep_largest` remedy  | advisory |
+| `minor_components_inflate_extent`                                   | any segmenter, `refine`, `measure`                     | material far from the main object stretches width/height/ellipse/hull traits; names the extent driver and the remedy  | advisory |
 | `lens_corrected`                                                    | `correct_lens_distortion`                              | which file to measure from here on; re-calibrate any scale on it                                                      | —        |
 | `thin_calibration`                                                  | `correct_lens_distortion`                              | fewer than 5 checkerboard frames went into the calibration                                                            | —        |
-| `distortion_voids_remain`                                           | `correct_lens_distortion`                              | no all-valid crop exists; fabricated black pixels remain at the edges                                                 | —        |
+| `high_reprojection_error`                                           | `correct_lens_distortion`                              | the calibration fits its own boards worse than 5 px rms; residual distortion of that order remains                    | —        |
+| `distortion_voids_remain`                                           | `correct_lens_distortion`                              | no usable all-valid crop exists; fabricated black pixels remain (count in `residual_void_px`)                         | —        |
 
 Refusals you will meet: a degenerate mask at `measure` (`DegenerateMaskError`), a refinement
 that erases the plant (`RefinementErasedMaskError`) or an invalid op list (`RefineSpecError`,
@@ -488,9 +501,10 @@ nothing applied), a skeleton PlantCV cannot analyse (`MorphologyRefusedError`, w
 the wrong session kind (`WrongSessionKindError`), a file that changed since segmentation
 (`ImageChangedSinceSegmentationError`, SHA-256), a grayscale or undecodable file
 (`NotColorImageError`), no colour card when one was asked for (`ColorCardNotFoundError`), a
-checkerboard directory with fewer than three detectable boards (`LensCalibrationError`, with
-the per-frame accounting), and unknown channel / method / index / analysis names, each
-listing the valid ones.
+checkerboard directory with fewer than three detectable boards, duplicate poses, or a
+meaningless fit (`LensCalibrationError`, with the per-frame accounting), an image whose
+resolution differs from its lens calibration (`CalibrationResolutionMismatchError`), and
+unknown channel / method / index / analysis names, each listing the valid ones.
 
 ## Crash containment: the analysis worker
 

@@ -226,3 +226,249 @@ def test_an_explicit_output_path_refuses_to_overwrite(tmp_path, calib_dir):
             output_path=str(target),
         )
     assert target.read_bytes() == b"not an image, and not ours to replace"
+
+
+# --- panel audit of 1.8.0 (2026-08-31): pinning the confirmed findings ---
+
+
+def test_a_wrong_resolution_image_is_refused(calibration):
+    """Panel 1 (4/5 judges): a 1280x960 image through the 640x480 calibration
+    came back 49x127 with no warning — intrinsics are in calibration-frame
+    pixels. The mismatch must be a typed refusal, not silent garbage."""
+    from plantcv_mcp.lens import CalibrationResolutionMismatchError, undistort_image
+
+    big = cv2.resize(_distort(_view(*POSES[0])), (1280, 960))
+    with pytest.raises(CalibrationResolutionMismatchError) as err:
+        undistort_image(cv2.cvtColor(big, cv2.COLOR_GRAY2BGR), calibration)
+    assert "1280" in str(err.value) and "640" in str(err.value)
+    # Positive control: the matching resolution still corrects.
+    ok, _ = undistort_image(
+        cv2.cvtColor(_distort(_view(*POSES[0])), cv2.COLOR_GRAY2BGR), calibration
+    )
+    assert ok.size > 0
+
+
+def test_the_crop_contains_no_fabricated_pixels():
+    """Panel 2 (codex, reproduced): with the exact fixture model and an all-127
+    source, OpenCV's alpha=1 ROI [13,24,613,430] kept 566 exactly-black
+    fabricated pixels. The crop must be computed from the TRUE valid mask."""
+    from plantcv_mcp.lens import LensCalibration, undistort_image
+
+    exact = LensCalibration(
+        mtx=MTX,
+        dist=DIST,
+        rms=0.5,
+        frames_used=["a"] * 8,
+        frames_skipped=[],
+        shape=(480, 640),
+    )
+    corrected, info = undistort_image(np.full((480, 640, 3), 127, np.uint8), exact)
+    black = int((corrected == 0).all(axis=2).sum())
+    assert black == 0
+    # Positive control: something was genuinely cropped away.
+    assert info["crop_fraction"] > 0.0
+    assert corrected.shape[0] < 480 or corrected.shape[1] < 640
+
+
+def test_ten_copies_of_one_pose_are_refused(tmp_path):
+    """Panel 3: ten duplicates calibrated to rms 0.125 with fx=224 (true 400)
+    — a LOW-rms wrong calibration, so only a pose-diversity gate can catch
+    it."""
+    from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
+
+    d = tmp_path / "dups"
+    d.mkdir()
+    one = _distort(_view(*POSES[0]))
+    for i in range(10):
+        cv2.imwrite(str(d / f"dup{i}.png"), one)
+    with pytest.raises(LensCalibrationError, match="pose"):
+        calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    # Positive control: the distinct-pose set calibrates through the same path.
+    d2 = tmp_path / "distinct"
+    _write_frames(d2)
+    calib = calibrate_lens(str(d2), row_corners=ROWS, col_corners=COLS)
+    assert len(calib.frames_used) == len(POSES)
+
+
+def test_checkerboard_symlinks_outside_roots_are_refused(tmp_path):
+    """Panel 4 (security, reproduced): only the DIRECTORY was containment-
+    checked; member symlinks to outside the roots were opened and calibrated.
+    Members must pass the same check_readable contract as every other read."""
+    from plantcv_mcp import paths
+    from plantcv_mcp.paths import PathOutsideRootsError
+    from plantcv_mcp.server import _correct_lens_impl
+
+    outside = tmp_path / "outside"
+    _write_frames(outside)
+    allowed = tmp_path / "allowed"
+    linkdir = allowed / "calib"
+    linkdir.mkdir(parents=True)
+    for i in range(len(POSES)):
+        os.symlink(str(outside / f"view{i}.png"), str(linkdir / f"view{i}.png"))
+    scene = allowed / "scene.png"
+    cv2.imwrite(
+        str(scene), _distort(cv2.cvtColor(_view(*POSES[0]), cv2.COLOR_GRAY2BGR))
+    )
+    paths.set_roots([str(allowed)])
+    try:
+        with pytest.raises(PathOutsideRootsError):
+            _correct_lens_impl(
+                str(scene), str(linkdir), row_corners=ROWS, col_corners=COLS
+            )
+        # Positive control: real files inside the root calibrate normally.
+        realdir = allowed / "real"
+        _write_frames(realdir)
+        res = _correct_lens_impl(
+            str(scene), str(realdir), row_corners=ROWS, col_corners=COLS
+        )
+        assert res["frames_used"] == len(POSES)
+    finally:
+        paths.set_roots(None)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores file permissions")
+def test_an_unreadable_member_file_is_skipped_not_fatal(tmp_path):
+    """Panel 4b: one unreadable regular file crashed the digest before
+    calibrate_lens could skip it. It must be named and skipped instead."""
+    from plantcv_mcp.server import _correct_lens_impl
+
+    d = tmp_path / "frames"
+    _write_frames(d)
+    locked = d / "locked.bin"
+    locked.write_bytes(b"sealed")
+    locked.chmod(0)
+    scene = tmp_path / "scene.png"
+    cv2.imwrite(
+        str(scene), _distort(cv2.cvtColor(_view(*POSES[0]), cv2.COLOR_GRAY2BGR))
+    )
+    try:
+        res = _correct_lens_impl(str(scene), str(d), row_corners=ROWS, col_corners=COLS)
+    finally:
+        locked.chmod(0o600)
+    assert res["frames_used"] == len(POSES)
+    assert "locked.bin" in res["frames_skipped"]
+
+
+def test_a_symlink_at_the_derived_output_is_refused(tmp_path, calib_dir):
+    """Panel 5 (destructive, reproduced): a pre-existing scene_undistorted.png
+    symlink was followed by the write and the victim file clobbered."""
+    from plantcv_mcp.server import _correct_lens_impl
+
+    scene = tmp_path / "scene.png"
+    cv2.imwrite(
+        str(scene), _distort(cv2.cvtColor(_view(*POSES[0]), cv2.COLOR_GRAY2BGR))
+    )
+    victim = tmp_path / "victim.png"
+    victim.write_bytes(b"PRECIOUS")
+    os.symlink(str(victim), str(tmp_path / "scene_undistorted.png"))
+    with pytest.raises(OSError, match="symlink"):
+        _correct_lens_impl(
+            str(scene), str(calib_dir), row_corners=ROWS, col_corners=COLS
+        )
+    assert victim.read_bytes() == b"PRECIOUS"
+
+
+def test_the_digest_cannot_be_collided_by_concatenation(tmp_path, calib_dir):
+    """Panel 6 (codex's construction, reproduced): name||bytes concatenation
+    made {0.png: A||"1.png"||B, 2.png: C} hash equal to {0.png: A, 1.png: B,
+    2.png: C}. Length-prefixed serialization must separate them."""
+    from plantcv_mcp.server import _checkerboard_digest
+
+    a = (calib_dir / "view0.png").read_bytes()
+    b = (calib_dir / "view1.png").read_bytes()
+    c = (calib_dir / "view2.png").read_bytes()
+    d1 = tmp_path / "dir1"
+    d2 = tmp_path / "dir2"
+    d1.mkdir()
+    d2.mkdir()
+    (d1 / "0.png").write_bytes(a + b"1.png" + b)
+    (d1 / "2.png").write_bytes(c)
+    (d2 / "0.png").write_bytes(a)
+    (d2 / "1.png").write_bytes(b)
+    (d2 / "2.png").write_bytes(c)
+    assert _checkerboard_digest(str(d1)) != _checkerboard_digest(str(d2))
+
+
+def test_thumbnails_sorting_first_do_not_hijack_the_calibration(tmp_path):
+    """Panel 12: the lexically first DETECTED frame fixed the working size, so
+    three thumbnails sorting first calibrated while eight full-resolution
+    views were skipped. The majority shape must win."""
+    from plantcv_mcp.lens import calibrate_lens
+
+    d = tmp_path / "mixed"
+    d.mkdir()
+    small = cv2.resize(_distort(_view(*POSES[0])), (320, 240))
+    found, _ = cv2.findChessboardCorners(small, (COLS, ROWS))
+    assert found, "fixture thumbnail must itself be detectable"
+    for i in range(3):
+        cv2.imwrite(str(d / f"a_thumb{i}.png"), small)
+    for i, (off, jig) in enumerate(POSES):
+        cv2.imwrite(str(d / f"view{i}.png"), _distort(_view(off, jig)))
+    calib = calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    assert calib.shape == (480, 640)
+    assert sorted(calib.frames_used) == sorted(
+        f"view{i}.png" for i in range(len(POSES))
+    )
+    assert set(calib.frames_skipped) == {f"a_thumb{i}.png" for i in range(3)}
+
+
+def test_high_reprojection_error_earns_an_advisory():
+    """Panel 3b: the real tutorial calibration ran at rms 13 px and said
+    nothing. The advisory assembly is pure, so it is tested directly."""
+    from plantcv_mcp.lens import LensCalibration
+    from plantcv_mcp.server import _lens_advisories
+
+    noisy = LensCalibration(
+        mtx=MTX,
+        dist=DIST,
+        rms=13.0,
+        frames_used=["a"] * 9,
+        frames_skipped=[],
+        shape=(480, 640),
+    )
+    info = {
+        "valid_roi": [0, 0, 600, 440],
+        "crop_fraction": 0.2,
+        "roi_degenerate": False,
+        "residual_void_px": 0,
+    }
+    codes = [w["code"] for w in _lens_advisories(noisy, info, "/tmp/x.png")]
+    assert "high_reprojection_error" in codes
+    # Positive control: a tight calibration earns no such advisory.
+    tight = LensCalibration(
+        mtx=MTX,
+        dist=DIST,
+        rms=0.4,
+        frames_used=["a"] * 9,
+        frames_skipped=[],
+        shape=(480, 640),
+    )
+    codes2 = [w["code"] for w in _lens_advisories(tight, info, "/tmp/x.png")]
+    assert "high_reprojection_error" not in codes2
+
+
+def test_the_degenerate_path_never_claims_no_crop_was_needed():
+    """Panel 9: crop_fraction 0.0 on the degenerate path produced 'No void
+    crop was needed' beside distortion_voids_remain — a self-contradiction."""
+    from plantcv_mcp.lens import LensCalibration
+    from plantcv_mcp.server import _lens_advisories
+
+    calib = LensCalibration(
+        mtx=MTX,
+        dist=DIST,
+        rms=0.5,
+        frames_used=["a"] * 9,
+        frames_skipped=[],
+        shape=(480, 640),
+    )
+    info = {
+        "valid_roi": [0, 0, 0, 0],
+        "crop_fraction": 0.0,
+        "roi_degenerate": True,
+        "residual_void_px": 293000,
+    }
+    warnings = _lens_advisories(calib, info, "/tmp/x.png")
+    codes = [w["code"] for w in warnings]
+    assert "distortion_voids_remain" in codes
+    lens_msg = next(w["message"] for w in warnings if w["code"] == "lens_corrected")
+    assert "No void crop was needed" not in lens_msg

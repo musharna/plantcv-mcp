@@ -58,7 +58,7 @@ from .imaging import (
     render_region_overlay,
     write_image,
 )
-from .lens import LensCalibration, calibrate_lens, undistort_image
+from .lens import LensCalibration, calibrate_lens_from_frames, undistort_image
 from .measurement import ANALYSES, TraitValue, validate_analyses
 from .paths import check_readable, configured_roots, set_roots
 from .refine import (
@@ -909,76 +909,82 @@ _lens_cache: dict[tuple[str, int, int], LensCalibration] = {}
 _lens_cache_lock = threading.Lock()
 
 
-def _checkerboard_digest(directory: str) -> str:
+def _load_checkerboard_frames(directory: str) -> tuple[list[tuple[str, bytes]], str]:
+    """Read every member file ONCE: the same bytes feed the cache digest and
+    the calibration, so a directory mutated mid-call cannot cache one state's
+    calibration under another state's digest. Each member passes
+    check_readable — a symlink inside the directory pointing outside the
+    configured roots is refused here exactly as segment() would refuse it —
+    and an unreadable regular file becomes a named skipped frame instead of
+    an exception from deep inside the digest. The digest serialization is
+    length-prefixed: bare name||bytes concatenation had deterministic
+    collisions (a file holding A||"1.png"||B hashed like two files A and B).
+    """
     digest = hashlib.sha256()
+    frames: list[tuple[str, bytes]] = []
     for name in sorted(os.listdir(directory)):
         path = os.path.join(directory, name)
         if not os.path.isfile(path):
             continue
-        digest.update(name.encode())
-        with open(path, "rb") as fh:
-            for chunk in iter(lambda: fh.read(1 << 20), b""):
-                digest.update(chunk)
-    return digest.hexdigest()
+        check_readable(path)
+        try:
+            with open(path, "rb") as fh:
+                data = fh.read()
+        except OSError:
+            data = b""
+        encoded = name.encode()
+        digest.update(len(encoded).to_bytes(8, "little"))
+        digest.update(encoded)
+        digest.update(len(data).to_bytes(8, "little"))
+        digest.update(data)
+        frames.append((name, data))
+    return frames, digest.hexdigest()
+
+
+def _checkerboard_digest(directory: str) -> str:
+    return _load_checkerboard_frames(directory)[1]
 
 
 def _lens_calibration(
     checkerboard_dir: str, row_corners: int, col_corners: int
 ) -> LensCalibration:
-    key = (
-        _checkerboard_digest(checkerboard_dir),
-        int(row_corners),
-        int(col_corners),
-    )
+    frames, digest = _load_checkerboard_frames(checkerboard_dir)
+    key = (digest, int(row_corners), int(col_corners))
     with _lens_cache_lock:
         cached = _lens_cache.get(key)
     if cached is not None:
         return cached
-    calib = calibrate_lens(
-        checkerboard_dir, row_corners=row_corners, col_corners=col_corners
+    calib = calibrate_lens_from_frames(
+        frames, row_corners=row_corners, col_corners=col_corners
     )
     with _lens_cache_lock:
         _lens_cache[key] = calib
     return calib
 
 
-def _correct_lens_impl(
-    image_path: str,
-    checkerboard_dir: str,
-    row_corners: int,
-    col_corners: int,
-    output_path: str | None = None,
-) -> dict:
-    real_image = check_readable(image_path)
-    img, _ = load_image_with_digest(real_image)
-    calib = _lens_calibration(
-        check_readable(checkerboard_dir), row_corners, col_corners
-    )
-    corrected, info = undistort_image(img, calib)
+# Above this the correction is only as good as the fit and deserves saying so:
+# the real fisheye tutorial set calibrates at rms 13 px — visibly helpful,
+# demonstrably imperfect.
+HIGH_REPROJECTION_RMS = 5.0
 
-    if output_path is None:
-        # The derived name is this tool's own to overwrite (re-running with a
-        # better calibration is the normal workflow) ...
-        out = os.path.splitext(real_image)[0] + "_undistorted.png"
-    else:
-        # ... but a user-supplied path pointing at an existing file is not.
-        out = check_readable(output_path)
-        if os.path.exists(out):
-            raise FileExistsError(
-                f"output_path {output_path!r} already exists. Pass a new path, "
-                "or omit output_path to write (and overwrite) the derived "
-                "<image>_undistorted.png next to the input."
-            )
-    write_image(out, corrected)
 
+def _lens_advisories(calib: LensCalibration, info: dict, out: str) -> list[dict]:
+    """The correction tool's warnings, assembled purely so they are testable."""
     warnings: list[dict] = []
-    crop_note = (
-        f"The corrected frame was cropped to the valid region — "
-        f"{info['crop_fraction']:.0%} of its pixels were remap voids, "
-        "fabricated black areas with no source data."
-        if info["crop_fraction"] > 0
-        else "No void crop was needed."
-    )
+    if info["roi_degenerate"] or info["residual_void_px"] > 0:
+        crop_note = (
+            f"No usable fully-valid crop exists for this calibration; "
+            f"{info['residual_void_px']} fabricated void pixels remain in the "
+            "output."
+        )
+    elif info["crop_fraction"] > 0:
+        crop_note = (
+            f"The corrected frame was cropped to the largest fully-valid "
+            f"rectangle — {info['crop_fraction']:.0%} of the frame (remap "
+            "voids and the contaminated border around them) was removed."
+        )
+    else:
+        crop_note = "No void crop was needed."
     warnings.append(
         {
             "code": "lens_corrected",
@@ -1012,20 +1018,69 @@ def _correct_lens_impl(
                 ),
             }
         )
-    if info["roi_degenerate"]:
+    if calib.rms > HIGH_REPROJECTION_RMS:
+        warnings.append(
+            {
+                "code": "high_reprojection_error",
+                "message": (
+                    f"The calibration fits its own checkerboards only to "
+                    f"{calib.rms:.1f} px rms (good calibrations sit under "
+                    f"{HIGH_REPROJECTION_RMS:.0f}). The correction helps but "
+                    "is not exact — residual distortion of that order "
+                    "remains. Sharper, more varied board views tighten it."
+                ),
+            }
+        )
+    if info["roi_degenerate"] or info["residual_void_px"] > 0:
         warnings.append(
             {
                 "code": "distortion_voids_remain",
                 "message": (
-                    "No all-valid crop rectangle exists for this calibration, "
-                    "so the corrected image still contains fabricated black "
+                    "The corrected image still contains fabricated black "
                     "void pixels at its edges. A value/darkness threshold "
                     "will select them as objects; segment on a channel where "
                     "black is neutral (such as 'a'), and check the overlay."
                 ),
             }
         )
+    return warnings
 
+
+def _correct_lens_impl(
+    image_path: str,
+    checkerboard_dir: str,
+    row_corners: int,
+    col_corners: int,
+    output_path: str | None = None,
+) -> dict:
+    real_image = check_readable(image_path)
+    img, _ = load_image_with_digest(real_image)
+    calib = _lens_calibration(
+        check_readable(checkerboard_dir), row_corners, col_corners
+    )
+    corrected, info = undistort_image(img, calib)
+
+    if output_path is None:
+        # The derived name is this tool's own to overwrite (re-running with a
+        # better calibration is the normal workflow); write_image refuses to
+        # follow a symlink squatting on it.
+        out = os.path.splitext(real_image)[0] + "_undistorted.png"
+        write_image(out, corrected)
+    else:
+        # A user-supplied path pointing at an existing file is not ours to
+        # replace; O_EXCL makes the refusal atomic rather than a check-then-
+        # write race.
+        out = check_readable(output_path)
+        try:
+            write_image(out, corrected, exclusive=True)
+        except FileExistsError as exc:
+            raise FileExistsError(
+                f"output_path {output_path!r} already exists. Pass a new path, "
+                "or omit output_path to write (and overwrite) the derived "
+                "<image>_undistorted.png next to the input."
+            ) from exc
+
+    warnings = _lens_advisories(calib, info, out)
     preview, scale = downscale(corrected)
     png = encode_png(preview)
     return {
@@ -1035,6 +1090,7 @@ def _correct_lens_impl(
         "rms_reprojection_error": calib.rms,
         "valid_roi": info["valid_roi"],
         "crop_fraction": info["crop_fraction"],
+        "residual_void_px": info["residual_void_px"],
         "corrected_size": [int(corrected.shape[0]), int(corrected.shape[1])],
         "overlay_scale": scale,
         "warnings": warnings,

@@ -387,3 +387,55 @@ def test_mask_warnings_carries_extent_inflation_to_segment_and_measure():
     mask[0:8, 292:300] = 255
     codes = [w.code for w in mask_warnings(mask, analyze_mask(mask))]
     assert "minor_components_inflate_extent" in codes
+
+
+# --- panel audit of 1.8.0 (2026-08-31): extent-inflation corrections ---
+
+
+def test_a_speck_off_the_short_axis_of_a_tall_plant_warns():
+    """Panel 7 (codex, reproduced): a 10x1000 plant plus a 1-px speck 190 px
+    off the short axis inflates width 20x while the union DIAGONAL moves only
+    1.02x — the diagonal metric silently missed the exact bug class this
+    advisory exists for. Width and height must be compared separately."""
+    from plantcv_mcp.diagnostics import minor_extent_inflation_warning
+
+    mask = np.zeros((1200, 500), np.uint8)
+    mask[100:1100, 100:110] = 255
+    mask[600:601, 300:301] = 255
+    w = minor_extent_inflation_warning(mask, analyze_mask(mask))
+    assert w is not None
+    assert w.code == "minor_components_inflate_extent"
+
+
+def test_two_majors_plus_a_far_speck_never_recommends_keep_largest():
+    """Panel 10: with two real plants and one far speck the warning fired and
+    told the user to keep_largest — which discards a real plant. The remedy
+    must defer to measure_regions when several majors exist."""
+    from plantcv_mcp.diagnostics import minor_extent_inflation_warning
+
+    mask = np.zeros((200, 400), np.uint8)
+    mask[80:140, 20:80] = 255
+    mask[80:140, 160:220] = 255
+    mask[0:5, 392:397] = 255
+    diag = analyze_mask(mask)
+    assert diag.major_object_count == 2
+    w = minor_extent_inflation_warning(mask, diag)
+    assert w is not None
+    assert "keep_largest" not in w.message
+    assert "measure_regions" in w.message
+
+
+def test_the_named_offender_is_the_extent_driver_not_the_biggest():
+    """Panel 11: the message named the largest-area outsider; a big blob just
+    over the major bbox edge outranked the far speck that actually stretched
+    the extent. Name the component with the largest overhang."""
+    from plantcv_mcp.diagnostics import minor_extent_inflation_warning
+
+    mask = np.zeros((300, 600), np.uint8)
+    mask[100:200, 100:200] = 255  # the plant (10,000 px)
+    mask[120:140, 202:222] = 255  # 400-px blob barely past the bbox edge
+    mask[150:158, 560:568] = 255  # 64-px speck far away — the extent driver
+    w = minor_extent_inflation_warning(mask, analyze_mask(mask))
+    assert w is not None
+    assert "64 px" in w.message
+    assert "400 px" not in w.message
