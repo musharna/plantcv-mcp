@@ -503,3 +503,52 @@ numerically flipped Rodrigues axis. I3 — `write_image` refuses any existing
 name by `lstat` before staging, so `os.link`'s EEXIST atomicity is
 observable only in the race between that check and the link; no
 single-process test can distinguish it. 377 tests after pinning.
+
+## Round 13 — the 1.10.0 conditioning, outlier, containment, and remedy guards (2026-09-01)
+
+The guards from the panel audit of 1.9.0, disabled one at a time (388 tests,
+`pytest -x` over the lens, imaging, diagnostics and paths files per mutant).
+Predictions logged before the run: three greens expected (`C3`, `U1`, `W5`);
+four survived — `D2` was a real gap the predictions missed.
+
+| mutant                              | change                                                                  | result |
+| ----------------------------------- | ----------------------------------------------------------------------- | ------ |
+| C1 conditioning gate off            | `MAX_FOCAL_CONDITIONING = 20.0` → `1e9`                                 | RED    |
+| C2 conditioning threshold 60        | → `60.0` (the ±7° set measures 52)                                      | RED    |
+| C3 fy instead of fx / min not max   | `sd[0]` → `sd[1]`; then `max(sd fx, sd fy)` → `min`                     | GREEN (equivalent) |
+| O1 outlier ratio off                | `OUTLIER_VIEW_RATIO = 3.0` → `1e9`                                      | RED    |
+| O2 outlier fraction floor off       | `OUTLIER_VIEW_FRACTION = 0.0025` → `0.0`                                | RED    |
+| O3 bar is the smaller of the two    | `bar = max(` → `min(`                                                   | RED    |
+| O4 no frame is ever an outlier      | `if px > bar` → `if px > 1e9`                                           | RED    |
+| U1 cluster boundary open            | `if angle <= deg` → `<`                                                 | GREEN (equivalent) |
+| U2 no transitive merge              | `parent[find(i)] = find(j)` → `pass`                                    | RED    |
+| W1 directory identity unchecked     | `if actual != directory:` → `if False:`                                 | RED    |
+| W2 no-hard-link fallback off        | `if exc.errno not in _NO_HARDLINKS:` → `if True:`                       | RED    |
+| W3 deterministic temp name          | random token → `<name>.<pid>.partial`                                   | RED    |
+| W4 blocking open                    | `O_NONBLOCK` removed from `_READ_FLAGS`                                 | RED    |
+| W5 regular-file check off           | `if not stat.S_ISREG(...)` → `if False:`                                | GREEN (equivalent) |
+| W6 opened file unchecked            | `check_open_fd(fd, path)` → `pass`                                      | RED    |
+| W7 opened file always inside        | `if _inside(real, roots):` → `if True:`                                 | RED    |
+| S1 output symlink check off         | `if os.path.islink(output_path):` → `if False:`                         | RED    |
+| S2 outlier advisory off             | `if calib.frames_outliers:` → `if False:`                               | RED    |
+| D1 fill_size from the offender only | `fill_size = max(... extenders)` → `= area`                             | RED    |
+| D2 flush components count as far    | `_overhang(r) > 0` → `>= 0`                                             | GREEN → pinned |
+
+The green that was a gap: `D2` — `_overhang` is negative for a component
+inside the majors' extent and exactly zero for one FLUSH with its edge, so
+`>= 0` counted a flush bystander as far material and would have raised
+`fill_size` to its area. Pinned in
+`test_the_fill_size_remedy_clears_every_extender_not_just_the_named_one`
+with a 750-px blob flush with the plant's left edge: `fill_size above 400`
+must stand. RED under the mutant.
+
+Three greens are EQUIVALENT and kept: `C3` — on any square-pixel camera the
+fx and fy uncertainties track each other (every fixture set, and the real
+tutorial set, within a few percent), so which one is judged, or the larger
+or smaller of the two, cannot change a verdict; the larger is kept as the
+conservative reading. `U1` — no set in the suite or in nature has two
+board normals at exactly 5.000°, so the open boundary is unobservable.
+`W5` — without root there is no device node to plant at a member's name,
+and a FIFO with a writer attached is a race (`O_NONBLOCK` returns `EAGAIN`
+or the writer's bytes depending on timing); the regular-file check is
+observable only by privilege, and stays. 388 tests after pinning.

@@ -3,12 +3,13 @@
 import errno
 import hashlib
 import os
+import secrets
 import stat
 
 import cv2
 import numpy as np
 
-from .paths import check_readable
+from .paths import check_open_fd, check_readable, fd_path
 
 
 class NotColorImageError(Exception):
@@ -19,6 +20,41 @@ OVERLAY_BGR = np.array([0, 0, 255], dtype=np.float64)  # red in BGR
 OVERLAY_ALPHA = 0.55
 OUTLINE_BGR = (255, 255, 0)  # cyan: the fill's complement, visible on red subjects
 
+# Every open of a file we intend to READ: never through a symlink at the
+# name, never blocking (a FIFO planted at the name would otherwise park the
+# server inside open(2) for good — panel audit of 1.9.0), never inherited.
+_READ_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_NONBLOCK", 0)
+    | getattr(os, "O_CLOEXEC", 0)
+)
+
+
+def open_regular_file(real: str, path: str) -> int:
+    """Open `real` for reading and return a descriptor that is PROVABLY a
+    regular file inside the read roots — judged on the opened descriptor,
+    not on the name.
+
+    check_readable judges a name, and between that judgement and the open
+    any ancestor directory can be renamed and replaced by a symlink; the
+    kernel re-resolves the whole pathname, O_NOFOLLOW guarding only its last
+    component. So: open without following a final link or blocking, fstat
+    to insist on a regular file, then ask the kernel where the descriptor
+    actually lives (check_open_fd). Raises OSError for anything that is not
+    a readable regular file and PathOutsideRootsError for a file that lives
+    outside the roots. `path` is the caller's spelling, for messages.
+    """
+    fd = os.open(real, _READ_FLAGS)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError(errno.EINVAL, "not a regular file", path)
+        check_open_fd(fd, path)
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
 
 def read_image_bytes(path: str) -> bytes:
     """Read the file ONCE. Everything derived from it — pixels and identity —
@@ -26,12 +62,14 @@ def read_image_bytes(path: str) -> bytes:
 
     The read-root check runs HERE, at the one place bytes leave the disk, so a
     path no tool layer validated — an ENVI sibling derived from a .hdr, a future
-    reader — is still contained. The open() uses the realpath the check
-    returned: the path that was checked is the path that is read.
+    reader — is still contained. The descriptor that is read is the one that
+    was checked (open_regular_file): the name is judged first for a clear
+    refusal, the opened file second for the binding.
     """
     real = check_readable(path)
     try:
-        with open(real, "rb") as fh:
+        fd = open_regular_file(real, path)
+        with os.fdopen(fd, "rb") as fh:
             return fh.read()
     except OSError as exc:
         # Same message shape pcv.readimage used, so callers and tests that
@@ -99,8 +137,52 @@ def load_image(path: str) -> np.ndarray:
     return load_image_with_digest(path)[0]
 
 
+# Errors os.link raises on a filesystem that has no hard links at all —
+# FAT/exFAT camera cards, some network shares. Nothing can squat on a name
+# there by linking either, so the name is created exclusively instead.
+_NO_HARDLINKS = {errno.EPERM, errno.ENOSYS, getattr(errno, "EOPNOTSUPP", errno.ENOTSUP)}
+_NO_HARDLINKS.add(errno.ENOTSUP)
+
+_CREATE_FLAGS = (
+    os.O_WRONLY
+    | os.O_CREAT
+    | os.O_EXCL
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_CLOEXEC", 0)
+)
+
+
+def _bind_directory(directory: str) -> int:
+    """Open `directory` once and return a descriptor that is PROVABLY that
+    directory: not a symlink at its name (O_NOFOLLOW), and, asked of the
+    kernel, living at exactly the path the caller intended. Every later
+    operation is relative to this descriptor, so the pathname is never
+    resolved again — which is what let a renamed output directory with an
+    outside symlink planted at its name redirect the write (panel audit of
+    1.9.0, reproduced: 800-byte victim → 79 bytes)."""
+    dfd = os.open(
+        directory,
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0),
+    )
+    try:
+        actual = fd_path(dfd)
+        if actual != directory:
+            raise OSError(
+                f"{directory!r} is now {actual!r} — the output directory was "
+                "moved or replaced while writing; nothing was written."
+            )
+    except BaseException:
+        os.close(dfd)
+        raise
+    return dfd
+
+
 def write_image(path: str, img: np.ndarray, *, exclusive: bool = False) -> None:
-    """Write an image without ever opening an existing inode for writing.
+    """Write an image without ever opening an existing inode for writing,
+    and without ever resolving its directory by name more than once.
 
     cv2.imwrite follows symlinks: measured on the one writing tool, a
     pre-existing `<image>_undistorted.png` symlink sent the corrected image
@@ -111,53 +193,71 @@ def write_image(path: str, img: np.ndarray, *, exclusive: bool = False) -> None:
     ours) and the directory entry at `path` is then linked or replaced —
     operations on the NAME that never write into whatever inode sat there.
     `exclusive` uses os.link, which fails atomically if anything already has
-    the name; otherwise os.replace swaps the entry. A symlink or hard link
-    squatting on the name is refused by name first, so the caller learns why.
+    the name (on a filesystem without hard links the name is created
+    exclusively instead); otherwise os.replace swaps the entry. A symlink or
+    hard link squatting on the name is refused by name first, so the caller
+    learns why. All of it happens relative to the directory descriptor from
+    _bind_directory, and the temp name is random, so a crash residue can
+    never collide with a later write (panel audit of 1.9.0).
+
+    `path` must be absolute and canonical (the server passes realpaths).
     """
     ext = os.path.splitext(path)[1] or ".png"
     ok, buf = cv2.imencode(ext, img)
     if not ok:
         raise OSError(f"Could not encode image for {path!r}")
+    directory, name = os.path.split(os.path.abspath(path))
+    dfd = _bind_directory(directory)
     try:
-        st = os.lstat(path)
-    except FileNotFoundError:
-        st = None
-    if st is not None:
-        if stat.S_ISLNK(st.st_mode):
-            raise OSError(
-                f"{path!r} is a symlink; images are written only to real "
-                "files, so the link's target was left untouched. Remove the "
-                "link or pass a different output_path."
-            )
-        if exclusive:
-            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), path)
-        if not stat.S_ISREG(st.st_mode):
-            raise OSError(f"{path!r} exists and is not a regular file; not replaced.")
-        if st.st_nlink > 1:
-            raise OSError(
-                f"{path!r} is a hard link ({st.st_nlink} names share its "
-                "contents); writing here would overwrite the other name's "
-                "file too, so it was left untouched. Remove the link or pass "
-                "a different output_path."
-            )
-    tmp = f"{path}.{os.getpid()}.partial"
-    fd = os.open(
-        tmp,
-        os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
-        0o644,
-    )
-    try:
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(buf.tobytes())
-        if exclusive:
-            os.link(tmp, path)  # atomic: EEXIST if any name appeared meanwhile
-        else:
-            os.replace(tmp, path)  # swaps the entry; never follows a link
-    finally:
         try:
-            os.unlink(tmp)
+            st = os.lstat(name, dir_fd=dfd)
         except FileNotFoundError:
-            pass
+            st = None
+        if st is not None:
+            if stat.S_ISLNK(st.st_mode):
+                raise OSError(
+                    f"{path!r} is a symlink; images are written only to real "
+                    "files, so the link's target was left untouched. Remove the "
+                    "link or pass a different output_path."
+                )
+            if exclusive:
+                raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), path)
+            if not stat.S_ISREG(st.st_mode):
+                raise OSError(
+                    f"{path!r} exists and is not a regular file; not replaced."
+                )
+            if st.st_nlink > 1:
+                raise OSError(
+                    f"{path!r} is a hard link ({st.st_nlink} names share its "
+                    "contents); writing here would overwrite the other name's "
+                    "file too, so it was left untouched. Remove the link or pass "
+                    "a different output_path."
+                )
+        tmp = f".{name}.{secrets.token_hex(8)}.partial"
+        fd = os.open(tmp, _CREATE_FLAGS, 0o644, dir_fd=dfd)
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(buf.tobytes())
+            if exclusive:
+                try:
+                    # Atomic: EEXIST if any name appeared meanwhile.
+                    os.link(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd)
+                except OSError as exc:
+                    if exc.errno not in _NO_HARDLINKS:
+                        raise
+                    fd2 = os.open(name, _CREATE_FLAGS, 0o644, dir_fd=dfd)
+                    with os.fdopen(fd2, "wb") as fh:
+                        fh.write(buf.tobytes())
+            else:
+                # Swaps the entry; never follows a link.
+                os.replace(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd)
+        finally:
+            try:
+                os.unlink(tmp, dir_fd=dfd)
+            except FileNotFoundError:
+                pass
+    finally:
+        os.close(dfd)
 
 
 def downscale(

@@ -54,6 +54,7 @@ from .imaging import (
     encode_png,
     load_image,
     load_image_with_digest,
+    open_regular_file,
     render_overlay,
     render_region_overlay,
     write_image,
@@ -933,10 +934,13 @@ def _load_checkerboard_frames(directory: str) -> tuple[list[tuple[str, bytes]], 
             continue
         real = check_readable(path)
         try:
-            # The open is bound to the path that passed the check, and never
-            # follows a link: a member swapped for an outside symlink between
-            # the check and the open was read and calibrated (panel of 1.8.2).
-            fd = os.open(real, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            # The bytes come from a descriptor that open_regular_file proved
+            # to be a regular file inside the roots — judged on the OPENED
+            # file, not on the name: a member swapped for an outside symlink
+            # (panel of 1.8.2), or its whole directory swapped for one, or the
+            # member replaced by a FIFO that would block the open (panel of
+            # 1.9.0) is a named skip or a refusal, never outside bytes.
+            fd = open_regular_file(real, path)
             with os.fdopen(fd, "rb") as fh:
                 data = fh.read()
         except OSError:
@@ -973,8 +977,9 @@ def _lens_calibration(
 
 # Above this the correction is only as good as the fit and deserves saying so.
 # A fraction of the frame diagonal, so one fit means one thing at every
-# resolution: the real fisheye tutorial set calibrates at rms 13 px of a
-# 3461-px diagonal (0.38%) — visibly helpful, demonstrably imperfect.
+# resolution: the real fisheye tutorial set calibrated at rms 13 px of a
+# 3461-px diagonal (0.38%) while its one outlier frame was in, 3.7 px (0.11%)
+# once the outlier gate dropped it — visibly helpful, demonstrably imperfect.
 HIGH_REPROJECTION_FRACTION = 0.0015
 
 # Below this the boards left most of the frame to extrapolation: measured on
@@ -1015,6 +1020,24 @@ def _lens_advisories(calib: LensCalibration, info: dict, out: str) -> list[dict]
             ),
         }
     )
+    if calib.frames_outliers:
+        named = ", ".join(f"{n} ({px:.1f} px)" for n, px in calib.frames_outliers)
+        warnings.append(
+            {
+                "code": "outlier_frames_dropped",
+                "message": (
+                    f"{len(calib.frames_outliers)} checkerboard frame(s) fitted "
+                    f"far worse than the rest and were left out of the "
+                    f"calibration: {named}, against a median of "
+                    f"{calib.median_view_rms:.1f} px per frame. A frame like "
+                    "that is usually blurred, mis-detected or shot at a "
+                    "different zoom; the camera was refitted without it "
+                    "(measured: one such frame moved the focal length 13% on "
+                    "the PlantCV tutorial set). Check those frames, and "
+                    "re-shoot or remove them."
+                ),
+            }
+        )
     if len(calib.frames_used) < 5:
         warnings.append(
             {
@@ -1104,7 +1127,15 @@ def _correct_lens_impl(
     else:
         # A user-supplied path pointing at an existing file is not ours to
         # replace; O_EXCL makes the refusal atomic rather than a check-then-
-        # write race.
+        # write race. The NAME the caller gave is judged before it is
+        # resolved: a dangling symlink there used to be followed and its
+        # target created (panel of 1.9.0).
+        if os.path.islink(output_path):
+            raise OSError(
+                f"output_path {output_path!r} is a symlink; images are written "
+                "only to real files, so nothing was written. Remove the link "
+                "or pass a different output_path."
+            )
         out = check_readable(output_path)
         try:
             write_image(out, corrected, exclusive=True)
@@ -1122,7 +1153,11 @@ def _correct_lens_impl(
         "corrected_image_path": out,
         "frames_used": len(calib.frames_used),
         "frames_skipped": calib.frames_skipped,
+        "frames_outliers": [
+            {"name": n, "rms_px": round(px, 2)} for n, px in calib.frames_outliers
+        ],
         "rms_reprojection_error": calib.rms,
+        "focal_conditioning": calib.focal_conditioning,
         "valid_roi": info["valid_roi"],
         "crop_fraction": info["crop_fraction"],
         "residual_void_px": info["residual_void_px"],

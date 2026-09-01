@@ -542,3 +542,37 @@ def test_the_offender_is_on_the_triggering_axis_even_when_another_overhangs_more
     w2 = minor_extent_inflation_warning(tall, analyze_mask(tall))
     assert w2 is not None
     assert "(31, 700)" not in w2.message
+
+
+def test_the_fill_size_remedy_clears_every_extender_not_just_the_named_one():
+    """Panel of 1.9.0 (four judges; reproduced): the remedy's fill_size came
+    from the ONE named offender. A 100-px speck 50 px left of a 100-px-wide
+    plant outranks a 400-px blob 30 px right of it (relative overhang 0.5 vs
+    0.3); 'fill_size above 100' removed the speck and the warning fired again
+    on the blob. The threshold must clear every component overhanging a
+    triggering axis, and say so."""
+    from plantcv_mcp.diagnostics import minor_extent_inflation_warning
+
+    mask = np.zeros((300, 800), np.uint8)
+    mask[100:200, 500:600] = 255  # the plant, 100 x 100
+    mask[120:130, 440:450] = 255  # 100 px, 50 px left: overhang 0.5
+    mask[140:160, 630:650] = 255  # 400 px, 30 px right: overhang 0.3
+    mask[170:200, 510:540] = 0  # a hole, so the next blob is a separate component
+    mask[175:195, 515:535] = 255  # 400-px bystander INSIDE the extent: not far
+    mask[105:145, 500:530] = 0  # a notch at the plant's left edge, and in it
+    mask[110:140, 500:525] = 255  # a 750-px blob FLUSH with that edge: overhang 0
+    w = minor_extent_inflation_warning(mask, analyze_mask(mask))
+    assert w is not None
+    assert "(440, 120)" in w.message  # the named offender is still the speck
+    assert "fill_size above 400" in w.message
+    assert "1 other far component" in w.message  # neither bystander is counted
+    assert "fill_size above 100" not in w.message
+    # Following the remedy clears the warning.
+    cleared = mask.copy()
+    cleared[120:130, 440:450] = 0
+    cleared[140:160, 630:650] = 0
+    assert minor_extent_inflation_warning(cleared, analyze_mask(cleared)) is None
+    # And a threshold that removes only the speck does not — the old remedy.
+    half = mask.copy()
+    half[120:130, 440:450] = 0
+    assert minor_extent_inflation_warning(half, analyze_mask(half)) is not None

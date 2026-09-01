@@ -10,7 +10,9 @@ face and base scaled 1.73x/1.31x/1.59x), which no px_per_mm can cancel; this
 module is the reason a correction tool exists at all.
 """
 
+import math
 import os
+import stat
 
 import cv2
 import numpy as np
@@ -554,13 +556,13 @@ def test_a_meaningless_fit_is_refused(tmp_path, monkeypatch, bad_rms):
     _write_frames(d)
     # Positive control first, on the real optimiser: this set calibrates.
     assert 0.0 < calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS).rms < 2.0
-    real = lens.cv2.calibrateCamera
+    real = lens.cv2.calibrateCameraExtended
 
     def garbage(*args, **kwargs):
-        _, mtx, dist, r, t = real(*args, **kwargs)
-        return bad_rms, mtx, dist, r, t
+        _, *rest = real(*args, **kwargs)
+        return (bad_rms, *rest)
 
-    monkeypatch.setattr(lens.cv2, "calibrateCamera", garbage)
+    monkeypatch.setattr(lens.cv2, "calibrateCameraExtended", garbage)
     with pytest.raises(LensCalibrationError, match="meaningless"):
         calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
 
@@ -717,9 +719,17 @@ def test_calibration_recovers_the_synthetic_camera(calibration):
 def _forward_map_error(calib):
     """Pixel error of the correction FIELD the tool applies (initUndistort-
     RectifyMap, the same map cv2.undistort builds) against the declared
-    camera, over the whole frame — not just where boards were."""
+    camera, over the whole frame — not just where boards were.
+
+    Both maps are built at the RECOVERED calibration's output camera, which
+    is the matrix undistort_image hands to cv2.undistort (panel of 1.9.0:
+    building both at the truth's output camera compared the two distortion
+    models under a destination the tool never uses — on the weakly-
+    conditioned ±7° set that oracle read 139 px where the applied field was
+    391 px, and a constructed calibration passed it at 20 px with the applied
+    field 25 px off)."""
     h, w = calib.shape
-    newm, _ = cv2.getOptimalNewCameraMatrix(MTX, DIST, (w, h), 1, (w, h))
+    newm, _ = cv2.getOptimalNewCameraMatrix(calib.mtx, calib.dist, (w, h), 1, (w, h))
     tx, ty = cv2.initUndistortRectifyMap(MTX, DIST, None, newm, (w, h), cv2.CV_32FC1)
     rx, ry = cv2.initUndistortRectifyMap(
         calib.mtx, calib.dist, None, newm, (w, h), cv2.CV_32FC1
@@ -734,12 +744,25 @@ def test_the_recovered_correction_field_holds_across_the_whole_frame(calibration
     the polynomial over outside the 24% of the frame the boards covered. On
     the spread fixture the free fit is worse still (fx 655, k3 -5.4, map error
     31,000 px); fixing k3 recovers k1/k2 to the second decimal with the map
-    within 10 px everywhere (measured 9.7 max, 4.8 at the 95th percentile).
-    The correction is a FIELD; the oracle must look at the whole of it."""
+    within 10 px at the 95th percentile and 25 px at the worst pixel (measured
+    9.3 max, 4.6 at the 95th percentile, at the recovered output camera).
+    The correction is a FIELD; the oracle must look at the whole of it, and
+    at the output camera the tool actually uses (panel of 1.9.0)."""
     err = _forward_map_error(calibration)
     assert float(np.percentile(err, 95)) < 10.0
     assert float(err.max()) < 25.0
     assert float(calibration.dist.ravel()[4]) == 0.0  # k3 is not fitted
+    # The recovered output camera must itself be the true one's: the map
+    # comparison above is blind to a shared destination that is wrong.
+    h, w = calibration.shape
+    true_newm, _ = cv2.getOptimalNewCameraMatrix(MTX, DIST, (w, h), 1, (w, h))
+    rec_newm, _ = cv2.getOptimalNewCameraMatrix(
+        calibration.mtx, calibration.dist, (w, h), 1, (w, h)
+    )
+    assert abs(rec_newm[0, 0] - true_newm[0, 0]) < 0.02 * true_newm[0, 0]
+    assert abs(rec_newm[1, 1] - true_newm[1, 1]) < 0.02 * true_newm[1, 1]
+    assert abs(rec_newm[0, 2] - true_newm[0, 2]) < 5.0
+    assert abs(rec_newm[1, 2] - true_newm[1, 2]) < 5.0
 
 
 def test_mirrored_frames_are_a_documented_limit_not_a_symmetry(tmp_path):
@@ -1089,3 +1112,227 @@ def test_a_symlinked_member_inside_the_roots_is_read_not_skipped(tmp_path):
         paths.set_roots(None)
     assert len(frames) == len(POSES)
     assert all(data == (real / name).read_bytes() for name, data in frames)
+
+
+# --- panel audit of 1.9.0 (2026-09-01): pinning the confirmed findings ---
+
+
+def _applied_field_error(calib, mtx=MTX, dist=DIST):
+    """Error of the map the TOOL applies: both fields built at the recovered
+    calibration's own output camera, exactly as undistort_image does."""
+    h, w = calib.shape
+    newm, _ = cv2.getOptimalNewCameraMatrix(calib.mtx, calib.dist, (w, h), 1, (w, h))
+    tx, ty = cv2.initUndistortRectifyMap(mtx, dist, None, newm, (w, h), cv2.CV_32FC1)
+    rx, ry = cv2.initUndistortRectifyMap(
+        calib.mtx, calib.dist, None, newm, (w, h), cv2.CV_32FC1
+    )
+    return np.hypot(tx - rx, ty - ry)
+
+
+def test_symmetric_small_tilts_are_refused_as_weakly_conditioned(tmp_path):
+    """Panel of 1.9.0 (codex; reproduced): a board tilted -7/0/+7 degrees about
+    ONE axis at fourteen spread positions passes the orientation count (3),
+    coverage (48%) and rms (0.03% of the diagonal) — and calibrates to fx 334
+    against 400 with the applied correction 391 px wrong at the corners. The
+    count is a proxy; the calibration's own focal-length uncertainty per pixel
+    of corner error (52 here, under 22 on every set that recovered the
+    camera, 3.5 on the real tutorial set) is the statistic. Refuse on it."""
+    from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
+
+    weak = [((0.12 * ((i % 3) - 1), 0.0, 0.0), t) for i, (_, t) in enumerate(POSES)]
+    _write_pose_set(tmp_path / "weak", weak)
+    with pytest.raises(LensCalibrationError, match="focal length"):
+        calibrate_lens(str(tmp_path / "weak"), row_corners=ROWS, col_corners=COLS)
+    # Positive control: five well-tilted views pass the same gate and recover
+    # the camera (conditioning 10.5 measured).
+    _write_pose_set(tmp_path / "five", POSES[:5])
+    calib = calibrate_lens(str(tmp_path / "five"), row_corners=ROWS, col_corners=COLS)
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0]
+    assert calib.focal_conditioning < 15.0
+
+
+def test_outlier_frames_are_dropped_named_and_the_camera_recovered(
+    tmp_path, calibration
+):
+    """Found while reproducing the panel of 1.9.0: per-view residuals were
+    never examined. PlantCV's own tutorial set carries one frame at 37 px rms
+    against a median of 4, which moves fx by 13%; this synthetic one-sided
+    20/26/40 degree set carries three frames at four times the median and
+    'calibrated' to fx 612 with the field 2814 px wrong at rms 1.6 (only the
+    generic advisory). Frames above 3x the median AND 0.25% of the diagonal
+    are dropped by name and the camera refitted."""
+    from plantcv_mcp.lens import calibrate_lens
+
+    tilts = [20, 26, 40]
+    poses = [
+        ((math.radians(tilts[i % 3]), 0.0, 0.0), t) for i, (_, t) in enumerate(POSES)
+    ]
+    _write_pose_set(tmp_path / "onesided", poses)
+    calib = calibrate_lens(
+        str(tmp_path / "onesided"), row_corners=ROWS, col_corners=COLS
+    )
+    dropped = [name for name, _ in calib.frames_outliers]
+    assert dropped == ["view4.png", "view6.png", "view7.png"]
+    assert all(px > 2.0 for _, px in calib.frames_outliers)
+    assert not set(dropped) & set(calib.frames_used)
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0]
+    assert float(_applied_field_error(calib).max()) < 15.0
+    # The tool says so, naming the frames and their residuals.
+    from plantcv_mcp.server import _lens_advisories
+
+    info = {"roi_degenerate": False, "residual_void_px": 0, "crop_fraction": 0.1}
+    codes = {w["code"]: w["message"] for w in _lens_advisories(calib, info, "x.png")}
+    assert "outlier_frames_dropped" in codes
+    assert "view4.png" in codes["outlier_frames_dropped"]
+    # Positive control: the fixture's own residual spread (0.08-1.14 px) is
+    # rendering, not a bad frame; nothing is dropped from it and nothing said.
+    assert calibration.frames_outliers == ()
+    assert len(calibration.frames_used) == len(POSES)
+    quiet = {w["code"] for w in _lens_advisories(calibration, info, "x.png")}
+    assert "outlier_frames_dropped" not in quiet
+
+
+def test_orientation_count_is_independent_of_frame_order():
+    """Panel of 1.9.0 (three judges): greedy first-fit packing counted the
+    tilts 0/4/8/12/16 degrees as three orientations in one filename order and
+    two in another, so renaming identical photos flipped the verdict. 'Within
+    5 degrees count as one' is a transitive relation; count its classes."""
+    from plantcv_mcp.lens import _distinct_orientations
+
+    rvecs = {
+        a: cv2.Rodrigues(cv2.Rodrigues(np.float32((math.radians(a), 0.0, 0.0)))[0])[0]
+        for a in (0, 4, 8, 12, 16)
+    }
+    chain_a = _distinct_orientations([rvecs[a] for a in (0, 8, 16, 4, 12)])
+    chain_b = _distinct_orientations([rvecs[a] for a in (4, 12, 0, 8, 16)])
+    assert chain_a == chain_b == 1
+    # Positive control: three tilts 8 degrees apart are three in any order.
+    three = [rvecs[a] for a in (0, 8, 16)]
+    assert _distinct_orientations(three) == _distinct_orientations(three[::-1]) == 3
+
+
+def test_a_true_k3_camera_is_a_documented_limit(tmp_path):
+    """Panel of 1.9.0 (codex; reproduced): k3 is fixed at zero, and the
+    fixture's truth has k3 = 0, so the oracle could never see a sixth-order
+    lens. A camera with k3 = 0.1 calibrates at rms 0.34 px (no advisory) with
+    the applied correction 77 px wrong at the corners, and the residuals carry
+    no radial signature to detect it by. Pinned as the limit it is."""
+    from plantcv_mcp.lens import calibrate_lens, rms_fraction
+    from plantcv_mcp.server import HIGH_REPROJECTION_FRACTION
+
+    dist = np.array([-0.5, 0.2, 0.0, 0.0, 0.1])
+    d = tmp_path / "k3"
+    d.mkdir()
+    for i, (r, t) in enumerate(POSES):
+        cv2.imwrite(str(d / f"view{i}.png"), _distort(_view(r, t), MTX, dist))
+    calib = calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    assert float(calib.dist.ravel()[4]) == 0.0
+    assert rms_fraction(calib.rms, calib.shape) < HIGH_REPROJECTION_FRACTION
+    assert calib.frames_outliers == ()
+    err = _applied_field_error(calib, MTX, dist)
+    assert float(err.max()) > 40.0  # the limit: silent, and large
+
+
+def test_a_member_swapped_through_its_parent_directory_is_refused(
+    tmp_path, monkeypatch
+):
+    """Panel of 1.9.0 (5/5 judges; reproduced): O_NOFOLLOW guards the LAST
+    path component. Renaming the calibration directory and planting an
+    outside symlink at its name between the check and the open read outside
+    bytes into the digest and the calibration. The read must be checked on
+    the OPENED file, not on a name."""
+    from plantcv_mcp import paths, server
+    from plantcv_mcp.paths import PathOutsideRootsError
+    from plantcv_mcp.server import _load_checkerboard_frames
+
+    root = tmp_path / "root"
+    calib = root / "calib"
+    _write_frames(calib)
+    outside = tmp_path / "outside"
+    _write_frames(outside)
+    real_check = server.check_readable
+
+    # The LAST member in listing order (view9 sorts after view13): swapping an
+    # earlier one is caught by the NEXT member's own name check, which is how
+    # this test passed on the unfixed code until it was aimed here.
+    def swap_parent_after_check(path):
+        real = real_check(path)
+        if os.path.basename(path) == "view9.png" and not os.path.islink(calib):
+            os.rename(calib, root / "calib.moved")
+            os.symlink(str(outside), str(calib))
+        return real
+
+    paths.set_roots([str(root)])
+    try:
+        monkeypatch.setattr(server, "check_readable", swap_parent_after_check)
+        with pytest.raises(PathOutsideRootsError):
+            _load_checkerboard_frames(str(calib))
+        # Positive control: with no swap the same directory reads normally.
+        monkeypatch.setattr(server, "check_readable", real_check)
+        frames, _ = _load_checkerboard_frames(str(root / "calib.moved"))
+    finally:
+        paths.set_roots(None)
+    assert len(frames) == len(POSES)
+    assert all(data == (root / "calib.moved" / n).read_bytes() for n, data in frames)
+
+
+def test_a_member_swapped_for_a_fifo_is_skipped_not_hung(tmp_path, monkeypatch):
+    """Panel of 1.9.0 (two judges; reproduced): a regular member replaced by a
+    FIFO between the check and the open blocked os.open(O_RDONLY) for good —
+    the 'named skip' never happened. Open without blocking, and only a regular
+    file is read."""
+    import threading
+
+    from plantcv_mcp import server
+    from plantcv_mcp.server import _load_checkerboard_frames
+
+    calib = tmp_path / "calib"
+    _write_frames(calib)
+    target = calib / "view0.png"
+    real_check = server.check_readable
+
+    def fifo_after_check(path):
+        real = real_check(path)
+        if os.path.basename(path) == "view0.png" and not stat.S_ISFIFO(
+            os.lstat(target).st_mode
+        ):
+            os.unlink(target)
+            os.mkfifo(target)
+        return real
+
+    monkeypatch.setattr(server, "check_readable", fifo_after_check)
+    result = {}
+
+    def run():
+        result["frames"] = _load_checkerboard_frames(str(calib))[0]
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    worker.join(15.0)
+    assert not worker.is_alive(), "the member open blocked on the FIFO"
+    by_name = dict(result["frames"])
+    assert by_name["view0.png"] == b""
+    assert by_name["view1.png"] == (calib / "view1.png").read_bytes()
+
+
+def test_a_dangling_symlink_at_output_path_is_refused_by_name(tmp_path, calib_dir):
+    """Panel of 1.9.0 (or-gpt): output_path was resolved BEFORE write_image
+    saw it, so a dangling symlink there created its target and reported the
+    target's path. The name the caller gave is the one that must be judged."""
+    from plantcv_mcp.server import _correct_lens_impl
+
+    scene = tmp_path / "scene.png"
+    cv2.imwrite(
+        str(scene), _distort(cv2.cvtColor(_view(*POSES[0]), cv2.COLOR_GRAY2BGR))
+    )
+    link = tmp_path / "out.png"
+    os.symlink(str(tmp_path / "unrequested.png"), str(link))
+    with pytest.raises(OSError, match="is a symlink"):
+        _correct_lens_impl(str(scene), str(calib_dir), ROWS, COLS, str(link))
+    assert not (tmp_path / "unrequested.png").exists()
+    # Positive control: a plain new path is written.
+    res = _correct_lens_impl(
+        str(scene), str(calib_dir), ROWS, COLS, str(tmp_path / "ok.png")
+    )
+    assert res["corrected_image_path"] == str(tmp_path / "ok.png")
+    assert (tmp_path / "ok.png").exists()

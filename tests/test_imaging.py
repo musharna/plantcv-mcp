@@ -99,3 +99,96 @@ def test_overlay_outlines_the_mask_in_cyan_so_red_subjects_stay_legible():
     assert tuple(out[10, 20]) == (255, 255, 0)  # boundary pixel: cyan
     assert tuple(out[20, 20]) != (255, 255, 0)  # interior: tinted, not outlined
     assert tuple(out[5, 5]) == (0, 0, 220)  # unmasked: untouched
+
+
+# --- panel audit of 1.9.0 (2026-09-01): the write path ---
+
+
+def _tiny():
+    return np.zeros((4, 4, 3), dtype=np.uint8)
+
+
+def test_write_image_refuses_a_swapped_parent_directory(tmp_path):
+    """Panel of 1.9.0 (two judges; reproduced): the temp file, the lstat and
+    the os.replace all resolved the output's directory by NAME, so renaming
+    it and planting a symlink to a victims' directory sent our image over an
+    outside file (800 -> 79 bytes). Every operation must be relative to the
+    directory that was checked, opened once and never re-resolved."""
+    import os
+
+    from plantcv_mcp.imaging import write_image
+
+    job = tmp_path / "job"
+    job.mkdir()
+    victims = tmp_path / "victims"
+    victims.mkdir()
+    victim = victims / "scene_undistorted.png"
+    victim.write_bytes(b"V" * 800)
+    out = str(job / "scene_undistorted.png")
+    os.rename(job, tmp_path / "job.moved")
+    os.symlink(str(victims), str(job))
+    with pytest.raises(OSError):
+        write_image(out, _tiny())
+    assert victim.stat().st_size == 800
+    assert sorted(os.listdir(victims)) == ["scene_undistorted.png"]  # no partial
+    # Positive control: the real directory still takes the write.
+    write_image(str(tmp_path / "job.moved" / "scene_undistorted.png"), _tiny())
+    assert (tmp_path / "job.moved" / "scene_undistorted.png").stat().st_size > 0
+    # The swap one level up: the output's own directory is a real directory
+    # reached THROUGH a symlinked ancestor, so O_NOFOLLOW on it says nothing.
+    # Only asking the kernel where the opened directory lives catches it.
+    top = tmp_path / "top"
+    (top / "run").mkdir(parents=True)
+    far = tmp_path / "far"
+    (far / "run").mkdir(parents=True)
+    victim2 = far / "run" / "scene_undistorted.png"
+    victim2.write_bytes(b"W" * 800)
+    out2 = str(top / "run" / "scene_undistorted.png")
+    os.rename(top, tmp_path / "top.moved")
+    os.symlink(str(far), str(top))
+    with pytest.raises(OSError, match="moved or replaced"):
+        write_image(out2, _tiny())
+    assert victim2.stat().st_size == 800
+    assert sorted(os.listdir(far / "run")) == ["scene_undistorted.png"]
+
+
+def test_explicit_output_still_writes_where_hard_links_are_unsupported(
+    tmp_path, monkeypatch
+):
+    """Panel of 1.9.0 (two judges): the exclusive path depended on os.link,
+    which FAT/exFAT — camera SD cards — refuse with EPERM, so every explicit
+    output_path there died with a raw error. Where no hard link can exist no
+    hard link can squat either: fall back to creating the name exclusively."""
+    import errno
+    import os
+
+    from plantcv_mcp.imaging import write_image
+
+    def no_links(*args, **kwargs):
+        raise OSError(errno.EPERM, "Operation not permitted")
+
+    monkeypatch.setattr(os, "link", no_links)
+    out = tmp_path / "sd.png"
+    write_image(str(out), _tiny(), exclusive=True)
+    assert out.stat().st_size > 0
+    assert [f for f in os.listdir(tmp_path) if "partial" in f] == []
+    # Still exclusive: a second write to the same name is refused.
+    with pytest.raises(FileExistsError):
+        write_image(str(out), _tiny(), exclusive=True)
+
+
+def test_a_stale_partial_file_does_not_block_the_write(tmp_path):
+    """Panel of 1.9.0 (two judges; reproduced): the temp name was
+    <path>.<pid>.partial, so a crash residue met again after PID reuse failed
+    every later write with a FileExistsError that the server reported as
+    'output_path already exists' — about a file that did not exist."""
+    import os
+
+    from plantcv_mcp.imaging import write_image
+
+    out = tmp_path / "out.png"
+    stale = tmp_path / f"out.png.{os.getpid()}.partial"
+    stale.write_bytes(b"stale")
+    write_image(str(out), _tiny(), exclusive=True)
+    assert out.stat().st_size > 0
+    assert stale.read_bytes() == b"stale"  # not ours to touch

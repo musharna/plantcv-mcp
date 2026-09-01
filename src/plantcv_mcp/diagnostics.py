@@ -499,23 +499,36 @@ def minor_extent_inflation_warning(
     # The named offender is the component that STRETCHES the triggering axis
     # furthest, not the biggest bystander: a large blob just past the bbox
     # edge must not outrank the far speck actually responsible.
-    worst = max(rows[~is_major], key=_overhang)
+    minors = rows[~is_major]
+    worst = max(minors, key=_overhang)
     area = int(worst[cv2.CC_STAT_AREA])
+    # The remedy must clear EVERY component overhanging a triggering axis,
+    # not just the named one: a 100-px speck outranked a 400-px blob on the
+    # same axis, and "fill_size above 100" removed the speck and left the
+    # warning firing on the blob (panel audit of 1.9.0, four judges).
+    extenders = [r for r in minors if _overhang(r) > 0]
+    fill_size = max(int(r[cv2.CC_STAT_AREA]) for r in extenders)
+    others = (
+        f" and the {len(extenders) - 1} other far component(s)"
+        if len(extenders) > 1
+        else ""
+    )
     majors = int(is_major.sum())
     if majors >= 2:
         remedy = (
             "Check the overlay: several comparably-sized objects share this "
             "mask (see multi_specimen), so keeping only the largest object "
             "would discard a real plant — measure_regions() measures each "
-            f"separately, and re-segmenting with fill_size above {area} "
-            "removes the far material."
+            f"separately, and re-segmenting with fill_size above {fill_size} "
+            f"removes this{others}."
         )
     else:
         remedy = (
             "Check the overlay: if that material is not part of the specimen, "
             "refine() with keep_largest (or re-segment with fill_size above "
-            f"{area}) and measure the refined session. A detached leaf at the "
-            "plant's own edge belongs in the measurement — keep it."
+            f"{fill_size}, which removes this{others}) and measure the refined "
+            "session. A detached leaf at the plant's own edge belongs in the "
+            "measurement — keep it."
         )
     return Advisory(
         code="minor_components_inflate_extent",
