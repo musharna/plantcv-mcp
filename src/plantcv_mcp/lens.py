@@ -438,6 +438,37 @@ def calibrate_lens_from_frames(
     # Drop views that fit far worse than the others, or that move the answer
     # far more than the others, one at a time, refitting after each: a bad
     # view bends the camera, and the bent camera hides the next one.
+    #
+    # A documented limit, in the shape of the k3 one above. On a SMALL set the
+    # view this loop drops is often not the guilty one: six views with one
+    # sheared 5% score the honest view at 11.0 sigma against the sheared
+    # view's 7.8, and the honest one goes. Measured over 32 faulted sets
+    # (6-14 views, prefix and random pose subsets, 2% and 5% shear) against
+    # the same sets with the influence rule off, that is worth keeping
+    # anyway: 28 of 32 drops improve the correction, several of them 3-10x
+    # (110.7 px -> 39.7, 120.9 -> 4.2, 69.2 -> 13.4), 4 leave it worse, and 6
+    # of the 7 drops that removed an honest view STILL improved the answer,
+    # because the loop goes on to drop the guilty view too. Dropping the
+    # wrong view and getting a worse answer are nearly independent here.
+    #
+    # Four ways to pick the guilty view more reliably were measured and none
+    # beat this one: judging each leave-one-out fit against the median of the
+    # leave-one-out fits rather than the all-views fit (10/24 against 11/24,
+    # and it fails on the same sets); the cross-validated residual of the
+    # held-out view (clean at 5% shear on 8+ views, but at six views the
+    # honest view scores 3.03 px against the sheared view's 1.50, and at 2%
+    # shear it separates nothing at any size); a lower focal-uncertainty
+    # advisory (2.5% catches 2 of 26 bad outcomes, 1% catches 12 but flags 6
+    # of 64 sound sets); and treating a drop that LOOSENED the fit as
+    # suspect (2 of 11 harmful, against 2 of 21 among those that tightened
+    # it). The reason they all fail is the same: a mildly bent board is
+    # absorbed by the camera model as a slightly different camera at a
+    # slightly different pose, so the fit's own statistics stay normal —
+    # rms 0.42-0.74 px, focal uncertainty as low as 0.46%, on sets whose
+    # correction is 27-38 px wrong. Nothing inside the fit can see it. The
+    # remedy is external and belongs in the guide: more views, more varied
+    # tilts, a board that is rigid. A small set is weak before anything is
+    # bent — a fault-free six-view set here leaves 14.4 px, one subset 23.2.
     outliers: list[tuple[str, float, str]] = []
     while len(used) >= MIN_VIEWS_FOR_RESIDUAL_DROP:
         n = len(used)

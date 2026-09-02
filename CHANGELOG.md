@@ -6,6 +6,31 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Documented
+
+- **The small-set wrong-view drop, investigated and deliberately left alone.**
+  On a small set the view the drop loop removes is often not the guilty one:
+  six views with one sheared 5% score the honest view at 11.0 sigma against
+  the sheared view's 7.8. Measured over 32 faulted sets against the same sets
+  with the influence rule off, dropping is still worth doing — 28 of 32 drops
+  improve the correction, several three to ten times over, and 6 of the 7
+  drops that removed an honest view still improved the answer because the loop
+  goes on to drop the guilty view too. Four sharper rules were measured and
+  none beat it: a robust reference (the median of the leave-one-out fits
+  rather than the all-views fit), the cross-validated residual of the held-out
+  view, a lower focal-uncertainty advisory, and treating a drop that loosened
+  the fit as suspect. The limit underneath is that a mildly bent board is
+  absorbed by the camera model, so rms and focal uncertainty stay reassuring
+  (0.42–0.74 px, uncertainty as low as 0.46%) while the correction is 27–38 px
+  wrong. Recorded on the drop loop and in the guide, with the remedy that
+  actually works: more views, more varied tilts, a rigid board.
+
+### Fixed
+
+- The guide said the influence rule fires above a 3% focal shift; 1.11.1
+  lowered that floor to half a percent.
+
+
 ## [1.12.0] — 2026-09-02
 
 The first real-camera dogfood of the calibration stack since 1.8.0: nine

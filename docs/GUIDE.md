@@ -183,7 +183,8 @@ do not belong are then dropped one at a time, the camera refitted after each, an
 with the reason (`frames_outliers`, warning `outlier_frames_dropped`): a view whose
 reprojection error stands above three times the OTHER views' median and 0.25% of the
 diagonal is a bad detection (the PlantCV tutorial set's 37-px frame, which moved fx by
-13%), and a view that fits but, left out, moves the focal length by more than 3% and more
+13%), and a view that fits but, left out, moves the focal length by more than half a
+percent and more
 than four times the uncertainty of the fit made without it is a bent board or a
 rolling-shutter frame, consistent with some camera but not this one (influence alone is
 not guilt: the steepest view of a weakly tilted set moves the answer too, and leaves a
@@ -192,6 +193,22 @@ among eight moved fx from 400 to 459 with the correction 111 px wrong and its ow
 residual unremarkable). Judged against the others, not a whole-set median, so two bad
 views of four cannot hide each other; judged only where there are enough views to have
 "others" (four for the residual test, five for the influence test).
+
+On a SMALL set the view that gets dropped is often not the guilty one, and that is worth
+knowing before you read `frames_outliers` as an accusation. Six views with one sheared by
+5%: the honest view scores 11.0 sigma against the sheared view's 7.8, and the honest one
+goes. Dropping is still worth doing — measured over 32 faulted sets against the same sets
+with the rule switched off, 28 of 32 drops improve the correction, several of them three
+to ten times over, and six of the seven drops that removed an honest view still improved
+the answer, because the loop goes on to drop the guilty view as well. Four sharper rules
+were measured and none beat it. **The limit underneath is that a mildly bent board is
+absorbed by the camera model** as a slightly different camera at a slightly different
+pose, so the fit's own numbers stay reassuring while the correction is wrong: sets
+measured here sit at rms 0.42–0.74 px and focal uncertainty as low as 0.46% with the
+applied correction 27–38 px out, and nothing inside the fit can tell. A small set is weak
+before anything is bent — a fault-free six-view set here leaves 14.4 px, one subset 23.2.
+The remedy is not a better statistic, it is more views, more varied tilts, and a board
+that is rigid: printed paper taped to something flat, not held in a hand.
 
 Three orientations is a floor, not a guarantee, and no statistic of the fit's own
 consistency is one either: what can be said honestly is the fit's uncertainty on the focal
