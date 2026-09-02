@@ -543,6 +543,7 @@ instead of a result.
 | `high_reprojection_error`                                           | `correct_lens_distortion`                              | the calibration fits its own boards worse than 0.15% of the frame diagonal; the correction is only as good as the fit | —        |
 | `low_calibration_coverage`                                          | `correct_lens_distortion`                              | the boards covered under 40% of the frame; the correction is extrapolated toward the edges and corners                | —        |
 | `distortion_voids_remain`                                           | `correct_lens_distortion`                              | no usable all-valid crop exists; fabricated pixels remain (void and void-blended border, count in `residual_void_px`) | —        |
+| `outlier_frames_dropped`                                            | `correct_lens_distortion`                              | frames fitting far worse than the rest were dropped by name (`frames_outliers`) and the camera refitted               | —        |
 
 Refusals you will meet: a degenerate mask at `measure` (`DegenerateMaskError`), a refinement
 that erases the plant (`RefinementErasedMaskError`) or an invalid op list (`RefineSpecError`,
@@ -550,8 +551,9 @@ nothing applied), a skeleton PlantCV cannot analyse (`MorphologyRefusedError`, w
 the wrong session kind (`WrongSessionKindError`), a file that changed since segmentation
 (`ImageChangedSinceSegmentationError`, SHA-256), a grayscale or undecodable file
 (`NotColorImageError`), no colour card when one was asked for (`ColorCardNotFoundError`), a
-checkerboard directory with fewer than three detectable boards, duplicate poses, or a
-meaningless fit (`LensCalibrationError`, with the per-frame accounting), an image whose
+checkerboard directory with fewer than three detectable boards, duplicate poses, a
+meaningless fit, or boards that leave the focal length undetermined (`LensCalibrationError`,
+with the per-frame accounting), an image whose
 resolution differs from its lens calibration (`CalibrationResolutionMismatchError`), and
 unknown channel / method / index / analysis names, each listing the valid ones.
 
