@@ -5,7 +5,7 @@
 [![ci](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
 [![python](https://img.shields.io/pypi/pyversions/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
-[![license](https://img.shields.io/pypi/l/plantcv-mcp)](LICENSE)
+[![license](https://img.shields.io/pypi/l/plantcv-mcp)](https://github.com/musharna/plantcv-mcp/blob/master/LICENSE)
 [![Glama](https://glama.ai/mcp/servers/musharna/plantcv-mcp/badges/score.svg)](https://glama.ai/mcp/servers/musharna/plantcv-mcp)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21713516.svg)](https://doi.org/10.5281/zenodo.21713516)
 
@@ -20,10 +20,8 @@ segmentation is degenerate.
 
 ## Why you are handed the overlay
 
-Red marks the pixels that were measured, and a cyan line traces the mask's own boundary — the
-tint alone was invisible on a photo of red beans, so the outline is drawn on the mask's edge
-pixels and never touches anything unmasked. Both images below come from the same file and the
-same threshold method — the only difference is one parameter.
+Both images below come from the same file and the same threshold method — the only difference
+is one parameter.
 
 | ✅ `channel="a", object_type="dark"`                                                                                   | ❌ `channel="s", object_type="dark"`                                                                                     |
 | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -33,6 +31,10 @@ same threshold method — the only difference is one parameter.
 The failure on the right is what this server exists to prevent. Without the picture, both
 runs return seventeen traits with correct units and entirely believable magnitudes. The one
 on the right is measuring the wall behind the plants.
+
+Red marks the pixels that were measured; a cyan line traces the mask's own boundary, drawn on
+the mask's edge pixels so it never touches anything unmasked (the tint alone was invisible on
+a photo of red beans).
 
 `segment()` returns the overlay and diagnostics but **no traits**. `measure()` requires the
 `session_id` that `segment()` mints. You cannot get a number without first being handed the
@@ -50,54 +52,74 @@ All three produce correctly-united, entirely believable numbers.
 
 ## Install
 
+No install is needed if the host has [uv](https://docs.astral.sh/uv/): `uvx plantcv-mcp`
+fetches the current release into its own environment and runs it. Otherwise:
+
 ```bash
 pip install plantcv-mcp
 ```
 
 Requires Python 3.11+. Installing pulls PlantCV and its scientific stack, so the first
-install is not fast. From a checkout: `uv add /path/to/plantcv-mcp`.
+install (or first `uvx` run) is not fast. From a checkout: `uv add /path/to/plantcv-mcp`.
 
 ## Configure your MCP client
 
 ```bash
-claude mcp add plantcv -- plantcv-mcp
+claude mcp add plantcv -- uvx plantcv-mcp
 ```
 
 Claude Desktop and other stdio hosts:
 
 ```json
-{ "mcpServers": { "plantcv": { "command": "plantcv-mcp" } } }
+{ "mcpServers": { "plantcv": { "command": "uvx", "args": ["plantcv-mcp"] } } }
 ```
 
-If `plantcv-mcp` is not on the host's `PATH`, use `"command": "uv", "args": ["run",
-"--directory", "/path/to/plantcv-mcp", "plantcv-mcp"]`. Verify with `list_methods()`.
-To confine reads to your imagery: `plantcv-mcp --root /data/phenotyping`.
+With a pip install, use `"command": "plantcv-mcp"` (and drop `uvx` from the `claude mcp add`
+line); from a checkout, `"command": "uv", "args": ["run", "--directory",
+"/path/to/plantcv-mcp", "plantcv-mcp"]`. Verify with `list_methods()`.
+
+Flags: `--root DIR` (repeatable, or `PLANTCV_MCP_ROOTS`) confines every read, and the one
+write, to your imagery: `plantcv-mcp --root /data/phenotyping`. `--no-isolate` (or
+`PLANTCV_MCP_ISOLATE=0`) runs analyses in-process instead of in the crash-containing worker.
 
 ## Tools
 
-| tool                                                                    | returns                                                                                                      |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `suggest_segmentation(image_path, channel, method)`                     | contact sheets, and what each `object_type` would yield                                                      |
-| `segment(image_path, channel, method, ...)`                             | overlay + diagnostics + warnings — **no traits**                                                             |
-| `refine(session_id, ops)`                                               | a NEW session with a cleaned-up mask, plus its overlay                                                       |
-| `measure(session_id, analyses, px_per_mm, ...)`                         | traits, or a raised error on a degenerate mask                                                               |
-| `calibrate_scale_from_marker(image_path, x, y, w, h, marker_length_mm)` | `px_per_mm` from a marker of known real size                                                                 |
-| `correct_lens_distortion(image_path, checkerboard_dir, ...)`            | a fisheye/wide-angle image undistorted via checkerboard calibration, written next to the input               |
-| `measure_regions(session_id, nrows, ncols, ...)`                        | one row per plant in a tray (RGB traits, thermal temperatures or HSI index stats), plus the numbered overlay |
-| `measure_morphology(session_id, prune_size, tangent_size, ...)`         | leaf/stem skeleton traits + the numbered-segment overlay                                                     |
-| `measure_images(image_paths, channel, method, ...)`                     | one recipe across many images (per plant with a grid); traits only where valid; time-budgeted                |
-| `segment_hyperspectral(envi_path, index, threshold, ...)`               | an HSI session from a spectral-index threshold + pseudo-RGB overlay                                          |
-| `measure_spectral(session_id, indices, ...)`                            | index statistics (and, opt-in, per-band reflectance)                                                         |
-| `segment_thermal(path, min_c, max_c, ...)`                              | a thermal session from a °C band + grey-frame overlay                                                        |
-| `measure_thermal(session_id, ...)`                                      | max/min/mean/median °C under the mask                                                                        |
-| `list_methods()`                                                        | channels, methods, object types, pinned PlantCV version                                                      |
+| tool                                                                    | returns                                                                                                            |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `suggest_segmentation(image_path, channel, method)`                     | contact sheets, and what each `object_type` would yield                                                            |
+| `segment(image_path, channel, method, ...)`                             | overlay + diagnostics + warnings — **no traits**                                                                   |
+| `refine(session_id, ops)`                                               | a NEW session with a cleaned-up mask, plus its overlay                                                             |
+| `measure(session_id, analyses, px_per_mm, ...)`                         | traits, or a raised error on a degenerate mask                                                                     |
+| `calibrate_scale_from_marker(image_path, x, y, w, h, marker_length_mm)` | `px_per_mm` from a marker of known real size                                                                       |
+| `correct_lens_distortion(image_path, checkerboard_dir, ...)`            | a fisheye/wide-angle image undistorted via checkerboard calibration, written next to the input or to `output_path` |
+| `measure_regions(session_id, nrows, ncols, ...)`                        | one row per plant in a tray (RGB traits, thermal temperatures or HSI index stats), plus the numbered overlay       |
+| `measure_morphology(session_id, prune_size, tangent_size, ...)`         | leaf/stem skeleton traits + the numbered-segment overlay                                                           |
+| `measure_images(image_paths, channel, method, ...)`                     | one recipe across many images (per plant with a grid); traits only where valid; time-budgeted                      |
+| `segment_hyperspectral(envi_path, index, threshold, ...)`               | an HSI session from a spectral-index threshold + pseudo-RGB overlay                                                |
+| `measure_spectral(session_id, indices, ...)`                            | index statistics (and, opt-in, per-band reflectance)                                                               |
+| `segment_thermal(path, min_c, max_c, ...)`                              | a thermal session from a °C band + grey-frame overlay                                                              |
+| `measure_thermal(session_id, ...)`                                      | max/min/mean/median °C under the mask                                                                              |
+| `list_methods()`                                                        | channels, methods, object types, pinned PlantCV version                                                            |
 
 Typical loop: `suggest_segmentation` → `segment` → **look at the overlay** → `segment` again
 with a different channel, method or polarity if it is wrong (or `refine` if it is nearly
-right) → `measure`.
+right) → `measure`. Pass `color_correct=true` to `segment` when a ColorChecker is in the
+frame: colours are corrected to the reference before segmenting and measuring, and the card
+itself is excluded from the mask (`exclude_color_card=true` does only the exclusion).
 
-The `segment()` response for the image above — verbatim, apart from a shortened
-`session_id` and an elided message — and the overlay arrives beside it as an image:
+The call that produced the left-hand image above:
+
+```json
+{
+  "image_path": "multi_specimen.png",
+  "channel": "a",
+  "method": "otsu",
+  "object_type": "dark"
+}
+```
+
+Its response — verbatim, apart from a shortened `session_id` and an elided message — with
+the overlay arriving beside it as an image:
 
 ```json
 {
@@ -106,6 +128,7 @@ The `segment()` response for the image above — verbatim, apart from a shortene
   "method": "otsu",
   "object_type": "dark",
   "fill_size": 200,
+  "color_correct": false,
   "mask_fraction": 0.031,
   "component_count": 9,
   "major_object_count": 4,
@@ -137,10 +160,18 @@ guards withhold numbers; advisories travel with them.
 - **Wrong scale, wrong kind, changed file** — a marker measured 4.35× wrong by PlantCV's own
   ROI method; a thermal session handed to an RGB measurer; an image edited after
   segmentation. Each is refused naming the right tool.
+- **A lens calibration the boards do not determine** — checkerboards tilted only ±7° fit
+  their own corners to 0.03% of the frame yet put the corrected image 391 px wrong at the
+  corners. A set whose focal length is that weakly determined is refused naming the number;
+  a frame that fits far worse than the rest is dropped by name and the camera refitted.
+- **No colour card when one was asked for** — `color_correct=true` raises rather than
+  returning colour traits that look corrected and are not.
 
-All 35 warning codes, every tool's parameters, and the measured facts behind each guard:
+Every warning code, every tool's parameters, and the measured facts behind each guard:
 **[docs/GUIDE.md](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md)** — [segmenting](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#segmenting) · [traits and units](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#what-it-measures) ·
+[real-world units](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#real-world-units) · [lens correction](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#correcting-lens-distortion) ·
 [polarity](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#getting-the-polarity-right) · [refining](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#refining-a-mask) ·
+[colour correction](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#colour-correction) ·
 [trays](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#measuring-a-tray) · [morphology](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#morphology-leaves-stem-branch-points) ·
 [batches](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#measuring-many-images) · [hyperspectral and thermal](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#hyperspectral-and-thermal) ·
 [warning reference](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#warnings-and-refusals).
@@ -148,9 +179,12 @@ All 35 warning codes, every tool's parameters, and the measured facts behind eac
 ## Security
 
 This server reads image files the host user can read and returns them to the model as
-images; with no `--root` there is no allow-list. Run it as a user whose read access you are
-comfortable exposing, set `--root`, and do not run it as root. PlantCV/OpenCV analyses run in
-a worker subprocess, so a native crash is a tool error, not a dead server. Details:
+images; with no `--root` there is no allow-list. It writes exactly one thing: the corrected
+image from `correct_lens_distortion`, next to its input or at an `output_path` — under the
+same roots, refused if the name exists, never through a symlink. Run it as a user whose read
+access you are comfortable exposing, set `--root`, and do not run it as root. PlantCV/OpenCV
+analyses run in a worker subprocess, so a native crash is a tool error, not a dead server.
+Details:
 [security](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#security-and-trust-boundary) · [read roots](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#restricting-what-the-server-may-read) ·
 [crash containment](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#crash-containment-the-analysis-worker) · [limitations](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#limitations).
 
@@ -168,6 +202,8 @@ project's own files. See [NOTICE](https://github.com/musharna/plantcv-mcp/blob/m
 - [CHANGELOG.md](https://github.com/musharna/plantcv-mcp/blob/master/CHANGELOG.md) — what changed, and why
 - [docs/MUTATION-CHECKS.md](https://github.com/musharna/plantcv-mcp/blob/master/docs/MUTATION-CHECKS.md) — every guard disabled on purpose, and
   the test that went red for it
+- Citing it: [CITATION.cff](https://github.com/musharna/plantcv-mcp/blob/master/CITATION.cff)
+  (archived at [doi:10.5281/zenodo.21713516](https://doi.org/10.5281/zenodo.21713516))
 
 Images on this page are rendered from `tests/fixtures/multi_specimen.png`, an original render
 by the author, and regenerate from committed code.

@@ -1740,8 +1740,9 @@ def main() -> None:
         action="append",
         metavar="DIR",
         help=(
-            "only read images under DIR (repeatable; also PLANTCV_MCP_ROOTS, "
-            "os.pathsep-separated). Unset: read anything the host user can read."
+            "only read images — and write correct_lens_distortion's output — "
+            "under DIR (repeatable; also PLANTCV_MCP_ROOTS, os.pathsep-separated). "
+            "Unset: read anything the host user can read."
         ),
     )
     args = parser.parse_args()

@@ -6,6 +6,44 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.10.1] — 2026-09-01
+
+Documentation only; no behaviour change. Released so the PyPI project page
+carries the current README (PyPI captures it at upload). Every README claim
+was checked against the 1.10.0 source.
+
+### Fixed
+
+- **README said the server only reads.** Since 1.8.0 `correct_lens_distortion`
+  writes one file — the corrected image, next to its input or at
+  `output_path`, under the same roots, refused if the name exists, never
+  through a symlink. The Security section and the `--root` help text now say
+  so; the guide already did.
+- **`outlier_frames_dropped` (1.10.0) was missing from the guide's warning
+  reference table**, and the README's "all 35 warning codes" was one short.
+  The row is added; the README no longer quotes a count that has drifted
+  twice.
+- **The "verbatim" `segment()` response** lacked the `color_correct` key
+  present since 1.6.0.
+- **Colour correction and the lens-calibration refusals were absent** from
+  the README. `color_correct` / `exclude_color_card` are introduced beside
+  the typical loop; "What it refuses" gains the weakly-determined calibration
+  (measured ±7° set, 391 px wrong at the corners) and the missing colour
+  card; the guide link list gains real-world units, lens correction and
+  colour correction.
+- **The license badge linked a relative `LICENSE`**, broken on PyPI where the
+  README is the front page.
+
+### Changed
+
+- **Zero-install path first**: `uvx plantcv-mcp` in the install, `claude mcp
+add` and JSON examples; pip and from-checkout forms follow. `--no-isolate`
+  and both environment variables are listed.
+- The request that produced the example response is shown beside it; the
+  cyan-outline explanation follows the images instead of preceding the point;
+  the lens tool row names `output_path`; a "Citing it" line points at
+  `CITATION.cff` and the Zenodo DOI.
+
 ## [1.10.0] — 2026-09-01
 
 Findings from an independent panel audit of 1.9.0 (five judges, all
