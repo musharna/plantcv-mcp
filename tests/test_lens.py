@@ -1957,3 +1957,120 @@ def test_a_bad_view_is_not_excused_by_the_size_of_the_set(tmp_path):
     clean = calibrate_lens(str(tmp_path / "clean"), row_corners=ROWS, col_corners=COLS)
     assert clean.frames_outliers == ()
     assert len(clean.frames_used) == len(POSES)
+
+
+# --- the real-camera dogfood of 1.11.1 (1.12.0) ---
+
+
+def test_the_correction_is_not_written_into_the_checkerboard_directory(tmp_path):
+    """Real-camera dogfood: correcting an image that lives in the checkerboard
+    directory put the tool's own <image>_undistorted.png back among the
+    calibration frames -- it came back in frames_skipped on the next call,
+    caught only by the majority-size rule because the correction happened to
+    crop. The directory is calibration INPUT: everything in it is a candidate
+    frame and the cache is keyed on its contents, so writing there also
+    refits every image of a batch from scratch. Refused, both for the derived
+    name and for an explicit output_path."""
+    from plantcv_mcp.server import _correct_lens_impl
+
+    d = tmp_path / "frames"
+    _write_frames(d)
+    # A plant photo that happens to be filed with the calibration shots: not
+    # a board, so it never counts as a frame and the view total below is the
+    # pose set alone.
+    inside = d / "scene.png"
+    cv2.imwrite(str(inside), np.full((480, 640, 3), 127, np.uint8))
+
+    with pytest.raises(ValueError) as excinfo:
+        _correct_lens_impl(str(inside), str(d), row_corners=ROWS, col_corners=COLS)
+    assert "checkerboard" in str(excinfo.value)
+    assert "Nothing was written" in str(excinfo.value)
+    assert not (d / "scene_undistorted.png").exists()
+
+    # The same refusal when the caller names the path explicitly, including
+    # by a route that only resolves to the directory (".." through a sibling).
+    outside = tmp_path / "scene.png"
+    cv2.imwrite(
+        str(outside), _distort(cv2.cvtColor(_view(*POSES[0]), cv2.COLOR_GRAY2BGR))
+    )
+    with pytest.raises(ValueError):
+        _correct_lens_impl(
+            str(outside),
+            str(d),
+            row_corners=ROWS,
+            col_corners=COLS,
+            output_path=str(d / "elsewhere.png"),
+        )
+    with pytest.raises(ValueError):
+        _correct_lens_impl(
+            str(outside),
+            str(d),
+            row_corners=ROWS,
+            col_corners=COLS,
+            output_path=str(tmp_path / "frames" / ".." / "frames" / "sneaky.png"),
+        )
+    assert sorted(p.name for p in d.glob("*.png")) == sorted(
+        [f"view{i}.png" for i in range(len(POSES))] + ["scene.png"]
+    )
+
+    # Positive control: the identical correction to a path OUTSIDE the
+    # checkerboard directory still succeeds, so the guard refuses the sink and
+    # not the tool.
+    res = _correct_lens_impl(str(outside), str(d), row_corners=ROWS, col_corners=COLS)
+    assert res["corrected_image_path"] == str(tmp_path / "scene_undistorted.png")
+    assert os.path.exists(res["corrected_image_path"])
+    assert res["frames_used"] == len(POSES)
+
+
+def test_a_skipped_frame_is_named_even_when_the_calibration_is_thick(tmp_path):
+    """Real-camera dogfood: bad_checkerboard.png was left out of a calibration
+    with eight usable views and NOTHING said so -- skips were named only
+    inside thin_calibration, which fires below five used frames, while every
+    outlier drop was announced. The skip is the likelier user error of the
+    two (wrong corner counts, a blurred frame, a file that is not the board)."""
+    from plantcv_mcp.server import _correct_lens_impl
+
+    d = tmp_path / "frames"
+    _write_frames(d)
+    cv2.imwrite(str(d / "not_a_board.png"), np.full((480, 640, 3), 127, np.uint8))
+    scene = tmp_path / "scene.png"
+    cv2.imwrite(
+        str(scene), _distort(cv2.cvtColor(_view(*POSES[0]), cv2.COLOR_GRAY2BGR))
+    )
+
+    res = _correct_lens_impl(str(scene), str(d), row_corners=ROWS, col_corners=COLS)
+    assert res["frames_used"] >= 5  # thick: thin_calibration cannot fire
+    assert "thin_calibration" not in [w["code"] for w in res["warnings"]]
+    skipped = [w for w in res["warnings"] if w["code"] == "frames_skipped"]
+    assert len(skipped) == 1
+    assert "not_a_board.png" in skipped[0]["message"]
+    assert "INNER corners" in skipped[0]["message"]
+
+    # Positive control: with nothing skipped the warning does not appear, so
+    # it reports a real skip rather than firing on every call.
+    clean = tmp_path / "clean"
+    _write_frames(clean)
+    res2 = _correct_lens_impl(
+        str(scene),
+        str(clean),
+        row_corners=ROWS,
+        col_corners=COLS,
+        output_path=str(tmp_path / "clean_out.png"),
+    )
+    assert res2["frames_skipped"] == []
+    assert "frames_skipped" not in [w["code"] for w in res2["warnings"]]
+
+
+def test_the_wrong_corner_counts_are_echoed_the_way_they_were_given(tmp_path):
+    """Real-camera dogfood: asked for row_corners=9, col_corners=6 the refusal
+    read '6x9-inner-corner', transposing the caller's own arguments back at
+    them while telling them to check those arguments."""
+    from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
+
+    d = tmp_path / "frames"
+    _write_frames(d)
+    with pytest.raises(LensCalibrationError) as excinfo:
+        calibrate_lens(str(d), row_corners=COLS + 2, col_corners=ROWS + 2)
+    message = str(excinfo.value)
+    assert f"{COLS + 2} x {ROWS + 2} inner corners" in message
+    assert "row_corners x col_corners" in message

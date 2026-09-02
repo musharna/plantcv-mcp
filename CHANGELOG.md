@@ -6,6 +6,47 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-09-02
+
+The first real-camera dogfood of the calibration stack since 1.8.0: nine
+photographs of a hand-held checkerboard through `correct_lens_distortion`,
+with every claim below measured on them rather than on the synthetic fixture.
+
+### Fixed
+
+- **The correction is no longer written into the checkerboard directory.**
+  Every file in `checkerboard_dir` is read as a calibration frame and the
+  cached calibration is keyed on that directory's contents, so a correction
+  written there was offered back to the next calibration: on a real run the
+  tool's own `<image>_undistorted.png` came back in `frames_skipped`, caught
+  only by the majority-size rule because that correction happened to crop. A
+  correction that cropped nothing would have been fitted as a distorted view
+  of the camera that produced it, and even when skipped it changed the
+  directory's digest, so every image of a batch refit from scratch (3.7 s per
+  call on these frames) instead of reusing the cache. The write is refused
+  with the reason and nothing is written; pass `output_path` outside the
+  directory. Refused rather than filtered by name, which would leave the
+  directory a sink for anything renamed.
+- **A skipped frame is named whatever the view count.** Skips were reported
+  only inside the `thin_calibration` advisory, which fires below five used
+  frames: a real set left `bad_checkerboard.png` out of an eight-view
+  calibration and said nothing, while every outlier drop was announced. A new
+  `frames_skipped` warning names them and points at the likely causes — the
+  corner counts, a frame that does not decode, a frame of a different size.
+- **The wrong-corner-counts refusal echoes the counts as they were given.**
+  Asked for `row_corners=9, col_corners=6` it read "6x9-inner-corner",
+  transposing the caller's own arguments while telling them to check those
+  arguments.
+
+### Changed
+
+- The guide's worked example is re-measured under 1.11.1: the PlantCV
+  tutorial set now keeps seven frames at rms 3.1, not eight at 3.7. The frame
+  1.11.1 added to the drop list is independently the most warped board in the
+  set (10.7 px of residual bow after correction, against 2.4–5.5 px for every
+  frame kept), and dropping it moves the applied correction by nothing
+  visible — 4.858 px of mean residual bow against 4.860 px.
+
 ## [1.11.1] — 2026-09-02
 
 The one design question left open by mutation round 14, measured and decided.

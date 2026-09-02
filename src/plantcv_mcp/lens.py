@@ -374,7 +374,8 @@ def calibrate_lens_from_frames(
         )
         raise LensCalibrationError(
             f"Only {len(used)} of {len(frames)} file(s) contain a detectable "
-            f"{col_corners}x{row_corners}-inner-corner checkerboard"
+            f"checkerboard of {row_corners} x {col_corners} inner corners "
+            "(row_corners x col_corners, as given)"
             + (f" (skipped: {', '.join(skipped)})" if skipped else "")
             + copies
             + f". A calibration needs at least {MIN_CALIBRATION_FRAMES} views "
