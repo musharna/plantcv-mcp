@@ -6,6 +6,126 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-09-01
+
+Findings from an independent panel audit of 1.10.1 (five judges, all
+answering; the rebuttal round did not run — the combined reports exceeded
+the judges' argument limit), every load-bearing claim reproduced on the live
+code before it was fixed, and three findings made while reproducing them.
+The theme this time: a statistic that measured the fit's opinion of itself,
+and a fit whose opinion was formed from a wrong start.
+
+### Changed
+
+- **The calibration is started from several focal lengths and the lowest
+  residual kept.** OpenCV's initial estimate ignores distortion; on this
+  module's own fixture it puts the focal length at 1356 for a true 400, and
+  from there the optimiser can settle in a wrong basin — a camera with a
+  residual a few times the right one and nothing downstream to tell it is
+  wrong. Thirteen of the fixture's fourteen honest views calibrated to
+  fx 780 (k1 −1.96, rms 1.8 px, conditioning 9.9, no outlier) with the
+  correction 272 px wrong; 41 of its 91 twelve-view subsets did the same.
+  Every one recovers the camera from a start at the frame width. The
+  one-sided 10/20/30° set 1.10.0 documented as an open limit ("fits fx 670
+  under the rms advisory; no statistic separates it") was this: from the
+  better start it fits fx 393 at a LOWER residual. So were the "weakly
+  conditioned" sets 1.10.0's gate was derived from (±7° about one axis:
+  fx 337 cold, 392 warm, correction 16 px) and 1.9.0's "two orientations
+  repeated four times fits fx 883". Closed, and the claims withdrawn.
+- **The conditioning gate is withdrawn; the fit's relative uncertainty on
+  the focal length is judged instead.** fx uncertainty per pixel of rms
+  refused a ±5° one-axis set whose correction was 8 px right (87), refused a
+  sound three-view set whose correction was 2.5 px right (23), and passed a
+  ±7° two-axis set whose correction was 54 px wrong (20.0) — measured with
+  the fit started properly, it separates nothing. What can be said honestly
+  is the fit's own uncertainty on the focal length as a fraction of it
+  (`focal_uncertainty`, replacing `focal_conditioning` in the response):
+  above 4% the calibration is refused as undetermined (two mis-detected
+  views of four 4.9%; ±3° about one axis 12%); above 2.5% the new
+  `focal_length_uncertain` warning says how loose it is (±7° about two axes
+  3.6%, correction 54 px; the PlantCV tutorial set 0.4%). A standard deviation that is not a
+  number is refused rather than compared (`nan > 20` was False).
+- **Views are dropped one at a time, against the other views, for two
+  reasons, and named with the reason.** 1.10.0 judged every view once
+  against a whole-set median and refitted once: two bad views of four
+  inflated the median so neither stood out (fx 359, correction 1462 px,
+  silent); after the one refit a newly exposed outlier stayed. And a view
+  can be wrong and still fit — a bent board, a rolling-shutter frame — its
+  corners consistent with SOME camera, so the optimiser compromised (one
+  view sheared by 5% among eight: fx 459, correction 111 px, the view's own
+  residual 1.7× the median, every gate quiet). Now: a view whose residual
+  stands above three times the OTHERS' median and 0.25% of the diagonal, or
+  which, left out, moves the focal length by more than 3% and more than
+  four times the uncertainty of the fit made without it (a wrong view
+  disagrees with a tight remainder; an informative one leaves a loose
+  remainder that says so), is dropped, the camera refitted, and
+  the test repeated; each `frames_outliers` entry carries its reason, and
+  the warning quotes the median the decision was made against, not a later
+  one. The whole-set "meaningless fit" refusal now comes AFTER this, so one
+  grossly mis-detected frame is named and dropped instead of the whole set
+  being sent back to the camera. Only where there are enough views to have
+  "others": four for the residual test, five for the influence test.
+- **The orientation count is a packing, not a chain.** 1.10.0 made "within
+  5° count as one" transitive, and a board swept smoothly through 40° in 4°
+  steps — a phone video of a nodding board — became ONE orientation and was
+  refused (every judge; the same corners calibrate to 1 px). Orientations
+  more than 5° apart are now counted in an order fixed by the set itself, so
+  the verdict still does not depend on filenames and a sweep counts every
+  5° of it. Judged before views are dropped, so a set that never had the
+  geometry is refused for that reason and not for what the drop loop made
+  of it, and again after.
+- **Byte-identical frames count once** (`frames_duplicates`, warning
+  `duplicate_frames_ignored`). Eight copies of a weak set passed a gate the
+  set itself failed: copies add no geometry and shrink every reported
+  uncertainty by the square root of their number.
+- **The extent remedy counts every component it removes.** `fill_size`
+  deletes every component under it, not only the far ones; the message
+  said "1 other far component" on a fixture whose remedy also deleted an
+  interior 400-px component. It now counts them all and says to check the
+  overlay for plant material among them.
+
+### Fixed
+
+- **Read roots from the environment could be re-pointed between the two
+  checks.** `PLANTCV_MCP_ROOTS` was resolved on every call: rename the root
+  directory, plant a symlink to outside at its name, and both the check on
+  the name and the check on the opened descriptor resolved to outside
+  (reproduced: outside bytes read). `--root` always snapshotted; the
+  environment form now does too.
+- **Every write failed on a platform without a descriptor-path facility,
+  roots or not.** The directory binding asked the kernel unconditionally,
+  so wherever `/proc` and `F_GETPATH` are absent the one writing tool
+  failed with a message telling the user to run without roots — which they
+  were — while the guide called the guards "inert" there. Without roots
+  there is nothing to verify against and the write proceeds; with roots the
+  refusal stands; on Linux and macOS the swap guard is unchanged.
+- **The no-hard-link fallback could leave a truncated output that blocked
+  every retry.** Where `os.link` is refused (FAT/exFAT), 1.10.0 wrote into
+  the final name directly; a crash mid-write left partial content that the
+  next call refused as "already exists". The name is now claimed empty and
+  the fully written temp swapped over it.
+- **A FIFO, socket or device present at a member's name from the start
+  vanished from the accounting**; only one swapped in after the check was
+  named. Both are named skips now; subdirectories are still not frames.
+- **An `output_path` that is a directory** was refused as "already exists.
+  Pass a new path"; it is now told what it is.
+- **The conditioning refusal printed fx's uncertainty even when fy's was
+  judged, in the wrong unit** — moot, the gate is gone; the new refusal
+  prints the judged quantity.
+
+### Documentation
+
+- README and this changelog said the corrected image was "refused if the
+  name exists"; that is true of an explicit `output_path` only — the
+  derived `<image>_undistorted.png` is deliberately replaced. Said so.
+- The guide's tutorial example quoted a post-refit median (2.8) beside a
+  decision made against a pre-refit one (4), and a conditioning of 4.6
+  beside a source comment saying 3.5; both numbers are gone with the
+  statistic, and the example now quotes the reason string the tool emits.
+- "Every read asks the kernel where the opened descriptor lives" holds with
+  read roots configured; the guide says so. The hidden `.partial` sibling a
+  crash can leave is documented.
+
 ## [1.10.1] — 2026-09-01
 
 Documentation only; no behaviour change. Released so the PyPI project page

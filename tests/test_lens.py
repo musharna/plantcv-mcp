@@ -309,8 +309,27 @@ def test_ten_copies_of_one_pose_are_refused(tmp_path):
     one = _distort(_view(*POSES[0]))
     for i in range(10):
         cv2.imwrite(str(d / f"dup{i}.png"), one)
-    with pytest.raises(LensCalibrationError, match="orientation"):
+    # Byte-identical copies are one observation (panel of 1.10.1) and are
+    # named as such; the same board re-photographed from one pose is one
+    # orientation, the degenerate end of the orientation-count refusal.
+    with pytest.raises(LensCalibrationError, match="copies of another"):
         calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    d1 = tmp_path / "onepose"
+    d1.mkdir()
+    for i in range(10):
+        cv2.imwrite(
+            str(d1 / f"same{i}.png"),
+            _distort(_view(POSES[0][0], POSES[0][1]))
+            if i == 0
+            else _distort(
+                _view(
+                    POSES[0][0],
+                    (POSES[0][1][0] + 0.05 * i, POSES[0][1][1], POSES[0][1][2]),
+                )
+            ),
+        )
+    with pytest.raises(LensCalibrationError, match="orientation"):
+        calibrate_lens(str(d1), row_corners=ROWS, col_corners=COLS)
     # Positive control: the distinct-pose set calibrates through the same path.
     d2 = tmp_path / "distinct"
     _write_frames(d2)
@@ -437,7 +456,13 @@ def test_thumbnails_sorting_first_do_not_hijack_the_calibration(tmp_path):
     assert sorted(calib.frames_used) == sorted(
         f"view{i}.png" for i in range(len(POSES))
     )
-    assert set(calib.frames_skipped) == {f"a_thumb{i}.png" for i in range(3)}
+    # The first thumbnail is skipped for its size; the other two are its
+    # byte-for-byte copies and are named as such (panel of 1.10.1).
+    assert set(calib.frames_skipped) == {"a_thumb0.png"}
+    assert calib.frames_duplicates == (
+        ("a_thumb1.png", "a_thumb0.png"),
+        ("a_thumb2.png", "a_thumb0.png"),
+    )
 
 
 def test_high_reprojection_error_earns_an_advisory():
@@ -847,11 +872,20 @@ def test_two_orientations_however_many_frames_are_refused(tmp_path):
     Two orientations leave the intrinsics undetermined; three is the floor."""
     from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
 
-    _write_pose_set(tmp_path / "two", [POSES[1]] * 4 + [POSES[9]] * 4)
+    # Four positions each (byte-identical copies would count once).
+    def slid(pose, k):
+        (r, (x, y, z)) = pose
+        return (r, (x + 0.6 * k, y + 0.4 * k, z))
+
+    two = [slid(POSES[1], k) for k in range(4)] + [slid(POSES[9], k) for k in range(4)]
+    _write_pose_set(tmp_path / "two", two)
     with pytest.raises(LensCalibrationError, match="2 distinct"):
         calibrate_lens(str(tmp_path / "two"), row_corners=ROWS, col_corners=COLS)
-    # Positive control: three orientations, three copies each, calibrate.
-    _write_pose_set(tmp_path / "three", [POSES[0], POSES[1], POSES[9]] * 3)
+    # Positive control: three orientations, three positions each, calibrate.
+    _write_pose_set(
+        tmp_path / "three",
+        [slid(p, k) for k in range(3) for p in (POSES[0], POSES[1], POSES[9])],
+    )
     calib = calibrate_lens(str(tmp_path / "three"), row_corners=ROWS, col_corners=COLS)
     assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.03 * MTX[0, 0]
 
@@ -1129,26 +1163,48 @@ def _applied_field_error(calib, mtx=MTX, dist=DIST):
     return np.hypot(tx - rx, ty - ry)
 
 
-def test_symmetric_small_tilts_are_refused_as_weakly_conditioned(tmp_path):
-    """Panel of 1.9.0 (codex; reproduced): a board tilted -7/0/+7 degrees about
-    ONE axis at fourteen spread positions passes the orientation count (3),
-    coverage (48%) and rms (0.03% of the diagonal) — and calibrates to fx 334
-    against 400 with the applied correction 391 px wrong at the corners. The
-    count is a proxy; the calibration's own focal-length uncertainty per pixel
-    of corner error (52 here, under 22 on every set that recovered the
-    camera, 3.5 on the real tutorial set) is the statistic. Refuse on it."""
-    from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
+def test_small_symmetric_tilts_are_loose_not_wrong(tmp_path):
+    """Panel of 1.10.1 (reproduced): 1.10.0 refused a board tilted -7/0/+7
+    degrees about ONE axis as 'weakly conditioned' on the strength of a fit
+    that was a wrong START, not weak data — from a start at the frame width
+    the same views calibrate to fx 392 with the correction 16 px at worst.
+    The fit's own uncertainty on the focal length is what can honestly be
+    said: the ±7 degree two-axis set (3.6%, correction 54 px — the documented
+    soft spot) is accepted and the looseness named; the ±3 degree set
+    genuinely does not determine the camera and is refused."""
+    from plantcv_mcp.lens import (
+        FOCAL_UNCERTAINTY_ADVISORY,
+        LensCalibrationError,
+        calibrate_lens,
+    )
+    from plantcv_mcp.server import _lens_advisories
 
+    info = {"roi_degenerate": False, "residual_void_px": 0, "crop_fraction": 0.1}
     weak = [((0.12 * ((i % 3) - 1), 0.0, 0.0), t) for i, (_, t) in enumerate(POSES)]
     _write_pose_set(tmp_path / "weak", weak)
-    with pytest.raises(LensCalibrationError, match="focal length"):
-        calibrate_lens(str(tmp_path / "weak"), row_corners=ROWS, col_corners=COLS)
-    # Positive control: five well-tilted views pass the same gate and recover
-    # the camera (conditioning 10.5 measured).
+    calib = calibrate_lens(str(tmp_path / "weak"), row_corners=ROWS, col_corners=COLS)
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.03 * MTX[0, 0]
+    assert float(_applied_field_error(calib).max()) < 25.0
+    # The soft spot: ±7 degrees about two axes, accepted and said.
+    tilts = [(-0.12, 0.0, 0.0), (0.0, 0.12, 0.0), (0.12, 0.0, 0.0), (0.0, -0.12, 0.0)]
+    soft = [(tilts[i % 4], t) for i, (_, t) in enumerate(POSES)]
+    _write_pose_set(tmp_path / "soft", soft)
+    loose = calibrate_lens(str(tmp_path / "soft"), row_corners=ROWS, col_corners=COLS)
+    assert loose.focal_uncertainty > FOCAL_UNCERTAINTY_ADVISORY
+    codes = {w["code"] for w in _lens_advisories(loose, info, "x.png")}
+    assert "focal_length_uncertain" in codes
+    # Positive control: the fixture is tight, and says nothing.
     _write_pose_set(tmp_path / "five", POSES[:5])
-    calib = calibrate_lens(str(tmp_path / "five"), row_corners=ROWS, col_corners=COLS)
-    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0]
-    assert calib.focal_conditioning < 15.0
+    five = calibrate_lens(str(tmp_path / "five"), row_corners=ROWS, col_corners=COLS)
+    assert five.focal_uncertainty < FOCAL_UNCERTAINTY_ADVISORY
+    assert "focal_length_uncertain" not in {
+        w["code"] for w in _lens_advisories(five, info, "x.png")
+    }
+    # Negative control: ±3 degrees about one axis is one orientation.
+    flat = [((0.052 * ((i % 3) - 1), 0.0, 0.0), t) for i, (_, t) in enumerate(POSES)]
+    _write_pose_set(tmp_path / "flat", flat)
+    with pytest.raises(LensCalibrationError, match="orientation"):
+        calibrate_lens(str(tmp_path / "flat"), row_corners=ROWS, col_corners=COLS)
 
 
 def test_outlier_frames_are_dropped_named_and_the_camera_recovered(
@@ -1171,9 +1227,13 @@ def test_outlier_frames_are_dropped_named_and_the_camera_recovered(
     calib = calibrate_lens(
         str(tmp_path / "onesided"), row_corners=ROWS, col_corners=COLS
     )
-    dropped = [name for name, _ in calib.frames_outliers]
-    assert dropped == ["view4.png", "view6.png", "view7.png"]
-    assert all(px > 2.0 for _, px in calib.frames_outliers)
+    dropped = [name for name, _, _ in calib.frames_outliers]
+    # Judged one at a time against the views around it, from a fit that is
+    # no longer a wrong start, two of the three stand out (the third fits
+    # once the camera is right); the set is a subset of the three either way.
+    assert dropped and set(dropped) <= {"view4.png", "view6.png", "view7.png"}
+    assert all(px > 2.0 for _, px, _ in calib.frames_outliers)
+    assert all("median" in why for _, _, why in calib.frames_outliers)
     assert not set(dropped) & set(calib.frames_used)
     assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0]
     assert float(_applied_field_error(calib).max()) < 15.0
@@ -1183,7 +1243,7 @@ def test_outlier_frames_are_dropped_named_and_the_camera_recovered(
     info = {"roi_degenerate": False, "residual_void_px": 0, "crop_fraction": 0.1}
     codes = {w["code"]: w["message"] for w in _lens_advisories(calib, info, "x.png")}
     assert "outlier_frames_dropped" in codes
-    assert "view4.png" in codes["outlier_frames_dropped"]
+    assert all(name in codes["outlier_frames_dropped"] for name in dropped)
     # Positive control: the fixture's own residual spread (0.08-1.14 px) is
     # rendering, not a bad frame; nothing is dropped from it and nothing said.
     assert calibration.frames_outliers == ()
@@ -1192,11 +1252,13 @@ def test_outlier_frames_are_dropped_named_and_the_camera_recovered(
     assert "outlier_frames_dropped" not in quiet
 
 
-def test_orientation_count_is_independent_of_frame_order():
+def test_orientation_count_is_independent_of_frame_order_and_not_a_chain():
     """Panel of 1.9.0 (three judges): greedy first-fit packing counted the
     tilts 0/4/8/12/16 degrees as three orientations in one filename order and
-    two in another, so renaming identical photos flipped the verdict. 'Within
-    5 degrees count as one' is a transitive relation; count its classes."""
+    two in another. Panel of 1.10.1 (every judge; reproduced): the transitive
+    fix made that chain ONE orientation and refused a board swept smoothly
+    through 40 degrees that calibrated to 1 px. Pack in a canonical order:
+    the count is a property of the set, and a sweep has spread."""
     from plantcv_mcp.lens import _distinct_orientations
 
     rvecs = {
@@ -1205,10 +1267,255 @@ def test_orientation_count_is_independent_of_frame_order():
     }
     chain_a = _distinct_orientations([rvecs[a] for a in (0, 8, 16, 4, 12)])
     chain_b = _distinct_orientations([rvecs[a] for a in (4, 12, 0, 8, 16)])
-    assert chain_a == chain_b == 1
-    # Positive control: three tilts 8 degrees apart are three in any order.
+    assert chain_a == chain_b == 3
+    # Positive control: three tilts 8 degrees apart are three in any order,
+    # and copies of one tilt are one.
     three = [rvecs[a] for a in (0, 8, 16)]
     assert _distinct_orientations(three) == _distinct_orientations(three[::-1]) == 3
+    assert _distinct_orientations([rvecs[8]] * 4) == 1
+
+
+def test_a_smooth_sweep_is_accepted(tmp_path):
+    """Panel of 1.10.1 (every judge; reproduced): a board tilted 0, 4, 8 ...
+    40 degrees about one axis — a phone video of a nodding board — was refused
+    as one orientation. It determines the camera to about a pixel."""
+    from plantcv_mcp.lens import calibrate_lens
+
+    sweep = [
+        ((math.radians(4 * i), 0.0, 0.0), t) for i, (_, t) in enumerate(POSES[:11])
+    ]
+    _write_pose_set(tmp_path / "sweep", sweep)
+    calib = calibrate_lens(str(tmp_path / "sweep"), row_corners=ROWS, col_corners=COLS)
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0]
+    assert float(_applied_field_error(calib).max()) < 25.0
+
+
+def test_a_wrong_start_no_longer_yields_a_wrong_camera(tmp_path):
+    """Panel of 1.10.1 (found while reproducing): thirteen of the fixture's
+    own fourteen honest views — view 12 left out — calibrated to fx 780
+    against 400 (k1 -1.96, rms 1.8 px, no outlier, every gate quiet) with the
+    correction 272 px wrong: OpenCV's distortion-blind initial focal length
+    (982 for this subset) led the optimiser into a wrong basin, and 41 of the
+    fixture's 91 twelve-view subsets did the same. The fit now starts from
+    several focal lengths and keeps the lowest residual."""
+    from plantcv_mcp.lens import calibrate_lens
+
+    poses = POSES[:12] + POSES[13:]
+    _write_pose_set(tmp_path / "sub", poses)
+    calib = calibrate_lens(str(tmp_path / "sub"), row_corners=ROWS, col_corners=COLS)
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0]
+    assert float(_applied_field_error(calib).max()) < 25.0
+    assert calib.frames_outliers == ()
+    # The mechanism, pinned: OpenCV's own start on these corners is the wrong
+    # basin (if this ever passes, the multi-start is no longer load-bearing
+    # on this fixture and a harder one is needed).
+    objp = np.zeros((ROWS * COLS, 3), np.float32)
+    objp[:, :2] = np.mgrid[0:COLS, 0:ROWS].T.reshape(-1, 2)
+    obj, img = [], []
+    for r, t in poses:
+        gray = _distort(_view(r, t))
+        found, corners = cv2.findChessboardCorners(gray, (COLS, ROWS))
+        assert found
+        obj.append(objp)
+        img.append(
+            cv2.cornerSubPix(
+                gray,
+                corners,
+                (11, 11),
+                (-1, -1),
+                (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001),
+            )
+        )
+    cold_rms, cold_mtx, *_ = cv2.calibrateCamera(
+        obj, img, (640, 480), None, None, flags=cv2.CALIB_FIX_K3
+    )
+    assert abs(cold_mtx[0, 0] - MTX[0, 0]) > 0.5 * MTX[0, 0]
+    assert cold_rms > 3 * calib.rms
+
+
+def test_the_documented_open_limit_of_1_10_0_was_a_wrong_start(tmp_path):
+    """1.10.0 documented a one-sided 10/20/30 degree set that 'still fits fx
+    670 under the rms advisory' as an open limit no statistic separated.
+    Panel of 1.10.1 (reproduced): from a start at the frame width the same
+    views fit fx 393 at a LOWER residual (0.71 vs 1.13 px). Closed."""
+    from plantcv_mcp.lens import calibrate_lens
+
+    tilts = [10, 20, 30]
+    poses = [
+        ((math.radians(tilts[i % 3]), 0.0, 0.0), t) for i, (_, t) in enumerate(POSES)
+    ]
+    _write_pose_set(tmp_path / "onesided", poses)
+    calib = calibrate_lens(
+        str(tmp_path / "onesided"), row_corners=ROWS, col_corners=COLS
+    )
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.03 * MTX[0, 0]
+    assert float(_applied_field_error(calib).max()) < 25.0
+
+
+def _shear(img, amount):
+    """An image sheared as a rolling shutter shears a panning frame."""
+    warp = np.float32([[1.0, amount, 0.0], [0.0, 1.0, 0.0]])
+    return cv2.warpAffine(img, warp, (img.shape[1], img.shape[0]), borderValue=255)
+
+
+def _ripple(img, amplitude, phase):
+    """A smooth non-projective warp: a board that was not flat."""
+    h, w = img.shape[:2]
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    mx = xx + amplitude * np.sin(yy / 37 + phase) * np.sin(xx / 53 + phase)
+    my = yy + amplitude * np.sin(xx / 41 - phase) * np.sin(yy / 47 + phase)
+    return cv2.remap(img, mx, my, cv2.INTER_LINEAR, borderValue=255)
+
+
+def test_a_view_that_bends_the_camera_is_dropped_for_its_influence(tmp_path):
+    """Panel of 1.10.1 (reproduced): one view of eight sheared by 5% — a
+    rolling-shutter frame, a bent board — is consistent with SOME camera, so
+    the optimiser compromised: fx 459 against 400, the correction 111 px
+    wrong, the view's own residual 1.7x the median, every gate quiet. Refit
+    without it and the focal length moves 16% where no other view moves it
+    more than 2%: dropped by name, for that reason."""
+    from plantcv_mcp.lens import calibrate_lens
+
+    d = tmp_path / "sheared"
+    d.mkdir()
+    for i, (r, t) in enumerate(POSES[:10]):
+        img = _view(r, t)
+        if i == 0:
+            img = _shear(img, 0.05)
+        cv2.imwrite(str(d / f"view{i}.png"), _distort(img))
+    calib = calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    dropped = {n: why for n, _, why in calib.frames_outliers}
+    assert set(dropped) == {"view0.png"}
+    assert "moves the focal length" in dropped["view0.png"]
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.03 * MTX[0, 0]
+    # Positive control: the same ten views unsheared drop nothing.
+    _write_pose_set(tmp_path / "clean", POSES[:10])
+    clean = calibrate_lens(str(tmp_path / "clean"), row_corners=ROWS, col_corners=COLS)
+    assert clean.frames_outliers == ()
+
+
+def test_bad_views_are_dropped_one_at_a_time_not_behind_a_median(tmp_path):
+    """Panel of 1.10.1 (codex; reproduced): three of six views rippled by
+    4-6 px inflated the whole-set median so that none stood 3x above it, and
+    the set 'calibrated' to fx 450 with the correction 92 px wrong. Each view
+    is judged against the OTHERS' median and the worst dropped, refit,
+    repeated: all three are named and the camera recovered."""
+    from plantcv_mcp.lens import calibrate_lens
+
+    d = tmp_path / "rippled"
+    d.mkdir()
+    bad = {3: (4.0, 0.3), 4: (4.0, 1.1), 5: (6.0, 2.0)}
+    for i, (r, t) in enumerate(POSES[:6]):
+        img = _distort(_view(r, t))
+        if i in bad:
+            img = _ripple(img, *bad[i])
+        cv2.imwrite(str(d / f"view{i}.png"), img)
+    calib = calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    assert {n for n, _, _ in calib.frames_outliers} == {
+        "view3.png",
+        "view4.png",
+        "view5.png",
+    }
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.03 * MTX[0, 0]
+    assert float(_applied_field_error(calib).max()) < 25.0
+
+
+def test_two_bad_views_of_four_are_refused_not_averaged(tmp_path):
+    """Panel of 1.10.1 (codex; reproduced): two of four views rippled by 4 px
+    calibrated to fx 359 with the correction 1462 px wrong, silently. Half a
+    set cannot be told from the other half; what the fit CAN say is that its
+    focal length is uncertain by 4.9%, and that is refused."""
+    from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
+
+    d = tmp_path / "half"
+    d.mkdir()
+    bad = {2: (4.0, 0.3), 3: (4.0, 1.1)}
+    for i, (r, t) in enumerate(POSES[:4]):
+        img = _distort(_view(r, t))
+        if i in bad:
+            img = _ripple(img, *bad[i])
+        cv2.imwrite(str(d / f"view{i}.png"), img)
+    with pytest.raises(LensCalibrationError, match="undetermined"):
+        calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    # Positive control: the same four views clean calibrate, nothing dropped.
+    _write_pose_set(tmp_path / "four", POSES[:4])
+    four = calibrate_lens(str(tmp_path / "four"), row_corners=ROWS, col_corners=COLS)
+    assert four.frames_outliers == ()
+    assert float(_applied_field_error(four).max()) < 25.0
+
+
+def test_a_sound_three_view_set_is_accepted(tmp_path):
+    """Panel of 1.10.1 (codex; reproduced): views 0, 1 and the frontal 11 of
+    the fixture recover the camera to 0.1% with the correction 2.5 px at
+    worst — and 1.10.0 refused them at 'conditioning 23'. The statistic did
+    not measure what its name said; the fit's relative uncertainty on the
+    focal length (0.6% here) does."""
+    from plantcv_mcp.lens import FOCAL_UNCERTAINTY_ADVISORY, calibrate_lens
+
+    _write_pose_set(tmp_path / "three", [POSES[0], POSES[1], POSES[11]])
+    calib = calibrate_lens(str(tmp_path / "three"), row_corners=ROWS, col_corners=COLS)
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.01 * MTX[0, 0]
+    assert float(_applied_field_error(calib).max()) < 10.0
+    assert calib.focal_uncertainty < FOCAL_UNCERTAINTY_ADVISORY
+
+
+def test_duplicate_frames_are_counted_once_and_named(tmp_path):
+    """Panel of 1.10.1 (codex; reproduced): eight byte-for-byte copies of a
+    set passed a gate the set itself failed — copies add no geometry but
+    shrink every reported uncertainty by the square root of their number.
+    Identical bytes are one observation: the calibration is the one the
+    distinct frames give, and the copies are named."""
+    import shutil
+
+    from plantcv_mcp.lens import calibrate_lens
+    from plantcv_mcp.server import _lens_advisories
+
+    _write_pose_set(tmp_path / "plain", POSES[:6])
+    plain = calibrate_lens(str(tmp_path / "plain"), row_corners=ROWS, col_corners=COLS)
+    _write_pose_set(tmp_path / "copied", POSES[:6])
+    for k in range(3):
+        shutil.copyfile(
+            tmp_path / "copied" / "view0.png", tmp_path / "copied" / f"z{k}.png"
+        )
+    calib = calibrate_lens(str(tmp_path / "copied"), row_corners=ROWS, col_corners=COLS)
+    assert calib.frames_duplicates == (
+        ("z0.png", "view0.png"),
+        ("z1.png", "view0.png"),
+        ("z2.png", "view0.png"),
+    )
+    assert calib.frames_used == plain.frames_used
+    assert calib.focal_uncertainty == pytest.approx(plain.focal_uncertainty)
+    info = {"roi_degenerate": False, "residual_void_px": 0, "crop_fraction": 0.1}
+    codes = {w["code"]: w["message"] for w in _lens_advisories(calib, info, "x.png")}
+    assert "z2.png" in codes["duplicate_frames_ignored"]
+    assert "duplicate_frames_ignored" not in {
+        w["code"] for w in _lens_advisories(plain, info, "x.png")
+    }
+
+
+def test_a_non_finite_focal_uncertainty_is_refused(tmp_path, monkeypatch):
+    """Panel of 1.10.1 (three judges): `nan > threshold` is False, so a fit
+    whose covariance came back NaN (a singular Jacobian at finite rms) sailed
+    through the gate that exists to catch undetermined focal lengths. A
+    standard deviation that is not a number is refused, not compared."""
+    from plantcv_mcp import lens
+    from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
+
+    real_fit = lens._fit
+
+    def nan_fit(*args, **kwargs):
+        fit = real_fit(*args, **kwargs)
+        sd = fit.sd.copy()
+        sd[0] = sd[1] = float("nan")
+        return fit._replace(sd=sd)
+
+    monkeypatch.setattr(lens, "_fit", nan_fit)
+    _write_pose_set(tmp_path / "six", POSES[:6])
+    with pytest.raises(LensCalibrationError, match="not finite"):
+        calibrate_lens(str(tmp_path / "six"), row_corners=ROWS, col_corners=COLS)
+    # Positive control: the unpatched fit on the same frames is accepted.
+    monkeypatch.setattr(lens, "_fit", real_fit)
+    calibrate_lens(str(tmp_path / "six"), row_corners=ROWS, col_corners=COLS)
 
 
 def test_a_true_k3_camera_is_a_documented_limit(tmp_path):
@@ -1336,3 +1643,82 @@ def test_a_dangling_symlink_at_output_path_is_refused_by_name(tmp_path, calib_di
     )
     assert res["corrected_image_path"] == str(tmp_path / "ok.png")
     assert (tmp_path / "ok.png").exists()
+
+
+def test_environment_roots_are_a_snapshot_not_re_resolved_per_call(
+    tmp_path, monkeypatch
+):
+    """Panel of 1.10.1 (codex; reproduced): PLANTCV_MCP_ROOTS was realpath'd
+    on every call, so renaming the root directory and planting a symlink to
+    outside at its name between the check on the name and the check on the
+    opened descriptor made BOTH checks resolve to outside, and outside bytes
+    were read. `--root` always snapshotted; the environment form does too."""
+    from plantcv_mcp import paths
+    from plantcv_mcp.imaging import open_regular_file
+    from plantcv_mcp.paths import PathOutsideRootsError, check_readable
+
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    root.mkdir()
+    outside.mkdir()
+    (root / "image.png").write_bytes(b"INSIDE")
+    (outside / "image.png").write_bytes(b"OUTSIDE")
+    monkeypatch.setenv("PLANTCV_MCP_ROOTS", str(root))
+    monkeypatch.setattr(paths, "_env_snapshot", None, raising=False)
+    path = str(root / "image.png")
+    real = check_readable(path)
+    os.rename(root, tmp_path / "root.old")
+    os.symlink(outside, root)
+    with pytest.raises(PathOutsideRootsError):
+        fd = open_regular_file(real, path)
+        os.close(fd)
+    # Positive control: with the directory back in place the read succeeds.
+    os.unlink(root)
+    os.rename(tmp_path / "root.old", root)
+    fd = open_regular_file(check_readable(path), path)
+    try:
+        assert os.read(fd, 16) == b"INSIDE"
+    finally:
+        os.close(fd)
+
+
+def test_a_fifo_present_from_the_start_is_a_named_skip(tmp_path):
+    """Panel of 1.10.1 (two judges): only a member SWAPPED for a FIFO after
+    the file check was named; one present at listing time failed isfile()
+    and vanished from the accounting. Anything at a member's name that is
+    not a regular file is a named skip; a subdirectory is still not a frame."""
+    from plantcv_mcp.server import _lens_calibration, _load_checkerboard_frames
+
+    calib = tmp_path / "calib"
+    _write_frames(calib)
+    os.mkfifo(calib / "pipe.png")
+    (calib / "subdir").mkdir()
+    frames, _ = _load_checkerboard_frames(str(calib))
+    names = [n for n, _ in frames]
+    assert "pipe.png" in names
+    assert dict(frames)["pipe.png"] == b""
+    assert "subdir" not in names
+    result = _lens_calibration(str(calib), ROWS, COLS)
+    assert "pipe.png" in result.frames_skipped
+    assert len(result.frames_used) == len(POSES)
+
+
+def test_an_output_path_that_is_a_directory_is_said_to_be_one(tmp_path, calib_dir):
+    """Panel of 1.10.1 (probe): a directory at output_path was refused as
+    'already exists. Pass a new path' — true, and useless."""
+    from plantcv_mcp.server import _correct_lens_impl
+
+    scene = tmp_path / "scene.png"
+    cv2.imwrite(
+        str(scene), cv2.cvtColor(_distort(_view(*POSES[0])), cv2.COLOR_GRAY2BGR)
+    )
+    (tmp_path / "outdir").mkdir()
+    with pytest.raises(OSError, match="is a directory"):
+        _correct_lens_impl(
+            str(scene), str(calib_dir), ROWS, COLS, str(tmp_path / "outdir")
+        )
+    # Positive control: a fresh file name is written.
+    out = _correct_lens_impl(
+        str(scene), str(calib_dir), ROWS, COLS, str(tmp_path / "out.png")
+    )
+    assert os.path.exists(out["corrected_image_path"])

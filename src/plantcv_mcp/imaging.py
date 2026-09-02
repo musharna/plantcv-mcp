@@ -9,7 +9,7 @@ import stat
 import cv2
 import numpy as np
 
-from .paths import check_open_fd, check_readable, fd_path
+from .paths import check_open_fd, check_readable, configured_roots, fd_path
 
 
 class NotColorImageError(Exception):
@@ -168,7 +168,18 @@ def _bind_directory(directory: str) -> int:
         | getattr(os, "O_CLOEXEC", 0),
     )
     try:
-        actual = fd_path(dfd)
+        try:
+            actual = fd_path(dfd)
+        except RuntimeError:
+            # No facility to ask (no /proc, no F_GETPATH). With read roots
+            # configured that is a policy the server cannot keep, so the
+            # refusal stands; without them there is nothing to keep, and
+            # demanding the facility anyway was 1.10.0's regression: every
+            # write failed there, with a message telling the user to run
+            # without roots — which they were (panel of 1.10.1).
+            if configured_roots() is not None:
+                raise
+            return dfd
         if actual != directory:
             raise OSError(
                 f"{directory!r} is now {actual!r} — the output directory was "
@@ -245,9 +256,13 @@ def write_image(path: str, img: np.ndarray, *, exclusive: bool = False) -> None:
                 except OSError as exc:
                     if exc.errno not in _NO_HARDLINKS:
                         raise
-                    fd2 = os.open(name, _CREATE_FLAGS, 0o644, dir_fd=dfd)
-                    with os.fdopen(fd2, "wb") as fh:
-                        fh.write(buf.tobytes())
+                    # Claim the name exclusively (an empty file), then swap
+                    # the fully written temp over it: the name never holds
+                    # partial content (panel of 1.10.1: writing into the
+                    # claimed name directly left a truncated output on a
+                    # crash, which every retry then refused as existing).
+                    os.close(os.open(name, _CREATE_FLAGS, 0o644, dir_fd=dfd))
+                    os.replace(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd)
             else:
                 # Swaps the entry; never follows a link.
                 os.replace(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd)

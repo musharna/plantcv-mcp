@@ -192,3 +192,93 @@ def test_a_stale_partial_file_does_not_block_the_write(tmp_path):
     write_image(str(out), _tiny(), exclusive=True)
     assert out.stat().st_size > 0
     assert stale.read_bytes() == b"stale"  # not ours to touch
+
+
+def test_writes_succeed_without_roots_where_descriptor_paths_are_unavailable(
+    tmp_path, monkeypatch
+):
+    """Panel of 1.10.1 (every judge; reproduced): the directory binding asked
+    the kernel where the descriptor lived unconditionally, so on a platform
+    without /proc or F_GETPATH EVERY write failed — roots or not — with a
+    message telling the user to run without roots, which they were. Without
+    roots there is no policy to verify against; with roots the refusal stays."""
+    import errno
+
+    import cv2
+
+    from plantcv_mcp import imaging, paths
+
+    def no_facility(fd):
+        raise RuntimeError("This platform cannot report where an open file lives")
+
+    monkeypatch.setattr(imaging, "fd_path", no_facility)
+    paths.set_roots(None)
+    monkeypatch.delenv("PLANTCV_MCP_ROOTS", raising=False)
+    img = np.zeros((4, 4, 3), np.uint8)
+    imaging.write_image(str(tmp_path / "out.png"), img)
+    assert cv2.imread(str(tmp_path / "out.png")) is not None
+    # Negative control: with roots configured the binding is still required.
+    paths.set_roots([str(tmp_path)])
+    try:
+        with pytest.raises(RuntimeError, match="cannot report"):
+            imaging.write_image(str(tmp_path / "out2.png"), img)
+        assert not (tmp_path / "out2.png").exists()
+    finally:
+        paths.set_roots(None)
+    assert errno.EPERM  # keep the import honest for the next test
+
+
+def test_the_no_hard_link_fallback_never_publishes_partial_content(
+    tmp_path, monkeypatch
+):
+    """Panel of 1.10.1 (codex): where os.link is refused, 1.10.0 wrote INTO
+    the final name; a crash or ENOSPC mid-write left a truncated output that
+    every retry refused as 'already exists'. The name is claimed empty and
+    the fully written temp swapped over it: the name never holds a partial
+    image. Simulated by failing the second file write of the call."""
+    import errno
+    import os
+
+    from plantcv_mcp import imaging, paths
+
+    paths.set_roots(None)
+    monkeypatch.delenv("PLANTCV_MCP_ROOTS", raising=False)
+
+    def no_links(*args, **kwargs):
+        raise OSError(errno.EPERM, "Operation not permitted")
+
+    monkeypatch.setattr(imaging.os, "link", no_links)
+    real_fdopen = os.fdopen
+    calls = {"n": 0}
+
+    class Truncating:
+        def __init__(self, fh):
+            self.fh = fh
+
+        def write(self, data):
+            self.fh.write(data[: len(data) // 2])
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self.fh.close()
+            return False
+
+    def counting_fdopen(fd, *args, **kwargs):
+        calls["n"] += 1
+        fh = real_fdopen(fd, *args, **kwargs)
+        return Truncating(fh) if calls["n"] == 2 else fh
+
+    monkeypatch.setattr(imaging.os, "fdopen", counting_fdopen)
+    img = np.zeros((16, 16, 3), np.uint8)
+    out = tmp_path / "out.png"
+    try:
+        imaging.write_image(str(out), img, exclusive=True)
+    except OSError:
+        pass
+    _ok, buf = imaging.cv2.imencode(".png", img)
+    if out.exists():
+        assert out.read_bytes() == buf.tobytes()
+    assert not [n for n in os.listdir(tmp_path) if n.endswith(".partial")]

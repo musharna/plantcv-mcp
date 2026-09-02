@@ -565,7 +565,12 @@ def test_the_fill_size_remedy_clears_every_extender_not_just_the_named_one():
     assert w is not None
     assert "(440, 120)" in w.message  # the named offender is still the speck
     assert "fill_size above 400" in w.message
-    assert "1 other far component" in w.message  # neither bystander is counted
+    # Panel of 1.10.1 (codex): fill_size removes EVERY component under it,
+    # the interior 400-px bystander included — the count says what the
+    # remedy will actually delete, and points at the overlay.
+    assert "2 other component(s) under that size" in w.message
+    assert "check the overlay" in w.message
+    assert "1 other far component" not in w.message
     assert "fill_size above 100" not in w.message
     # Following the remedy clears the warning.
     cleared = mask.copy()
