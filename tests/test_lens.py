@@ -2074,3 +2074,56 @@ def test_the_wrong_corner_counts_are_echoed_the_way_they_were_given(tmp_path):
     message = str(excinfo.value)
     assert f"{COLS + 2} x {ROWS + 2} inner corners" in message
     assert "row_corners x col_corners" in message
+
+
+def test_dropping_a_view_earns_its_place_even_when_it_picks_the_wrong_one(
+    tmp_path, monkeypatch
+):
+    """The small-set wrong-view drop, investigated 2026-09-02 and deliberately
+    left alone. Six views with one sheared 5%: the honest view scores 11.0
+    sigma against the sheared view's 7.8, so the loop drops the honest one.
+    That is the symptom -- and it is not the thing that matters. Measured over
+    32 faulted sets against the same sets with the influence rule off, 28 of
+    32 drops improve the correction and 6 of the 7 that removed an honest view
+    still improved it. Four sharper rules were measured and none beat this one
+    (see the comment on the drop loop). What is pinned here is the invariant
+    that survived: dropping earns its place. A future rule that picks better
+    passes this too; one that makes the answer worse than not dropping does
+    not."""
+    from plantcv_mcp import lens as L
+
+    d = tmp_path / "sheared"
+    d.mkdir()
+    for i, (r, t) in enumerate(POSES[:6]):
+        img = _view(r, t)
+        if i == 0:
+            img = _shear(img, 0.05)
+        cv2.imwrite(str(d / f"view{i}.png"), _distort(img))
+
+    with_rule = L.calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    field_with = float(_applied_field_error(with_rule).max())
+
+    # The same set judged with the influence rule switched off -- the honest
+    # alternative the original report never measured against.
+    monkeypatch.setattr(L, "INFLUENCE_SHIFT", 1e9)
+    without_rule = L.calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    field_without = float(_applied_field_error(without_rule).max())
+    monkeypatch.undo()
+
+    assert with_rule.frames_outliers, "the rule is expected to fire on this set"
+    assert not without_rule.frames_outliers
+    # It drops the wrong view here, and is still worth having: 72.5 px against
+    # 118.8 px when nothing is dropped, a little under two thirds. The margin
+    # is what makes this assertion bite -- a rule with its thresholds removed
+    # throws two honest views away and still lands at 115.1 px, which beats
+    # 118.8 by enough to pass a bare inequality and nothing more.
+    assert field_with < 0.8 * field_without
+
+    # Positive control: on the same six poses with nothing sheared the rule
+    # fires on no one, so the gain above is a response to the fault and not a
+    # rule that always throws a view away.
+    clean = tmp_path / "clean"
+    _write_pose_set(clean, POSES[:6])
+    sound = L.calibrate_lens(str(clean), row_corners=ROWS, col_corners=COLS)
+    assert sound.frames_outliers == ()
+    assert len(sound.frames_used) == 6
