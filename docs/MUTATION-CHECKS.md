@@ -552,3 +552,124 @@ board normals at exactly 5.000°, so the open boundary is unobservable.
 and a FIFO with a writer attached is a race (`O_NONBLOCK` returns `EAGAIN`
 or the writer's bytes depending on timing); the regular-file check is
 observable only by privilege, and stays. 388 tests after pinning.
+
+## Round 14 — the 1.11.0 multi-start, uncertainty, drop-rule, packing, dedup, and containment guards (2026-09-02)
+
+The guards from the panel audit of 1.10.1, disabled one at a time (402
+tests; `pytest -x` over the lens, imaging, diagnostics, paths and isolation
+files per mutant, 109 of them, 53 s green). Predictions logged before the
+run: sixteen greens expected; fourteen survived. Three were not predicted
+(`L14`, `L24`, `L25`) and five predicted greens went red (`L15`, `L21`,
+`L23`, `L27`, `S6`).
+
+| mutant                                  | change                                                                        | result |
+| --------------------------------------- | ----------------------------------------------------------------------------- | ------ |
+| L1 multi-start off                      | the three warm starts removed from `_best_fit`                                | RED    |
+| L2 best fit is the worst                | `min(fits, key=rms)` → `max`                                                  | RED    |
+| L3 guess flag dropped                   | `CALIB_USE_INTRINSIC_GUESS` never set (every start is the cold start)         | RED    |
+| L4 start error propagates               | `except cv2.error: continue` → `raise`                                        | GREEN → pinned |
+| L5 non-finite rms wins `min`            | `f.rms if isfinite else inf` → `f.rms`                                        | GREEN → pinned |
+| L6 uncertainty gate off                 | `MAX_FOCAL_UNCERTAINTY = 0.04` → `1e9`                                        | RED    |
+| L7 uncertainty gate tight               | → `0.001`                                                                     | RED    |
+| L8 non-finite uncertainty passes        | `not isfinite(uncertainty) or` removed                                        | RED    |
+| L9 uncertainty advisory off             | `FOCAL_UNCERTAINTY_ADVISORY = 0.025` → `1e9`                                  | RED    |
+| L10 uncertainty advisory always         | → `0.0`                                                                       | RED    |
+| L11 smaller of fx/fy uncertainty        | `sd_f = max(` → `min(`                                                        | GREEN — EQUIVALENT |
+| L12 residual ratio off                  | `OUTLIER_VIEW_RATIO = 3.0` → `1e9`                                            | RED    |
+| L13 residual fraction floor off         | `OUTLIER_VIEW_FRACTION = 0.0025` → `0.0`                                      | RED    |
+| L14 residual drop from three views      | `MIN_VIEWS_FOR_RESIDUAL_DROP = 4` → `2`                                       | GREEN — EQUIVALENT in verdict |
+| L15 residual drop needs five            | → `5`                                                                         | RED    |
+| L16 median includes the view itself     | `np.median(np.delete(pv, k))` → `np.median(pv)`                               | RED    |
+| L17 influence off                       | `INFLUENCE_SHIFT = 0.03` → `1e9`                                              | RED    |
+| L18 influence shift floor off           | → `0.0`                                                                       | GREEN — design question |
+| L19 influence sigma off                 | `INFLUENCE_SIGMA = 4.0` → `0.0`                                               | RED    |
+| L20 influence from four views           | `MIN_VIEWS_FOR_INFLUENCE = 5` → `4`                                           | GREEN → pinned |
+| L21 influence from eleven views         | → `11`                                                                        | RED    |
+| L22 leave-one-out fit cold              | `guess=fit.mtx` → `guess=None`                                                | RED    |
+| L23 sigma from the full fit's sd        | `loose` from `fit.sd / fx` instead of the fit without the view                | RED    |
+| L24 first flagged, not worst            | `score > worst[0]` → `worst is None`                                          | GREEN → pinned |
+| L25 refit after a drop cold             | `fit = _best_fit(...)` → `_fit(...)` in the drop loop                         | GREEN → pinned |
+| L26 no orientation count after drops    | `if outliers:` → `if False:`                                                  | GREEN → pinned |
+| L27 packing in frame order              | `sorted(normals, key=canonical)` → `normals`                                  | RED    |
+| L28 dedup off                           | `if key in seen:` → `if False:`                                               | RED    |
+| L29 the copy is still decoded           | `continue` after the duplicate is recorded removed                            | RED    |
+| L30 too-few message without duplicates  | `if duplicates` → `if False`                                                  | RED    |
+| S1 duplicate advisory off               | `if calib.frames_duplicates:` → `if False:`                                   | RED    |
+| S2 uncertain advisory off               | `if calib.focal_uncertainty > ADVISORY:` → `if False:`                        | RED    |
+| S3 reason not in the advisory           | `f"{n} {why}"` → `f"{n}"`                                                     | GREEN → pinned |
+| S4 reason not in the response           | `"reason": why` removed from the entry                                        | GREEN → pinned |
+| S5 non-regular member vanishes          | `frames.append((name, b""))` removed                                          | RED    |
+| S6 non-regular member not digested      | the three `digest.update` calls removed                                       | RED    |
+| S7 directory output unchecked           | `if os.path.isdir(output_path):` → `if False:`                                | RED    |
+| S8 focal uncertainty not reported       | `"focal_uncertainty"` removed from the response                               | GREEN → pinned |
+| P1 roots re-resolved per call           | `if _env_snapshot is None or _env_snapshot[0] != raw:` → `if True:`           | RED    |
+| P2 snapshot never refreshed             | → `if _env_snapshot is None:`                                                 | GREEN → pinned |
+| I1 fallback ignores roots               | `if configured_roots() is not None: raise` removed                            | RED    |
+| I2 fallback always refuses              | `return dfd` → `raise`                                                        | RED    |
+| I3 no exclusive claim                   | `os.close(os.open(name, _CREATE_FLAGS, ...))` removed                         | GREEN → pinned |
+| D1 remedy count none                    | `removed = <count of minors under fill_size>` → `1`                           | RED    |
+| D2 remedy count off by one              | `{removed - 1} other` → `{removed} other`                                     | RED    |
+
+Thirty-one of forty-five red. Eleven greens pinned in nine tests, each watched red
+under its own mutant on live code first, for the stated reason:
+
+- `test_a_start_that_fails_inside_opencv_is_skipped_not_fatal` (L4): one
+  warm start raising `cv2.error` must not abort a calibration the other
+  starts recover. Under the mutant the simulated error propagates.
+- `test_a_start_with_a_non_finite_residual_never_wins` (L5): `min` over
+  residuals with a NaN among them is order luck — nothing compares less
+  than NaN. With the cold start's rms forced to NaN, the mutant keeps it and
+  refuses the set as meaningless; the guard sorts it last and a finite start
+  wins.
+- `test_four_views_are_not_judged_by_a_three_view_leave_one_out` (L20):
+  views 2, 8, 9 and 10 calibrate to 0.5% with the correction 17 px at
+  worst; judged by three-view fits without each, one shifts fx 7% at 4.7σ
+  and under the mutant is dropped, the remaining three 'calibrating' to
+  fx 427 with the correction 111 px wrong and every gate quiet. Nine of the
+  120 four-view subsets probed would lose a view the same way.
+- `test_the_worst_view_is_dropped_first_not_the_first_flagged` (L24): view
+  6 of eight rippled by 6 px bends the camera until the honest view 0 looks
+  influential (24% at 4σ, only with view 1 rippled by 2.5 px to loosen the
+  remainder); the mutant drops view 0 first, then view 6. The guard drops
+  view 6 and view 0 is quiet.
+- `test_the_refit_after_a_drop_starts_from_several_focal_lengths_too`
+  (L25): view 12 spoiled and dropped leaves the thirteen views that a cold
+  start fits to fx 780; the mutant's cold refit landed there and, from that
+  camera, dropped the honest views 6 and 9 before recovering.
+- `test_dropped_views_that_supplied_the_orientations_are_named` (L26):
+  four views at one tilt plus two rippled views at other tilts — three
+  orientations at the start, one after the drops; the guard refuses for the
+  orientations naming the dropped views, the mutant as 'undetermined' (16%).
+- `test_the_response_carries_each_reason_and_the_focal_uncertainty` (S3,
+  S4, S8): each dropped frame's reason in the advisory text and as `reason`
+  on the response entry, and `focal_uncertainty` in the response.
+- `test_a_new_environment_roots_value_is_resolved` (P2): the snapshot is
+  per value of the variable; a new value is resolved.
+- `test_the_no_hard_link_fallback_claims_the_name_exclusively` (I3): a
+  file that appears at the name after the existence check is left alone
+  and the write refused as existing; the mutant replaces it.
+
+One green is a DESIGN QUESTION, recorded and not pinned: `L18` — the 3%
+shift floor under the influence rule. No fixture shows it protecting an
+honest view (every honest view of every set measures ≤ 2.2σ, so the sigma
+gate alone would keep them all). The one fixture where the floor acts is
+view 0 of the full fourteen sheared by 5%: shift 2.5% at 4.8σ, KEPT by the
+floor with the correction 28.7 px at worst (fx 407), dropped without it
+for 8.1 px (fx 397). At 6.5% shear the shift passes 3% and both drop it.
+Pinning that would pin the worse outcome; whether "a shift that matters"
+should be 3% of the focal length or some multiple of the uncertainty
+advisory is a question for the next audit, logged in memory.
+
+Two greens are EQUIVALENT and kept: `L11` — on a square-pixel camera the fx
+and fy uncertainties track each other (every fixture set within a few
+percent), so the smaller or the larger cannot change a verdict; the larger
+stays as the conservative reading (round 13's `C3` again, at the new site).
+`L14` — from three views a drop leaves two, which the orientation gate
+refuses in every case; probed with view 0 of the sound three-view set
+rippled by 1.5 to 4 px, the guard refuses as 'undetermined' (4.5–9.3%)
+wherever the mutant would have dropped the view and refused for the
+orientations, and accepts the same 1.5-px case either way (nothing stands
+3× above two others). Same verdict on every three-view set; the floor only
+decides which refusal is worded, and the dropped-view wording would be the
+more useful one — noted with L18 for the next audit. 411 tests after
+pinning.

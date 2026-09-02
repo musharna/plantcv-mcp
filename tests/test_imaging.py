@@ -282,3 +282,42 @@ def test_the_no_hard_link_fallback_never_publishes_partial_content(
     if out.exists():
         assert out.read_bytes() == buf.tobytes()
     assert not [n for n in os.listdir(tmp_path) if n.endswith(".partial")]
+
+
+def test_the_no_hard_link_fallback_claims_the_name_exclusively(tmp_path, monkeypatch):
+    """Round 14 (I3): where os.link is refused, the name is claimed O_EXCL
+    before the written temp is swapped over it, so a file that appeared at
+    the name after the existence check — another writer's — is left alone
+    and the write refused. Simulated by creating the name during the write."""
+    import errno
+    import os
+
+    from plantcv_mcp import imaging, paths
+
+    paths.set_roots(None)
+    monkeypatch.delenv("PLANTCV_MCP_ROOTS", raising=False)
+
+    def no_links(*args, **kwargs):
+        raise OSError(errno.EPERM, "Operation not permitted")
+
+    monkeypatch.setattr(imaging.os, "link", no_links)
+    out = tmp_path / "out.png"
+    real_fdopen = os.fdopen
+
+    def racing_fdopen(fd, *args, **kwargs):
+        if not out.exists():
+            out.write_bytes(b"THEIRS")
+        return real_fdopen(fd, *args, **kwargs)
+
+    monkeypatch.setattr(imaging.os, "fdopen", racing_fdopen)
+    img = np.zeros((16, 16, 3), np.uint8)
+    with pytest.raises(FileExistsError):
+        imaging.write_image(str(out), img, exclusive=True)
+    assert out.read_bytes() == b"THEIRS"
+    assert not [n for n in os.listdir(tmp_path) if n.endswith(".partial")]
+    # Positive control: the fallback writes where nothing appeared.
+    monkeypatch.setattr(imaging.os, "fdopen", real_fdopen)
+    other = tmp_path / "other.png"
+    imaging.write_image(str(other), img, exclusive=True)
+    _ok, buf = imaging.cv2.imencode(".png", img)
+    assert other.read_bytes() == buf.tobytes()
