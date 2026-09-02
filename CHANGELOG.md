@@ -6,6 +6,28 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.11.1] — 2026-09-02
+
+The one design question left open by mutation round 14, measured and decided.
+
+### Fixed
+
+- **A bad view was excused by the size of the set it was in.** A view that is
+  wrong but self-consistent — a bent board, a rolling-shutter frame — is
+  caught by its influence: refit without it and the focal length moves far
+  more than the fit's own uncertainty allows. That test was ANDed with an
+  absolute floor of 3% on the shift, and a leave-one-out shift shrinks as
+  views are added while its sigma barely does. One view sheared 5% moves the
+  focal length 15.9% at 6.7 sigma among eight views and 2.5% at 4.8 sigma
+  among fourteen, so the floor excused it in the larger set: kept, the
+  correction 28.7 px wrong, against 8.1 px once dropped. The floor now stands
+  at half a percent, the point below which a shift cannot move the applied
+  correction by 2 px (measured on the fixture: 0.45 px per 0.1% of focal
+  length). Swept over 52 sets at seven floors it was the only outcome the old
+  floor decided, and over 203 views of 22 sound sets it protected none of
+  them — not one reached 4 sigma at a shift under 3%, so nothing that was
+  kept before is dropped now.
+
 ## [1.11.0] — 2026-09-01
 
 Findings from an independent panel audit of 1.10.1 (five judges, all
