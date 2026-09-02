@@ -508,9 +508,16 @@ def minor_extent_inflation_warning(
     # warning firing on the blob (panel audit of 1.9.0, four judges).
     extenders = [r for r in minors if _overhang(r) > 0]
     fill_size = max(int(r[cv2.CC_STAT_AREA]) for r in extenders)
+    # fill_size removes EVERY component under it, not only the far ones:
+    # the count names what the remedy will actually delete, interior minors
+    # included, so the overlay can be checked for plant material among them
+    # (panel of 1.10.1, codex: "1 other far component" on a fixture whose
+    # remedy also deleted an interior 400-px component).
+    removed = int(sum(1 for r in minors if int(r[cv2.CC_STAT_AREA]) <= fill_size))
     others = (
-        f" and the {len(extenders) - 1} other far component(s)"
-        if len(extenders) > 1
+        f" and the {removed - 1} other component(s) under that size — check "
+        "the overlay that none of them is part of the plant"
+        if removed > 1
         else ""
     )
     majors = int(is_major.sum())

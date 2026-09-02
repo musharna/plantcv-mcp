@@ -27,14 +27,31 @@ def set_roots(roots: list[str] | None) -> None:
     _roots = None if roots is None else [os.path.realpath(r) for r in roots]
 
 
+_env_snapshot: tuple[str, list[str]] | None = None
+
+
 def configured_roots() -> list[str] | None:
-    """The active roots as realpaths, or None when reads are unrestricted."""
+    """The active roots as realpaths, or None when reads are unrestricted.
+
+    The environment's roots are resolved ONCE per value of the variable: a
+    policy re-resolved on every call can be re-pointed between the check on
+    a name and the check on the opened file (panel of 1.10.1, codex: rename
+    the root directory, plant a symlink to outside at its name, and both
+    checks resolved to outside). `--root` was always a snapshot; this makes
+    the environment form one too.
+    """
+    global _env_snapshot
     if _roots is not None:
         return list(_roots)
     raw = os.environ.get(_ENV)
     if raw is None or not raw.strip():
         return None
-    return [os.path.realpath(r) for r in raw.split(os.pathsep) if r.strip()]
+    if _env_snapshot is None or _env_snapshot[0] != raw:
+        _env_snapshot = (
+            raw,
+            [os.path.realpath(r) for r in raw.split(os.pathsep) if r.strip()],
+        )
+    return list(_env_snapshot[1])
 
 
 def _inside(real: str, roots: list[str]) -> bool:

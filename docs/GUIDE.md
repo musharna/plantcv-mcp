@@ -138,14 +138,14 @@ corrected file:
 correct_lens_distortion(image_path, checkerboard_dir, row_corners=13, col_corners=19)
   -> corrected_image_path ".../img_undistorted.png", frames_used 8,
      frames_skipped [bad_checkerboard.png],
-     frames_outliers [{checkerboard1.png, rms_px 37.2}], rms 3.7,
-     focal_conditioning 4.6, crop_fraction 0.19, residual_void_px 0,
+     frames_outliers [{checkerboard1.png, rms_px 37.2, reason "fits at 37.2 px against the other views' median of 3.8 px, and moves the focal length by 13% on its own (the other views by 0.1%)"}],
+     rms 3.7, focal_uncertainty 0.0038, crop_fraction 0.19, residual_void_px 0,
      board_coverage 0.71, warnings [lens_corrected, outlier_frames_dropped]
 ```
 
 (That is the PlantCV tutorial set as this release reads it: one frame does not detect,
-one fits at 37 px against a median of 2.8 and is left out, and the remaining eight fit at
-3.7 px — the 13 px that earlier releases quoted for this set was that one frame.)
+one is left out for the reason quoted, and the remaining eight fit at 3.7 px — the 13 px
+that earlier releases quoted for this set was that one frame.)
 
 `checkerboard_dir` holds several photos of a checkerboard taken with the **same camera at
 the same resolution**, the board **tilted differently in each — by ten degrees and more, in
@@ -155,21 +155,45 @@ three detections is refused (PlantCV's own `checkerboard_calib` crashes on that 
 and would happily "calibrate" from one frame). So is a set showing fewer than three distinct
 board **orientations**: a camera model is determined by the board's angles, not its
 positions, and copies of one photo, the board slid around the frame, moved nearer or farther,
-or turned in its own plane all count as ONE (frames within 5° of each other count as one,
-transitively, so the verdict does not depend on filenames). Measured with that refusal
-disabled on a synthetic camera of known intrinsics, ten duplicates "calibrated" to fx=252
-against a true 400 at rms 0.19, eight positions of a board facing the camera to fx=228, and
-two orientations repeated four times each to fx=883 — confidently wrong models no error
-metric could flag. Three orientations is a floor, not a guarantee: a board tilted only
-−7/0/+7° about one axis passes it and calibrated to fx=334 with the applied correction 391 px
-wrong at the corners, at an rms of 0.03% of the diagonal. What the fit needs is data that
-**determine the focal length**, so the calibration's own uncertainty on fx per pixel of
-reprojection error is measured and a set above 20 is refused, naming the number (weak sets
-measured 28–52; the PlantCV tutorial set 3.5; a sound three-view set 14). Separately, a frame
-whose own reprojection error stands above three times the median AND 0.25% of the diagonal
-is a bad detection, not a bad camera: it is dropped by name (`frames_outliers`, warning
-`outlier_frames_dropped`) and the camera refitted — on the PlantCV tutorial set one such frame
-at 37 px against a median of 4 moved fx by 13% and the set's rms from 13.1 to 3.7 px.
+or turned in its own plane all count as ONE (orientations more than 5° apart are counted, in
+an order that depends on the set and not on filenames — and NOT as a chain, so a board
+swept smoothly through 40° in 4° steps, a phone video of a nodding board, counts every 5°
+of it). Byte-identical files count once (`frames_duplicates`, warning
+`duplicate_frames_ignored`): copies add no geometry and only make every uncertainty the fit
+reports look smaller. Measured with the orientation refusal disabled on a synthetic camera
+of known intrinsics, ten copies of one pose "calibrated" to fx=252 against a true 400 at
+rms 0.19 and eight positions of a board facing the camera to fx=228 — confidently wrong
+models no error metric could flag.
+
+The fit itself is started from several focal lengths and the lowest residual kept: OpenCV's
+own initial estimate ignores distortion, and on a strongly distorted lens seen through
+near-frontal boards it can be far enough off that the optimiser settles in a wrong basin —
+a camera with a residual a few times the right one that nothing downstream can tell is
+wrong (measured: 41 of 91 twelve-view subsets of an honest synthetic set calibrated to
+fx 480–8270; every one recovers the camera from a start at the frame width). Views that
+do not belong are then dropped one at a time, the camera refitted after each, and named
+with the reason (`frames_outliers`, warning `outlier_frames_dropped`): a view whose
+reprojection error stands above three times the OTHER views' median and 0.25% of the
+diagonal is a bad detection (the PlantCV tutorial set's 37-px frame, which moved fx by
+13%), and a view that fits but, left out, moves the focal length by more than 3% and more
+than four times the uncertainty of the fit made without it is a bent board or a
+rolling-shutter frame, consistent with some camera but not this one (influence alone is
+not guilt: the steepest view of a weakly tilted set moves the answer too, and leaves a
+loose fit behind that says so) (measured: one view sheared by 5%
+among eight moved fx from 400 to 459 with the correction 111 px wrong and its own
+residual unremarkable). Judged against the others, not a whole-set median, so two bad
+views of four cannot hide each other; judged only where there are enough views to have
+"others" (four for the residual test, five for the influence test).
+
+Three orientations is a floor, not a guarantee, and no statistic of the fit's own
+consistency is one either: what can be said honestly is the fit's uncertainty on the focal
+length relative to its value (`focal_uncertainty`). Above 4% the calibration is refused as
+undetermined (measured: two mis-detected views of four 4.9%, ±3° about one axis 12%);
+above 2.5% the `focal_length_uncertain` warning says how loose it is (±7° about two axes
+3.6% with the correction 54 px at worst — the documented soft spot; a board tilted ±7°
+about one axis 2.4% with 16 px; the PlantCV tutorial set 0.4%; a sound three-view set
+0.6%). Tilt the board ten degrees and beyond, in different directions, and none of this
+fires.
 Mirrored frames are a limit, not a check: a set that is
 _all_ mirrored calibrates the reflected camera consistently, but a set with _some_ frames
 mirrored returns a camera that is neither (measured with cx=285, the mixed set fitted cx=319
@@ -543,7 +567,9 @@ instead of a result.
 | `high_reprojection_error`                                           | `correct_lens_distortion`                              | the calibration fits its own boards worse than 0.15% of the frame diagonal; the correction is only as good as the fit | —        |
 | `low_calibration_coverage`                                          | `correct_lens_distortion`                              | the boards covered under 40% of the frame; the correction is extrapolated toward the edges and corners                | —        |
 | `distortion_voids_remain`                                           | `correct_lens_distortion`                              | no usable all-valid crop exists; fabricated pixels remain (void and void-blended border, count in `residual_void_px`) | —        |
-| `outlier_frames_dropped`                                            | `correct_lens_distortion`                              | frames fitting far worse than the rest were dropped by name (`frames_outliers`) and the camera refitted               | —        |
+| `outlier_frames_dropped`                                            | `correct_lens_distortion`                              | views that fit far worse than the others, or move the answer far more, were dropped by name (`frames_outliers`)      | —        |
+| `duplicate_frames_ignored`                                          | `correct_lens_distortion`                              | byte-identical checkerboard files counted once (`frames_duplicates`)                                                | —        |
+| `focal_length_uncertain`                                            | `correct_lens_distortion`                              | the views determine the focal length only loosely (`focal_uncertainty` above 2.5%); tilt the board more             | —        |
 
 Refusals you will meet: a degenerate mask at `measure` (`DegenerateMaskError`), a refinement
 that erases the plant (`RefinementErasedMaskError`) or an invalid op list (`RefineSpecError`,
@@ -589,16 +615,22 @@ Every path argument — `segment`, `suggest_segmentation`,
 `.hdr` siblings, thermal files — is resolved with symlinks and `..` followed
 **first**, then checked against the roots; a symlink inside a root pointing outside
 is refused, and a batch with one stray path is refused whole before anything is
-read. `list_methods()` reports the policy as `read_roots`. The check on the name is
-the early, legible refusal; the binding one is made on the file that was actually
-opened — the descriptor is asked where it lives (Linux `/proc`, macOS `F_GETPATH`),
-so a directory renamed and replaced by an outside symlink between the check and the
-open is refused rather than followed, and only regular files are read (a FIFO planted
-at a member's name is a named skip, not a hang). Written files — the corrected image —
-go through a descriptor of their directory, opened once, so the same swap cannot
-redirect a write. Both require a POSIX platform that can report a descriptor's path:
-with read roots configured on any other platform the server refuses to read rather
-than read unverified.
+read. `list_methods()` reports the policy as `read_roots`, and the roots themselves are
+resolved once (a root directory renamed and replaced by a symlink after the server read
+its configuration does not move the policy). The check on the name is the early, legible
+refusal; with roots configured the binding one is made on the file that was actually
+opened — the descriptor is asked where it lives (Linux `/proc`, macOS `F_GETPATH`), so a
+directory renamed and replaced by an outside symlink between the check and the open is
+refused rather than followed — and only regular files are read (a FIFO, socket or device
+at a checkerboard member's name is a named skip, whether it was there from the start or
+swapped in after the check). Written files — the corrected image — go through a descriptor
+of their directory, opened once and, wherever the platform can say where it lives, checked
+to be the directory intended, so the same swap cannot redirect a write; the image is
+written to a random hidden `.<name>.<token>.partial` sibling first and swapped into place,
+so a crash can leave such a residue and never a half-written output. A platform that
+cannot report a descriptor's path refuses to READ with roots configured and refuses to
+verify the write's directory only if roots are configured; without roots it writes
+unverified, as 1.9.0 did.
 
 ## Security and trust boundary
 
@@ -640,8 +672,8 @@ survive a server restart.
 
 The server is developed and tested on Linux and relies on POSIX file semantics
 (`O_NOFOLLOW`, directory descriptors, hard links, `/proc`): the containment guards
-around reading and writing files are inert on Windows, and read roots cannot be
-enforced there.
+around reading and writing files are inert on Windows, read roots cannot be enforced
+there, and the corrected image is written through plain exclusive creates.
 
 Images on these pages are rendered from `tests/fixtures/multi_specimen.png`, an original render
 by the author, and regenerate from committed code.

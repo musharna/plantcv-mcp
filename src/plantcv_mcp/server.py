@@ -60,6 +60,7 @@ from .imaging import (
     write_image,
 )
 from .lens import (
+    FOCAL_UNCERTAINTY_ADVISORY,
     LensCalibration,
     calibrate_lens_from_frames,
     rms_fraction,
@@ -930,7 +931,19 @@ def _load_checkerboard_frames(directory: str) -> tuple[list[tuple[str, bytes]], 
     frames: list[tuple[str, bytes]] = []
     for name in sorted(os.listdir(directory)):
         path = os.path.join(directory, name)
+        if os.path.isdir(path):
+            continue
         if not os.path.isfile(path):
+            # A FIFO, socket or device sitting at a member's name is not a
+            # frame; it is named as a skipped one rather than vanishing from
+            # the accounting (panel of 1.10.1: only a member SWAPPED for a
+            # FIFO after this check was named, one present from the start
+            # was silently omitted).
+            frames.append((name, b""))
+            encoded = name.encode()
+            digest.update(len(encoded).to_bytes(8, "little"))
+            digest.update(encoded)
+            digest.update((0).to_bytes(8, "little"))
             continue
         real = check_readable(path)
         try:
@@ -1021,20 +1034,51 @@ def _lens_advisories(calib: LensCalibration, info: dict, out: str) -> list[dict]
         }
     )
     if calib.frames_outliers:
-        named = ", ".join(f"{n} ({px:.1f} px)" for n, px in calib.frames_outliers)
+        named = "; ".join(f"{n} {why}" for n, _, why in calib.frames_outliers)
         warnings.append(
             {
                 "code": "outlier_frames_dropped",
                 "message": (
-                    f"{len(calib.frames_outliers)} checkerboard frame(s) fitted "
-                    f"far worse than the rest and were left out of the "
-                    f"calibration: {named}, against a median of "
-                    f"{calib.median_view_rms:.1f} px per frame. A frame like "
-                    "that is usually blurred, mis-detected or shot at a "
-                    "different zoom; the camera was refitted without it "
-                    "(measured: one such frame moved the focal length 13% on "
-                    "the PlantCV tutorial set). Check those frames, and "
-                    "re-shoot or remove them."
+                    f"{len(calib.frames_outliers)} checkerboard frame(s) were "
+                    f"left out of the calibration, each judged against the "
+                    f"views around it at the time: {named}. The "
+                    f"{len(calib.frames_used)} views kept fit at a median of "
+                    f"{calib.median_view_rms:.1f} px. A frame like that is "
+                    "usually blurred, mis-detected, shot at a different zoom, "
+                    "or of a board that was not flat; the camera was refitted "
+                    "without it (measured: one such frame moved the focal "
+                    "length 13% on the PlantCV tutorial set). Check those "
+                    "frames, and re-shoot or remove them."
+                ),
+            }
+        )
+    if calib.frames_duplicates:
+        named = ", ".join(
+            f"{n} (same bytes as {first})" for n, first in calib.frames_duplicates
+        )
+        warnings.append(
+            {
+                "code": "duplicate_frames_ignored",
+                "message": (
+                    f"{len(calib.frames_duplicates)} checkerboard file(s) are "
+                    f"byte-for-byte copies of another and were counted once: "
+                    f"{named}. Copies add no geometry; they only make every "
+                    "uncertainty the fit reports look smaller than it is."
+                ),
+            }
+        )
+    if calib.focal_uncertainty > FOCAL_UNCERTAINTY_ADVISORY:
+        warnings.append(
+            {
+                "code": "focal_length_uncertain",
+                "message": (
+                    f"The {len(calib.frames_used)} views determine the focal "
+                    f"length only to about ±{calib.focal_uncertainty:.1%} (the "
+                    "fit's own uncertainty on it), so the correction is "
+                    "correspondingly loose toward the frame corners (measured: "
+                    "a set at 3.6% left the corners 54 px off). The board was "
+                    "tilted too little, or only about one axis; more strongly "
+                    "and more variously tilted views tighten it."
                 ),
             }
         )
@@ -1136,6 +1180,11 @@ def _correct_lens_impl(
                 "only to real files, so nothing was written. Remove the link "
                 "or pass a different output_path."
             )
+        if os.path.isdir(output_path):
+            raise OSError(
+                f"output_path {output_path!r} is a directory; pass the path of "
+                "the file to create (it must not exist yet)."
+            )
         out = check_readable(output_path)
         try:
             write_image(out, corrected, exclusive=True)
@@ -1154,10 +1203,14 @@ def _correct_lens_impl(
         "frames_used": len(calib.frames_used),
         "frames_skipped": calib.frames_skipped,
         "frames_outliers": [
-            {"name": n, "rms_px": round(px, 2)} for n, px in calib.frames_outliers
+            {"name": n, "rms_px": round(px, 2), "reason": why}
+            for n, px, why in calib.frames_outliers
+        ],
+        "frames_duplicates": [
+            {"name": n, "same_as": first} for n, first in calib.frames_duplicates
         ],
         "rms_reprojection_error": calib.rms,
-        "focal_conditioning": calib.focal_conditioning,
+        "focal_uncertainty": calib.focal_uncertainty,
         "valid_roi": info["valid_roi"],
         "crop_fraction": info["crop_fraction"],
         "residual_void_px": info["residual_void_px"],

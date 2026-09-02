@@ -180,8 +180,9 @@ Every warning code, every tool's parameters, and the measured facts behind each 
 
 This server reads image files the host user can read and returns them to the model as
 images; with no `--root` there is no allow-list. It writes exactly one thing: the corrected
-image from `correct_lens_distortion`, next to its input or at an `output_path` — under the
-same roots, refused if the name exists, never through a symlink. Run it as a user whose read
+image from `correct_lens_distortion`, next to its input (replacing an earlier run's output
+of the same name) or at an `output_path` that must not exist yet — under the same roots,
+never through a symlink. Run it as a user whose read
 access you are comfortable exposing, set `--root`, and do not run it as root. PlantCV/OpenCV
 analyses run in a worker subprocess, so a native crash is a tool error, not a dead server.
 Details:
