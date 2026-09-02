@@ -1052,6 +1052,30 @@ def _lens_advisories(calib: LensCalibration, info: dict, out: str) -> list[dict]
                 ),
             }
         )
+    if calib.frames_skipped:
+        # A skip used to be named only inside thin_calibration, so a set with
+        # five or more usable views reported nothing at all: a real run left
+        # bad_checkerboard.png out of the calibration silently while every
+        # outlier drop was announced. A skip is the more likely user error of
+        # the two -- the wrong corner counts, a blurred frame, a file that is
+        # not a photo of the board -- so it is named whatever the view count.
+        warnings.append(
+            {
+                "code": "frames_skipped",
+                "message": (
+                    f"{len(calib.frames_skipped)} file(s) in the checkerboard "
+                    "directory were left out before any camera was fitted: "
+                    f"{', '.join(calib.frames_skipped)}. No board of the "
+                    "given corner counts was detected there, the file did not "
+                    "decode, or its size differs from the other frames. The "
+                    f"calibration used the remaining {len(calib.frames_used)}. "
+                    "If you expected those frames to count, check the corner "
+                    "counts (INNER corners, one less per side than squares) "
+                    "and that every photo is of the same board at the same "
+                    "resolution."
+                ),
+            }
+        )
     if calib.frames_duplicates:
         named = ", ".join(
             f"{n} (same bytes as {first})" for n, first in calib.frames_duplicates
@@ -1157,9 +1181,38 @@ def _correct_lens_impl(
 ) -> dict:
     real_image = check_readable(image_path)
     img, _ = load_image_with_digest(real_image)
-    calib = _lens_calibration(
-        check_readable(checkerboard_dir), row_corners, col_corners
+    real_dir = check_readable(checkerboard_dir)
+
+    # The checkerboard directory is calibration INPUT and nothing else: every
+    # file in it is read as a frame, and the cache is keyed on the digest of
+    # its contents. A correction written there becomes a candidate frame on
+    # the next call -- measured on real photos, the tool's own
+    # <image>_undistorted.png came back in frames_skipped, caught only by the
+    # majority-size rule because the correction happened to crop; a correction
+    # that cropped nothing would be fitted as a distorted view of the camera
+    # that produced it. Even skipped it changes the digest, so every image of
+    # a batch recalibrates from scratch (3.7 s per call on nine 5-MP frames)
+    # instead of reusing the cache this tool advertises. Refused rather than
+    # filtered by name: filtering leaves the directory a sink, and a renamed
+    # correction walks straight back in.
+    intended = (
+        os.path.splitext(real_image)[0] + "_undistorted.png"
+        if output_path is None
+        else output_path
     )
+    if os.path.dirname(os.path.realpath(intended)) == os.path.realpath(real_dir):
+        raise ValueError(
+            f"The corrected image would be written into the checkerboard "
+            f"directory {checkerboard_dir!r}, which is read as calibration "
+            "input: every file there is a candidate frame and the cached "
+            "calibration is keyed on the directory's contents, so the "
+            "correction would be offered back to the next calibration and "
+            "each image would refit from scratch. Nothing was written. Pass "
+            "output_path pointing outside that directory, or move the image "
+            "you are correcting out of it."
+        )
+
+    calib = _lens_calibration(real_dir, row_corners, col_corners)
     corrected, info = undistort_image(img, calib)
 
     if output_path is None:
@@ -1561,6 +1614,9 @@ def build_server() -> MCPServer:
         write the corrected image next to the input as <image>_undistorted.png
         (or to output_path, refused if it exists), and return its path plus a
         preview. Segment, calibrate scale, and measure the CORRECTED file.
+        The correction is never written INTO checkerboard_dir: everything there
+        is read as a calibration frame, so pass output_path elsewhere when the
+        image you are correcting sits with the calibration photos.
 
         Use this FIRST when straight edges bow in the image: measured on a real
         fisheye photo, distortion inflated plant area 2.13x and varied by

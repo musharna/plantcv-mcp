@@ -136,16 +136,24 @@ corrected file:
 
 ```
 correct_lens_distortion(image_path, checkerboard_dir, row_corners=13, col_corners=19)
-  -> corrected_image_path ".../img_undistorted.png", frames_used 8,
+  -> corrected_image_path ".../img_undistorted.png", frames_used 7,
      frames_skipped [bad_checkerboard.png],
-     frames_outliers [{checkerboard1.png, rms_px 37.2, reason "fits at 37.2 px against the other views' median of 3.8 px, and moves the focal length by 13% on its own (the other views by 0.1%)"}],
-     rms 3.7, focal_uncertainty 0.0038, crop_fraction 0.19, residual_void_px 0,
-     board_coverage 0.71, warnings [lens_corrected, outlier_frames_dropped]
+     frames_outliers [{checkerboard1.png, rms_px 37.2, reason "fits at 37.2 px against the other views' median of 3.8 px, and moves the focal length by 13% on its own, 33 times the uncertainty of the fit without it"},
+                      {checkerboard2.png, reason "moves the focal length by 2% on its own, 5 times the uncertainty of the fit without it — a view consistent with some camera but not this one: a bent board, a rolling-shutter frame"}],
+     rms 3.1, focal_uncertainty 0.0044, crop_fraction 0.19, residual_void_px 0,
+     board_coverage 0.71,
+     warnings [lens_corrected, outlier_frames_dropped, frames_skipped]
 ```
 
 (That is the PlantCV tutorial set as this release reads it: one frame does not detect,
-one is left out for the reason quoted, and the remaining eight fit at 3.7 px — the 13 px
-that earlier releases quoted for this set was that one frame.)
+two are left out for the reasons quoted, and the remaining seven fit at 3.1 px — the 13 px
+that earlier releases quoted for this set was the first of those frames. The second is the
+one 1.11.1 added: it moves the focal length 2%, which the 3% floor before it waved through.
+Both are real. Measured independently of the fit, by how straight the board's own rows come
+out after correction, `checkerboard2` is the most warped board in the set — 10.7 px of
+residual bow against 2.4–5.5 px for every frame kept — and dropping it changes the
+correction the tool applies by nothing you can see: mean residual bow over the seven is
+4.858 px, against 4.860 px when it is kept.)
 
 `checkerboard_dir` holds several photos of a checkerboard taken with the **same camera at
 the same resolution**, the board **tilted differently in each — by ten degrees and more, in
@@ -567,9 +575,9 @@ instead of a result.
 | `high_reprojection_error`                                           | `correct_lens_distortion`                              | the calibration fits its own boards worse than 0.15% of the frame diagonal; the correction is only as good as the fit | —        |
 | `low_calibration_coverage`                                          | `correct_lens_distortion`                              | the boards covered under 40% of the frame; the correction is extrapolated toward the edges and corners                | —        |
 | `distortion_voids_remain`                                           | `correct_lens_distortion`                              | no usable all-valid crop exists; fabricated pixels remain (void and void-blended border, count in `residual_void_px`) | —        |
-| `outlier_frames_dropped`                                            | `correct_lens_distortion`                              | views that fit far worse than the others, or move the answer far more, were dropped by name (`frames_outliers`)      | —        |
-| `duplicate_frames_ignored`                                          | `correct_lens_distortion`                              | byte-identical checkerboard files counted once (`frames_duplicates`)                                                | —        |
-| `focal_length_uncertain`                                            | `correct_lens_distortion`                              | the views determine the focal length only loosely (`focal_uncertainty` above 2.5%); tilt the board more             | —        |
+| `outlier_frames_dropped`                                            | `correct_lens_distortion`                              | views that fit far worse than the others, or move the answer far more, were dropped by name (`frames_outliers`)       | —        |
+| `duplicate_frames_ignored`                                          | `correct_lens_distortion`                              | byte-identical checkerboard files counted once (`frames_duplicates`)                                                  | —        |
+| `focal_length_uncertain`                                            | `correct_lens_distortion`                              | the views determine the focal length only loosely (`focal_uncertainty` above 2.5%); tilt the board more               | —        |
 
 Refusals you will meet: a degenerate mask at `measure` (`DegenerateMaskError`), a refinement
 that erases the plant (`RefinementErasedMaskError`) or an invalid op list (`RefineSpecError`,
