@@ -120,8 +120,19 @@ MIN_VIEWS_FOR_RESIDUAL_DROP = 4
 # loose remainder and disagrees by few (every honest view measured ≤ 2.2σ;
 # a 2% shear, correction 38 px, sits at 2.7σ and is the soft edge). Judged
 # only where there are enough views for "the fit without it" to mean
-# something, and only for a shift that matters.
-INFLUENCE_SHIFT = 0.03
+# something, and only for a shift big enough to be seen in the output:
+# scaling the fixture's focal length moves the correction the tool applies by
+# 0.45 px per 0.1%, so half a percent is about 2 px. The floor is there for a
+# set so tight that any shift at all clears the sigma test, not as a second
+# opinion on guilt. It stood at 3% until 1.11.1 — 12 px of correction error on
+# a fixture whose whole error is 9 — and an absolute shift shrinks as views
+# are added while the sigma barely does (one view sheared 5%: 15.9% at 6.7σ
+# among eight views, 2.5% at 4.8σ among fourteen), so the old floor excused
+# bad views in exactly the large sets where dropping one costs least:
+# measured, it kept that view of fourteen and left the correction 28.7 px
+# wrong where dropping it gives 8.1. Over 203 views of 22 sound sets it
+# protected nothing — not one reached 4σ at a shift under 3%.
+INFLUENCE_SHIFT = 0.005
 INFLUENCE_SIGMA = 4.0
 MIN_VIEWS_FOR_INFLUENCE = 5
 

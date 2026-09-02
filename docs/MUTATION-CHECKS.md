@@ -660,6 +660,18 @@ Pinning that would pin the worse outcome; whether "a shift that matters"
 should be 3% of the focal length or some multiple of the uncertainty
 advisory is a question for the next audit, logged in memory.
 
+**Decided in 1.11.1.** Measured: over 203 views of 22 sound sets the floor
+protects none of them (not one reaches 4σ at a shift under 3%), while a
+leave-one-out shift shrinks as views are added and its σ barely does (one
+view sheared 5%: 15.9% at 6.7σ among eight views, 2.5% at 4.8σ among
+fourteen), so the floor read "the set is small", not "the shift matters".
+Run end to end over 52 sets at seven floors it decided one outcome, and
+decided it wrong. `INFLUENCE_SHIFT` is now 0.005 — half a percent, about 2 px
+of applied correction at the fixture's measured 0.45 px per 0.1% — and the
+`L18` mutant to 0.0 stays green by design: the floor is a numerical guard,
+not a second opinion on guilt. Pinned by
+`test_a_bad_view_is_not_excused_by_the_size_of_the_set`.
+
 Two greens are EQUIVALENT and kept: `L11` — on a square-pixel camera the fx
 and fy uncertainties track each other (every fixture set within a few
 percent), so the smaller or the larger cannot change a verdict; the larger

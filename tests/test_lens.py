@@ -1919,3 +1919,41 @@ def test_a_new_environment_roots_value_is_resolved(tmp_path, monkeypatch):
     assert paths.configured_roots() == [os.path.realpath(a)]
     monkeypatch.setenv("PLANTCV_MCP_ROOTS", str(b))
     assert paths.configured_roots() == [os.path.realpath(b)]
+
+
+# --- the L18 design question of mutation round 14, decided (1.11.1) ---
+
+
+def test_a_bad_view_is_not_excused_by_the_size_of_the_set(tmp_path):
+    """Round 14 left the influence rule's absolute shift floor open: it was
+    ANDed with the sigma test at 3% of the focal length. A leave-one-out shift
+    shrinks as views are added while its sigma barely does — one view sheared
+    5% moves fx 15.9% at 6.7 sigma among eight views and 2.5% at 4.8 sigma
+    among fourteen — so the floor excused the bad view in the larger set and
+    nowhere else: kept at fx 407 with the correction 28.7 px wrong, against
+    fx 397 and 8.1 px once dropped. Swept over 52 sets at seven floors, that
+    was the only outcome the floor decided, and over 203 views of 22 sound
+    sets it protected none of them (not one reached 4 sigma at a shift under
+    3%). The floor now sits at the half percent below which a shift cannot
+    move the applied correction by 2 px."""
+    from plantcv_mcp.lens import calibrate_lens
+
+    d = tmp_path / "sheared"
+    d.mkdir()
+    for i, (r, t) in enumerate(POSES):
+        img = _view(r, t)
+        if i == 0:
+            img = _shear(img, 0.05)
+        cv2.imwrite(str(d / f"view{i}.png"), _distort(img))
+    calib = calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    dropped = {n: why for n, _, why in calib.frames_outliers}
+    assert set(dropped) == {"view0.png"}
+    assert "moves the focal length" in dropped["view0.png"]
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.03 * MTX[0, 0]
+    assert float(_applied_field_error(calib).max()) < 15.0
+    # Positive control: the same fourteen views unsheared keep every one of
+    # them — the lower floor does not start dropping sound views.
+    _write_pose_set(tmp_path / "clean", POSES)
+    clean = calibrate_lens(str(tmp_path / "clean"), row_corners=ROWS, col_corners=COLS)
+    assert clean.frames_outliers == ()
+    assert len(clean.frames_used) == len(POSES)
