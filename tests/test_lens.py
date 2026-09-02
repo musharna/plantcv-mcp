@@ -1722,3 +1722,200 @@ def test_an_output_path_that_is_a_directory_is_said_to_be_one(tmp_path, calib_di
         str(scene), str(calib_dir), ROWS, COLS, str(tmp_path / "out.png")
     )
     assert os.path.exists(out["corrected_image_path"])
+
+
+# --- Mutation round 14: pins for the greens of the 1.11.0 guards ---
+
+
+def test_a_start_that_fails_inside_opencv_is_skipped_not_fatal(tmp_path, monkeypatch):
+    """Round 14 (L4): one of the four starting focal lengths raising inside
+    calibrateCamera must not abort a calibration the other starts recover;
+    that start is skipped and the best remaining fit kept."""
+    from plantcv_mcp import lens
+    from plantcv_mcp.lens import calibrate_lens
+
+    real_fit = lens._fit
+
+    def failing_start(objp, imgp, size, guess=None):
+        if guess is not None and abs(float(guess[0, 0]) - 2.0 * size[0]) < 1e-6:
+            raise cv2.error("simulated: one start does not converge")
+        return real_fit(objp, imgp, size, guess)
+
+    monkeypatch.setattr(lens, "_fit", failing_start)
+    _write_pose_set(tmp_path / "six", POSES[:6])
+    calib = calibrate_lens(str(tmp_path / "six"), row_corners=ROWS, col_corners=COLS)
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0]
+    assert float(_applied_field_error(calib).max()) < 25.0
+
+
+def test_a_start_with_a_non_finite_residual_never_wins(tmp_path, monkeypatch):
+    """Round 14 (L5): `min` over the starts' residuals with a NaN among them
+    is order luck — nothing compares less than NaN, so a NaN first start
+    would be kept and the set refused as meaningless. Non-finite residuals
+    sort last, and a finite start wins."""
+    from plantcv_mcp import lens
+    from plantcv_mcp.lens import calibrate_lens
+
+    real_fit = lens._fit
+
+    def nan_cold_start(objp, imgp, size, guess=None):
+        fit = real_fit(objp, imgp, size, guess)
+        return fit._replace(rms=float("nan")) if guess is None else fit
+
+    monkeypatch.setattr(lens, "_fit", nan_cold_start)
+    _write_pose_set(tmp_path / "six", POSES[:6])
+    calib = calibrate_lens(str(tmp_path / "six"), row_corners=ROWS, col_corners=COLS)
+    assert math.isfinite(calib.rms)
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0]
+
+
+def test_four_views_are_not_judged_by_a_three_view_leave_one_out(tmp_path):
+    """Round 14 (L20): views 2, 8, 9 and 10 of the fixture calibrate to 0.5%
+    with the correction 17 px at worst. Judged by the fit WITHOUT each view
+    — three views — one of them shifts the focal length 7% at 4.7σ, is
+    dropped, and the three that remain 'calibrate' to fx 427 with the
+    correction 111 px wrong, every gate quiet (measured under the mutant).
+    Influence is judged from five views, where the fit without one still
+    has a say."""
+    from plantcv_mcp.lens import calibrate_lens
+
+    _write_pose_set(tmp_path / "four", [POSES[i] for i in (2, 8, 9, 10)])
+    calib = calibrate_lens(str(tmp_path / "four"), row_corners=ROWS, col_corners=COLS)
+    assert calib.frames_outliers == ()
+    assert len(calib.frames_used) == 4
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0]
+    assert float(_applied_field_error(calib).max()) < 25.0
+
+
+def test_the_worst_view_is_dropped_first_not_the_first_flagged(tmp_path):
+    """Round 14 (L24): with view 6 of eight rippled by 6 px, the camera bent
+    to fit it makes the honest view 0 look influential — 24% at 4σ, flagged
+    only because of view 6 (view 1 rippled by 2.5 px keeps the remainder
+    loose enough for that). Dropping the first flagged view throws the honest
+    one away and then view 6; dropping the WORST removes view 6, after which
+    view 0 is quiet and kept."""
+    from plantcv_mcp.lens import calibrate_lens
+
+    d = tmp_path / "cascade"
+    d.mkdir()
+    for i, (r, t) in enumerate(POSES[:8]):
+        img = _distort(_view(r, t))
+        if i == 1:
+            img = _ripple(img, 2.5, 0.7)
+        if i == 6:
+            img = _ripple(img, 6.0, 2.0)
+        cv2.imwrite(str(d / f"view{i}.png"), img)
+    calib = calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    assert {n for n, _, _ in calib.frames_outliers} == {"view6.png"}
+    assert "view0.png" in calib.frames_used
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0]
+
+
+def test_the_refit_after_a_drop_starts_from_several_focal_lengths_too(tmp_path):
+    """Round 14 (L25): with view 12 spoiled by a 6-px ripple and dropped, the
+    thirteen honest views that remain are exactly the subset a cold start
+    fits to fx 780 (test_a_wrong_start_no_longer_yields_a_wrong_camera). A
+    cold refit landed there and, from that wrong camera, dropped two more
+    honest views (6 and 9) before recovering (measured under the mutant).
+    The refit starts from several focal lengths like the first fit does."""
+    from plantcv_mcp.lens import calibrate_lens
+
+    d = tmp_path / "spoiled"
+    d.mkdir()
+    for i, (r, t) in enumerate(POSES):
+        img = _distort(_view(r, t))
+        if i == 12:
+            img = _ripple(img, 6.0, 1.0)
+        cv2.imwrite(str(d / f"view{i}.png"), img)
+    calib = calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    assert [n for n, _, _ in calib.frames_outliers] == ["view12.png"]
+    assert len(calib.frames_used) == 13
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0]
+    assert float(_applied_field_error(calib).max()) < 25.0
+
+
+def test_dropped_views_that_supplied_the_orientations_are_named(tmp_path):
+    """Round 14 (L26): four views at one tilt plus two at other tilts, both
+    rippled by 6 px: three orientations at the start, the two dropped for
+    their residuals, and the four that remain ONE orientation. That is the
+    orientation refusal naming the dropped views — not 'undetermined', which
+    is what the four views' uncertainty (16%) says when the count is not
+    taken again after the drops."""
+    from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
+
+    def write(directory, rippled):
+        directory.mkdir()
+        for i, (_, t) in enumerate(POSES[:4]):
+            cv2.imwrite(
+                str(directory / f"view{i}.png"), _distort(_view((0.12, 0.0, 0.0), t))
+            )
+        for i, ((r, t), phase) in enumerate(((POSES[9], 0.3), (POSES[10], 1.1))):
+            img = _distort(_view(r, t))
+            if rippled:
+                img = _ripple(img, 6.0, phase)
+            cv2.imwrite(str(directory / f"view{4 + i}.png"), img)
+
+    write(tmp_path / "supplied", rippled=True)
+    with pytest.raises(LensCalibrationError, match="orientation") as excinfo:
+        calibrate_lens(str(tmp_path / "supplied"), row_corners=ROWS, col_corners=COLS)
+    assert "view4.png" in str(excinfo.value) and "view5.png" in str(excinfo.value)
+    # Positive control: the same two views clean are the missing orientations.
+    write(tmp_path / "clean", rippled=False)
+    calib = calibrate_lens(str(tmp_path / "clean"), row_corners=ROWS, col_corners=COLS)
+    assert calib.frames_outliers == ()
+    assert abs(calib.mtx[0, 0] - MTX[0, 0]) < 0.02 * MTX[0, 0]
+
+
+def test_the_response_carries_each_reason_and_the_focal_uncertainty(
+    tmp_path, calib_dir
+):
+    """Round 14 (S3, S4, S8): why a frame was dropped reaches the caller
+    twice — in the advisory text and as `reason` on each frames_outliers
+    entry — and the focal uncertainty the gate judged is reported."""
+    from plantcv_mcp.lens import FOCAL_UNCERTAINTY_ADVISORY
+    from plantcv_mcp.server import _correct_lens_impl
+
+    tilts = [20, 26, 40]
+    poses = [
+        ((math.radians(tilts[i % 3]), 0.0, 0.0), t) for i, (_, t) in enumerate(POSES)
+    ]
+    _write_pose_set(tmp_path / "onesided", poses)
+    scene = tmp_path / "scene.png"
+    cv2.imwrite(
+        str(scene), cv2.cvtColor(_distort(_view(*POSES[0])), cv2.COLOR_GRAY2BGR)
+    )
+    res = _correct_lens_impl(
+        str(scene), str(tmp_path / "onesided"), ROWS, COLS, str(tmp_path / "out.png")
+    )
+    assert res["frames_outliers"]
+    assert all(entry["reason"] for entry in res["frames_outliers"])
+    message = next(
+        w["message"] for w in res["warnings"] if w["code"] == "outlier_frames_dropped"
+    )
+    assert all(entry["reason"] in message for entry in res["frames_outliers"])
+    assert 0.0 < res["focal_uncertainty"] < FOCAL_UNCERTAINTY_ADVISORY
+    # Positive control: the clean fixture reports its uncertainty and no drops.
+    quiet = _correct_lens_impl(
+        str(scene), str(calib_dir), ROWS, COLS, str(tmp_path / "quiet.png")
+    )
+    assert quiet["frames_outliers"] == []
+    assert 0.0 < quiet["focal_uncertainty"] < FOCAL_UNCERTAINTY_ADVISORY
+
+
+def test_a_new_environment_roots_value_is_resolved(tmp_path, monkeypatch):
+    """Round 14 (P2): the roots are a snapshot per VALUE of the variable, not
+    for the life of the process — a server handed a new PLANTCV_MCP_ROOTS
+    reads under the new roots, and the same value asked again is the same
+    snapshot."""
+    from plantcv_mcp import paths
+
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    paths.set_roots(None)
+    monkeypatch.setattr(paths, "_env_snapshot", None, raising=False)
+    monkeypatch.setenv("PLANTCV_MCP_ROOTS", str(a))
+    assert paths.configured_roots() == [os.path.realpath(a)]
+    assert paths.configured_roots() == [os.path.realpath(a)]
+    monkeypatch.setenv("PLANTCV_MCP_ROOTS", str(b))
+    assert paths.configured_roots() == [os.path.realpath(b)]
