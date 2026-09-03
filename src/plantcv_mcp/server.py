@@ -17,6 +17,7 @@ session store carries its own lock.
 import functools
 import hashlib
 import json
+import math
 import os
 import threading
 from typing import Any, NotRequired
@@ -1091,7 +1092,16 @@ def _lens_advisories(calib: LensCalibration, info: dict, out: str) -> list[dict]
                 ),
             }
         )
-    if calib.focal_uncertainty > FOCAL_UNCERTAINTY_ADVISORY:
+    # Judged on the PER-VIEW uncertainty, `sd/f · √N`, not on the reported
+    # ratio: the ratio shrinks as ~1/√N whatever the geometry, so a weak set
+    # used to buy silence by adding frames of the same weakness (panel of
+    # 1.12.0 — see FOCAL_UNCERTAINTY_ADVISORY for the measurements). The
+    # reported number stays the plain ratio, which is what the fit actually
+    # says about itself; only the decision to speak changed.
+    per_view_uncertainty = calib.focal_uncertainty * math.sqrt(
+        max(1, len(calib.frames_used))
+    )
+    if per_view_uncertainty > FOCAL_UNCERTAINTY_ADVISORY:
         warnings.append(
             {
                 "code": "focal_length_uncertain",
@@ -1100,9 +1110,13 @@ def _lens_advisories(calib: LensCalibration, info: dict, out: str) -> list[dict]
                     f"length only to about ±{calib.focal_uncertainty:.1%} (the "
                     "fit's own uncertainty on it), so the correction is "
                     "correspondingly loose toward the frame corners (measured: "
-                    "a set at 3.6% left the corners 54 px off). The board was "
+                    "a set at 3.6% left the corners 54 px off). Judged per "
+                    "view, because that ratio falls as frames are added "
+                    "whether or not the geometry improves: these views are "
+                    f"worth ±{per_view_uncertainty:.1%} each. The board was "
                     "tilted too little, or only about one axis; more strongly "
-                    "and more variously tilted views tighten it."
+                    "and more variously tilted views tighten it — more frames "
+                    "of the SAME view will not."
                 ),
             }
         )

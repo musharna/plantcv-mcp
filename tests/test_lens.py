@@ -1190,13 +1190,22 @@ def test_small_symmetric_tilts_are_loose_not_wrong(tmp_path):
     soft = [(tilts[i % 4], t) for i, (_, t) in enumerate(POSES)]
     _write_pose_set(tmp_path / "soft", soft)
     loose = calibrate_lens(str(tmp_path / "soft"), row_corners=ROWS, col_corners=COLS)
-    assert loose.focal_uncertainty > FOCAL_UNCERTAINTY_ADVISORY
+    # Judged PER VIEW since 1.13.0: the plain ratio falls as ~1/sqrt(N) whether
+    # or not the geometry improves, so the threshold moved onto the quantity
+    # that does not (panel of 1.12.0).
+    assert (
+        loose.focal_uncertainty * math.sqrt(len(loose.frames_used))
+        > FOCAL_UNCERTAINTY_ADVISORY
+    )
     codes = {w["code"] for w in _lens_advisories(loose, info, "x.png")}
     assert "focal_length_uncertain" in codes
     # Positive control: the fixture is tight, and says nothing.
     _write_pose_set(tmp_path / "five", POSES[:5])
     five = calibrate_lens(str(tmp_path / "five"), row_corners=ROWS, col_corners=COLS)
-    assert five.focal_uncertainty < FOCAL_UNCERTAINTY_ADVISORY
+    assert (
+        five.focal_uncertainty * math.sqrt(len(five.frames_used))
+        < FOCAL_UNCERTAINTY_ADVISORY
+    )
     assert "focal_length_uncertain" not in {
         w["code"] for w in _lens_advisories(five, info, "x.png")
     }
@@ -2112,7 +2121,7 @@ def test_dropping_a_view_earns_its_place_even_when_it_picks_the_wrong_one(
 
     # The same set judged with the influence rule switched off -- the honest
     # alternative the original report never measured against.
-    monkeypatch.setattr(L, "INFLUENCE_SHIFT", 1e9)
+    monkeypatch.setattr(L, "INFLUENCE_SHIFT_PX", 1e9)
     without_rule = L.calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
     field_without = float(_applied_field_error(without_rule).max())
     monkeypatch.undo()
@@ -2134,3 +2143,160 @@ def test_dropping_a_view_earns_its_place_even_when_it_picks_the_wrong_one(
     sound = L.calibrate_lens(str(clean), row_corners=ROWS, col_corners=COLS)
     assert sound.frames_outliers == ()
     assert len(sound.frames_used) == 6
+
+
+# --- the panel audit of 1.12.0 (1.13.0) ---
+
+
+def test_recompressing_the_same_frames_does_not_buy_a_calibration(tmp_path):
+    """Panel of 1.12.0 (codex, reproduced): the duplicate guard keyed on FILE
+    BYTES, so one raster written at several PNG compression levels was several
+    'distinct' frames that decode to the same picture. The fit's uncertainty
+    then fell by the square root of the count -- exactly the loophole the guard
+    exists to close -- and this defeats the REFUSAL, not merely the advisory.
+    Measured on the +/-7 degree two-axis set: six frames once each are refused
+    as leaving the focal length undetermined; the same six rasters at four zip
+    levels each were ACCEPTED at 2.06%, silent, correction 111.2 px wrong."""
+    from plantcv_mcp.lens import LensCalibrationError, calibrate_lens
+
+    tilts = [(-0.12, 0.0, 0.0), (0.0, 0.12, 0.0), (0.12, 0.0, 0.0), (0.0, -0.12, 0.0)]
+    rasters = [_distort(_view(tilts[i % 4], POSES[i][1])) for i in range(6)]
+
+    once = tmp_path / "once"
+    once.mkdir()
+    for i, r in enumerate(rasters):
+        cv2.imwrite(str(once / f"v{i}.png"), r)
+    with pytest.raises(LensCalibrationError, match="undetermined"):
+        calibrate_lens(str(once), row_corners=ROWS, col_corners=COLS)
+
+    # The same six pictures, re-encoded. Byte-distinct, pixel-identical.
+    many = tmp_path / "many"
+    many.mkdir()
+    for i, r in enumerate(rasters):
+        for level in (1, 3, 6, 9):
+            cv2.imwrite(
+                str(many / f"v{i}_c{level}.png"),
+                r,
+                [cv2.IMWRITE_PNG_COMPRESSION, level],
+            )
+    assert len({p.read_bytes() for p in many.glob("*.png")}) == 24, (
+        "the fixture must produce byte-distinct files or it tests nothing"
+    )
+    with pytest.raises(LensCalibrationError, match="undetermined"):
+        calibrate_lens(str(many), row_corners=ROWS, col_corners=COLS)
+
+    # Positive control: six DIFFERENT pictures of the same board still
+    # calibrate, so the key rejects copies and not frames.
+    real = tmp_path / "real"
+    _write_frames(real, n=6)
+    ok = calibrate_lens(str(real), row_corners=ROWS, col_corners=COLS)
+    assert len(ok.frames_used) == 6
+    assert ok.frames_duplicates == ()
+
+
+def test_a_weak_set_cannot_silence_the_looseness_warning_with_more_frames(tmp_path):
+    """Panel of 1.12.0: `sd/f` is a PRECISION statistic that falls as ~1/sqrt(N)
+    whatever the geometry, so against a fixed threshold a weak set bought
+    silence by adding frames -- measured over three seeds, the +/-7 degree
+    two-axis geometry warns at 6 views (3.85%) and goes SILENT at 28 (1.69%)
+    with the correction still 44 px wrong, and at one seed the correction
+    DEGRADES 38.7 -> 52.8 px while the statistic falls 3.35% -> 1.40%. The
+    advisory now judges the per-view quantity, which does not move."""
+    from plantcv_mcp import lens as L
+    from plantcv_mcp.server import _lens_advisories
+
+    rng = np.random.default_rng(3)
+    tilts = [(-0.12, 0.0, 0.0), (0.0, 0.12, 0.0), (0.12, 0.0, 0.0), (0.0, -0.12, 0.0)]
+    info = {
+        "valid_roi": [0, 0, 600, 440],
+        "crop_fraction": 0.2,
+        "roi_degenerate": False,
+        "residual_void_px": 0,
+    }
+
+    def weak(n):
+        return [
+            (
+                tilts[i % 4],
+                tuple(np.array(POSES[i % len(POSES)][1]) + rng.normal(0, 0.2, 3)),
+            )
+            for i in range(n)
+        ]
+
+    seen = []
+    for n in (6, 28):
+        d = tmp_path / f"weak{n}"
+        _write_pose_set(d, weak(n))
+        calib = L.calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+        codes = {w["code"] for w in _lens_advisories(calib, info, "x.png")}
+        seen.append((n, len(calib.frames_used), calib.focal_uncertainty, codes))
+        assert "focal_length_uncertain" in codes, (
+            f"{n} frames of the same weak geometry went quiet: "
+            f"u={calib.focal_uncertainty:.2%} over {len(calib.frames_used)} views"
+        )
+    # The thing that made it possible: the plain ratio really does fall.
+    assert seen[1][2] < seen[0][2], (
+        "fixture check: the plain ratio must fall with frames, or this test "
+        f"proves nothing (got {seen[0][2]:.2%} then {seen[1][2]:.2%})"
+    )
+
+    # Positive control: a SOUND set of the same size stays quiet.
+    d = tmp_path / "sound28"
+    _write_pose_set(
+        d,
+        [
+            (
+                tuple(np.array(POSES[i % len(POSES)][0]) + rng.normal(0, 0.010, 3)),
+                tuple(np.array(POSES[i % len(POSES)][1]) + rng.normal(0, 0.2, 3)),
+            )
+            for i in range(28)
+        ],
+    )
+    sound = L.calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    assert "focal_length_uncertain" not in {
+        w["code"] for w in _lens_advisories(sound, info, "x.png")
+    }
+
+
+def test_the_influence_floor_is_the_same_correction_error_at_every_resolution():
+    """Panel of 1.12.0: the floor was defended as '0.45 px per 0.1%, so half a
+    percent is about 2 px' -- measured on the 640x480 fixture and frozen as a
+    dimensionless ratio, while the pixels it defends scale with the frame. At
+    12 MP the same 0.5% was worth 15 px, 6x its stated justification.
+    `_rms_fraction` normalises residuals by the diagonal for exactly this
+    reason; this threshold now does too."""
+    from plantcv_mcp.lens import INFLUENCE_SHIFT_PX, influence_shift_floor
+
+    # The applied correction moves ~0.6 px per unit shift per pixel of
+    # diagonal (measured); the floor must invert that to a constant px.
+    for w, h in ((640, 480), (1280, 960), (2592, 1944), (4000, 3000)):
+        diagonal = math.hypot(w, h)
+        moved = 0.6 * diagonal * influence_shift_floor(diagonal)
+        assert abs(moved - INFLUENCE_SHIFT_PX) < 1e-9, (
+            f"{w}x{h}: floor is worth {moved:.2f} px, not {INFLUENCE_SHIFT_PX}"
+        )
+    # And it really is resolution-dependent -- a fixed ratio would not be.
+    assert influence_shift_floor(math.hypot(4000, 3000)) < 0.25 * influence_shift_floor(
+        math.hypot(640, 480)
+    )
+
+
+def test_focal_uncertainty_judges_each_axis_against_its_own_focal_length():
+    """Panel of 1.12.0 (codex): both standard deviations were divided by fx,
+    which is only right on a square-pixel camera -- the comment said so and
+    nothing enforced it. On an anamorphic lens or an anisotropically resized
+    image the fy reading is off by exactly fy/fx (measured on a 300/600
+    camera: 0.40% reported against 0.20% true), overstating when fy > fx."""
+    from plantcv_mcp.lens import LensCalibration, calibration_uncertainty
+
+    # fy twice fx, each axis equally well determined at 1% of ITS OWN focal.
+    mtx = np.array([[300.0, 0.0, 320.0], [0.0, 600.0, 240.0], [0.0, 0.0, 1.0]])
+    sd = np.array([3.0, 6.0, 0.0, 0.0, 0.0])
+    assert abs(calibration_uncertainty(mtx, sd) - 0.01) < 1e-9
+    # Dividing both by fx would have read 2% -- the fy/fx inflation.
+    assert abs(max(sd[0], sd[1]) / mtx[0, 0] - 0.02) < 1e-9
+    # Square pixels: unchanged from the old reading.
+    square = np.array([[400.0, 0.0, 320.0], [0.0, 400.0, 240.0], [0.0, 0.0, 1.0]])
+    sd2 = np.array([4.0, 4.0, 0.0, 0.0, 0.0])
+    assert abs(calibration_uncertainty(square, sd2) - 0.01) < 1e-9
+    assert isinstance(LensCalibration, type)

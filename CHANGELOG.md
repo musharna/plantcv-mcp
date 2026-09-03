@@ -4,7 +4,81 @@ All notable changes to `plantcv-mcp` are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.13.0] — 2026-09-02
+
+Findings from an independent panel audit of 1.12.0 — five judges, all
+answering, four rebutting — plus probes run on the live code before any judge
+reported. Every load-bearing claim was reproduced here before it was fixed.
+The theme: a guard that judged the wrong quantity, and a statistic that a user
+could improve without improving anything real.
+
+### Fixed
+
+- **Re-saving the same frames no longer buys a calibration.** The duplicate
+  guard keyed on FILE BYTES, so one photograph written at four PNG compression
+  levels was four byte-distinct files that decode to the same picture — and
+  the fit's uncertainty falls as the square root of the frame count, which is
+  precisely the loophole that guard exists to close. Measured: six frames of a
+  ±7° two-axis set are correctly REFUSED as leaving the focal length
+  undetermined; the same six rasters at four zip levels each were ACCEPTED at
+  2.06%, silently, with the correction 111.2 px wrong. No adversary is needed —
+  any pipeline that re-encodes produces this by keeping both copies. Frames are
+  now counted as one when their DECODED PIXELS match, whatever the file is
+  named or how it was compressed.
+- **A weak set can no longer silence the looseness warning by growing.**
+  `focal_uncertainty` is a precision statistic: it falls as roughly 1/√N
+  whatever the geometry, so against a fixed threshold more frames of the same
+  weak angle bought silence. Measured on ±7° about two axes over three seeds:
+  six views 3.85% and warned with the correction 111 px wrong, twenty-eight
+  views 1.69% and SILENT with it still 44 px wrong — and on one draw the
+  correction DEGRADED from 38.7 px to 52.8 px while the number fell 3.35% to
+  1.40%. That is the disease that killed 1.10.0's conditioning gate, in its
+  replacement. The warning now judges the per-view quantity (the ratio times
+  the square root of the views used), which does not move when frames are
+  added: sound sets measure 0.7–3.9 there, weak ones 6.7–14.5. The REFUSAL
+  keeps the plain ratio deliberately — it asks whether the focal length is
+  determined at all, and under the per-view form a catastrophic set ranks below
+  a merely weak one. The reported number is unchanged; only the decision to
+  speak.
+- **The drop rule's floor is the same correction error at every resolution.**
+  It was defended as "0.45 px per 0.1%, so half a percent is about 2 px" —
+  measured on the 640×480 fixture and then frozen as a dimensionless ratio,
+  while the pixels it defends scale with the frame. Measured: 0.48 / 0.96 /
+  1.95 / 3.01 px per 0.1% at diagonals 800 / 1600 / 3240 / 5000, linear in the
+  diagonal, so the same 0.5% was worth 2.4 px on the fixture and 15.0 px at
+  12 MP — six times its own justification, excusing bad views in exactly the
+  frames a modern camera produces (the real-camera set of 1.12.0 was 5 MP,
+  where it excused 9.7 px). The floor is now stated in pixels of applied
+  correction and derived from the frame's diagonal, as `_rms_fraction` has
+  always done for residuals.
+- **Each focal axis is judged against its own focal length.** Both standard
+  deviations were divided by `fx`, which is right only when the pixels are
+  square; the comment said so and nothing enforced it. On an anamorphic lens or
+  an anisotropically resized image the `fy` reading was off by exactly `fy/fx`
+  (measured on a 300/600 camera: 0.40% reported against 0.20% true),
+  overstating when `fy > fx` — a false refusal — and understating when
+  `fy < fx`. Identical to the old reading whenever `fx ≈ fy`.
+
+### Documentation
+
+- **README promised a refusal that 1.11.0 withdrew.** "What it refuses" still
+  said checkerboards tilted ±7° put the corrected image 391 px wrong and were
+  refused. 1.11.0 withdrew both the refusal and the number — 391 px was an
+  artifact of the cold-start wrong basin it eliminated — and the repo's own
+  test asserts that set is now accepted with the correction 16 px right. The
+  guide was updated at the time; the README, which is also the PyPI front page,
+  was missed.
+- `frames_skipped`, added in 1.12.0, was missing from the guide's warning-code
+  table; it appeared only inside a worked example. It is the code a user is
+  most likely to meet, since it fires whenever any file in the checkerboard
+  directory is not a usable board.
+- The guide credited the drop rule with refusing two bad views among four. It
+  does not: the influence test needs five views and the residual test does not
+  separate them — what refuses that set is the uncertainty of the fit they
+  produce. The outcome was right and the mechanism named was not.
+- The guide still said the influence rule fires above a 3% focal shift, which
+  1.11.1 had lowered to half a percent; that sentence is now stated in pixels
+  of applied correction, per the floor change above.
 
 ### Documented
 
@@ -24,12 +98,6 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   (0.42–0.74 px, uncertainty as low as 0.46%) while the correction is 27–38 px
   wrong. Recorded on the drop loop and in the guide, with the remedy that
   actually works: more views, more varied tilts, a rigid board.
-
-### Fixed
-
-- The guide said the influence rule fires above a 3% focal shift; 1.11.1
-  lowered that floor to half a percent.
-
 
 ## [1.12.0] — 2026-09-02
 

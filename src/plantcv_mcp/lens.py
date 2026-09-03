@@ -89,7 +89,32 @@ ORIENTATION_DISTINCT_DEG = 5.0
 # mis-detected views of four
 # 4.9% (field 1462 px), three of six 10.9%, ±3° one axis 12.3% (field 538).
 MAX_FOCAL_UNCERTAINTY = 0.04
-FOCAL_UNCERTAINTY_ADVISORY = 0.025
+
+# The ADVISORY judges a different quantity from the refusal, and the panel of
+# 1.12.0 is why. `sd/f` is a PRECISION statistic: it shrinks as ~1/√N whatever
+# the geometry, so against a fixed threshold a weak set buys silence by adding
+# frames. Measured on the ±7° two-axis geometry over three seeds: 6 views
+# 3.85% (warns, correction 111 px), 28 views 1.69% (SILENT, still 44 px), 40
+# views 2.00% (SILENT, 29 px) — and at one seed the correction DEGRADES from
+# 38.7 to 52.8 px while the statistic falls 3.35% → 1.40%. That is the disease
+# that killed 1.10.0's conditioning gate, in its replacement.
+#
+# What the advisory should ask is whether THIS GEOMETRY determines the focal
+# length, which must not improve by repeating views. `sd/f · √N` is that
+# quantity — the per-view contribution — and it is N-invariant: under the
+# recompression attack above it moves 3.93% → 3.89% where `sd/f` falls by 2.9×.
+# Measured separation (tmp/statfix_1120.py, 4 seeds × 6 counts; documented sets
+# in tmp/docsets_1120.py): sound 0.72–3.86, weak 6.73–14.50. The threshold sits
+# between, ~1.3× from each side — thinner margin than one would like, and said
+# plainly rather than glossed; the quantity it replaces has NO valid fixed
+# threshold at all, its weak band straddling 2.5%.
+#
+# The REFUSAL keeps the raw ratio on purpose: it asks "is the focal length
+# determined at all", and under the √N form the ordering inverts — the
+# catastrophic two-mis-detected-of-four set scores 9.8 while an acceptable weak
+# set scores 14.50. Frame multiplication is kept out of the refusal by the
+# decoded-pixel duplicate key instead.
+FOCAL_UNCERTAINTY_ADVISORY = 0.05
 
 # A view whose own reprojection rms stands far above the OTHERS' median is a
 # bad detection, not a bad camera, and the optimiser bends the camera to fit
@@ -132,8 +157,54 @@ MIN_VIEWS_FOR_RESIDUAL_DROP = 4
 # measured, it kept that view of fourteen and left the correction 28.7 px
 # wrong where dropping it gives 8.1. Over 203 views of 22 sound sets it
 # protected nothing — not one reached 4σ at a shift under 3%.
-INFLUENCE_SHIFT = 0.005
+#
+# The floor is stated in PIXELS OF APPLIED CORRECTION, not as a ratio of the
+# focal length, because pixels are what it was always reasoning about — "half
+# a percent is about 2 px" was a fixture-sized coincidence. A relative shift is
+# dimensionless while the correction it moves scales with the frame, so the
+# same 0.5% is worth 2.4 px on the 640×480 fixture and 15.0 px on a 12-MP
+# camera (measured, tmp/scale_1120.py: 0.48 / 0.96 / 1.95 / 3.01 px per 0.1% at
+# diagonals 800 / 1600 / 3240 / 5000 — linear in the diagonal). Frozen as a
+# ratio it was 6× too loose on a big sensor, excusing bad views in exactly the
+# frames a user is most likely to shoot; the real-camera dogfood set was 5 MP,
+# where it excused 9.7 px. `_rms_fraction` below normalises residuals by the
+# diagonal for this same reason — "so a fit means the same thing at every
+# resolution" — and this threshold simply never got that treatment (panel of
+# 1.12.0). The conversion 0.6 px of correction per unit shift per pixel of
+# diagonal reproduces the fixture's own measured 0.45 px per 0.1%.
+INFLUENCE_SHIFT_PX = 2.0
+_CORRECTION_PX_PER_SHIFT_PER_DIAGONAL = 0.6
 INFLUENCE_SIGMA = 4.0
+
+
+def influence_shift_floor(diagonal: float) -> float:
+    """The smallest focal-length shift worth acting on, as a fraction of the
+    focal length, for a frame of this diagonal — the shift that moves the
+    correction the tool applies by INFLUENCE_SHIFT_PX pixels."""
+    scale = _CORRECTION_PX_PER_SHIFT_PER_DIAGONAL * diagonal
+    return INFLUENCE_SHIFT_PX / scale if scale > 0 else math.inf
+
+
+def calibration_uncertainty(mtx: np.ndarray, sd: np.ndarray) -> float:
+    """The fit's uncertainty on the focal length, as a fraction of it.
+
+    Each axis is judged against ITS OWN focal length. Until 1.13.0 both
+    standard deviations were divided by fx, which is only right when the
+    pixels are square — the comment at the refusal said so and nothing
+    enforced it. On an anamorphic lens or an anisotropically resized image
+    that overstates the fy reading by exactly fy/fx (measured on a 300/600
+    camera: 0.40% reported against 0.20% true), giving a false refusal when
+    fy > fx and a missed one when fy < fx (panel of 1.12.0). Either focal
+    length being undetermined is the same failure, so the larger is returned.
+    """
+    fx = float(mtx[0, 0])
+    fy = float(mtx[1, 1])
+    return max(
+        float(sd[0]) / fx if fx > 0 else math.inf,
+        float(sd[1]) / fy if fy > 0 else math.inf,
+    )
+
+
 MIN_VIEWS_FOR_INFLUENCE = 5
 
 
@@ -305,13 +376,17 @@ def calibrate_lens_from_frames(
     skipped: list[str] = []
     duplicates: list[tuple[str, str]] = []
     seen: dict[str, str] = {}
+    seen_pixels: dict[str, str] = {}
     for name, data in frames:
         if data:
             # The same bytes under two names are one observation. Copies
             # do not add geometry, but they do shrink every uncertainty the
             # fit reports by the square root of their number (panel of
             # 1.10.1, codex: eight copies of a weak set passed a gate the
-            # set itself failed). Kept once, named.
+            # set itself failed). Kept once, named. This is only the cheap
+            # half of the test — identical bytes are identical pictures and
+            # need no decode to prove it; the decoded key below is the
+            # binding one.
             key = hashlib.sha256(data).hexdigest()
             if key in seen:
                 duplicates.append((name, seen[key]))
@@ -335,6 +410,26 @@ def calibrate_lens_from_frames(
         if img.dtype != np.uint8:
             top = float(img.max()) or 1.0
             img = (img.astype(np.float32) * (255.0 / top)).astype(np.uint8)
+        # Panel of 1.12.0 (codex, reproduced): the byte key above is not
+        # enough, and the gap defeats the REFUSAL, not merely the advisory.
+        # One raster written at two PNG compression levels is two
+        # byte-distinct files that decode to the same picture, so the guard
+        # counted them as two observations and the fit's uncertainty fell by
+        # the square root of the count -- exactly the loophole the guard
+        # exists to close. Measured: six frames of the ±7° two-axis set are
+        # REFUSED as leaving the focal length undetermined; the same six
+        # rasters written at four zip levels each are ACCEPTED at 2.06%,
+        # silent, with the correction 111.2 px wrong. No adversary is needed
+        # — any pipeline that re-encodes (a phone sync, an export, an
+        # "optimise PNG" pass) produces this by keeping both copies.
+        # What makes two frames one observation is the PICTURE, so the key
+        # is the raster the fit will actually see, after the greyscale and
+        # dtype normalisation above.
+        pixel_key = hashlib.sha256(np.ascontiguousarray(img).tobytes()).hexdigest()
+        if pixel_key in seen_pixels:
+            duplicates.append((name, seen_pixels[pixel_key]))
+            continue
+        seen_pixels[pixel_key] = name
         decoded.append((name, img))
 
     shape: tuple[int, int] | None = None
@@ -470,6 +565,9 @@ def calibrate_lens_from_frames(
     # tilts, a board that is rigid. A small set is weak before anything is
     # bent — a fault-free six-view set here leaves 14.4 px, one subset 23.2.
     outliers: list[tuple[str, float, str]] = []
+    # In pixels of applied correction, so the same set judged at two
+    # resolutions is judged the same way (panel of 1.12.0).
+    shift_floor = influence_shift_floor(diagonal)
     while len(used) >= MIN_VIEWS_FOR_RESIDUAL_DROP:
         n = len(used)
         pv = fit.per_view
@@ -486,7 +584,7 @@ def calibrate_lens_from_frames(
                 )
                 fx_without = float(without.mtx[0, 0])
                 shift = abs(fx_without - fx) / fx
-                loose = max(float(without.sd[0]), float(without.sd[1])) / fx_without
+                loose = calibration_uncertainty(without.mtx, without.sd)
                 shifts.append((shift, shift / loose if loose > 0 else math.inf))
         worst: tuple[float, int, str] | None = None
         for k in range(n):
@@ -502,7 +600,7 @@ def calibrate_lens_from_frames(
                 )
             if shifts is not None:
                 shift, sigma = shifts[k]
-                if shift > INFLUENCE_SHIFT and sigma > INFLUENCE_SIGMA:
+                if shift > shift_floor and sigma > INFLUENCE_SIGMA:
                     score = max(score, sigma / INFLUENCE_SIGMA)
                     reasons.append(
                         f"moves the focal length by {shift:.0%} on its own, "
@@ -540,11 +638,16 @@ def calibrate_lens_from_frames(
 
     # Three orientations is the floor, not a guarantee: the fit's own
     # uncertainty on the focal length says how well the views determined
-    # it. Either focal length undetermined is the same failure (they track
-    # each other on any square-pixel camera), so the larger is judged.
-    fx = float(fit.mtx[0, 0])
-    sd_f = max(float(fit.sd[0]), float(fit.sd[1]))
-    uncertainty = sd_f / fx if fx > 0 else math.inf
+    # it. Either focal length undetermined is the same failure, so the
+    # larger is judged — but each against ITS OWN focal length. Until
+    # 1.13.0 both standard deviations were divided by fx, which is only
+    # right when the pixels are square; the comment here said as much and
+    # nothing enforced it. On an anamorphic lens or an anisotropically
+    # resized image the fy reading is off by exactly fy/fx (measured on a
+    # 300/600 camera: 0.40% reported against 0.20% true), overstating when
+    # fy > fx — a false refusal — and understating when fy < fx (panel of
+    # 1.12.0). Identical to the old reading whenever fx ≈ fy.
+    uncertainty = calibration_uncertainty(fit.mtx, fit.sd)
     if not math.isfinite(uncertainty) or uncertainty > MAX_FOCAL_UNCERTAINTY:
         raise LensCalibrationError(
             f"The {len(used)} detected views leave the focal length "
