@@ -102,15 +102,14 @@ asserts the rule for **every** tool rather than a named list, and the two mutant
 it fires. A per-tool assertion protects the tools that exist; a rule protects the ones that
 have not been written yet.
 
-
 ## Round 5 — per-region measurement (`measure_regions`)
 
-| mutant                              | change                                                              | result |
-| ----------------------------------- | ------------------------------------------------------------------- | ------ |
-| empty-region guard removed          | `if label not in present:` → `if False:`                             | RED    |
-| label mapping shifted by one        | `label = i + 1` → `i + 2` for the first two regions                   | RED    |
-| `_as_xy` slices instead of refusing | `if len(pair) != 2:` → `if False:`                                    | RED    |
-| overlay draws all regions as measured | `colour = ... else EMPTY_BGR` → `colour = MEASURED_BGR`             | RED    |
+| mutant                                | change                                                  | result |
+| ------------------------------------- | ------------------------------------------------------- | ------ |
+| empty-region guard removed            | `if label not in present:` → `if False:`                | RED    |
+| label mapping shifted by one          | `label = i + 1` → `i + 2` for the first two regions     | RED    |
+| `_as_xy` slices instead of refusing   | `if len(pair) != 2:` → `if False:`                      | RED    |
+| overlay draws all regions as measured | `colour = ... else EMPTY_BGR` → `colour = MEASURED_BGR` | RED    |
 
 The second mutant is the one that matters. Region indices and PlantCV's label
 indices are separate sequences that happen to line up, and nothing but this test
@@ -118,7 +117,6 @@ holds them together; if they drift, every row after an empty cell describes the
 neighbouring plant, with numbers that look entirely reasonable. It is only
 detectable because the fixture's plants have deliberately different areas
 (1257 / 5027 / 11310 px). Identical plants would make the mutant invisible.
-
 
 ## Round 6 — the 1.3.1–1.5.2 guards (2026-08-29)
 
@@ -128,25 +126,25 @@ thermal `fill_erased_mask`, `analyses=[]`), disabled one at a time; full suite e
 time (276 tests, ~80 s). Runner: a shell loop of literal `sed` mutations with
 `git checkout` between them.
 
-| mutant                                   | change                                                                          | result |
-| ---------------------------------------- | ------------------------------------------------------------------------------- | ------ |
-| noise rule never fires                   | `component_count - major_object_count >= NOISY_MINOR_COMPONENTS` → `False`      | RED (4) |
-| noise rule ignores the dominant object   | `and largest_frac < NOISY_LARGEST_FRACTION` → `and True`                        | **GREEN → fixed** |
-| per-cell `multi_specimen` removed        | `multi = multi_specimen_warning(whole_diag, scope="cell")` → `multi = None`     | RED    |
-| per-cell `multi_specimen` on the crop    | `whole_diag = analyze_mask(labeled == label)` → same on the cell's bbox slice   | **GREEN → fixed** |
-| `object_exceeds_region` always fires     | `if ratio < EXCEEDS_CELL_RATIO:` → `if True:`                                   | RED (3) |
-| batch: noisy still blocks with a grid    | `blocking = [w … if w.code != "noisy_segmentation"]` → `blocking = blocking`    | RED    |
-| batch: merged rows returned measured     | `if r["measured"] and spill:` → `if False:`                                     | RED    |
-| batch: time budget off                   | `if max_seconds is not None and entries and elapsed > max_seconds:` → `if False:` | RED  |
-| batch: `nrows` alone accepted            | `if grid["nrows"] is None or grid["ncols"] is None:` → `if False:`              | RED    |
-| batch: `MAX_REGIONS` cap off             | `if grid["nrows"] * grid["ncols"] > MAX_REGIONS:` → `if False:`                 | RED    |
-| batch: `mode` unchecked                  | `if grid["mode"] not in REGION_MODES:` → `if False:`                            | RED    |
-| batch: `radius` unchecked                | `if grid["radius"] is not None and grid["radius"] <= 0:` → `if False:`          | RED    |
-| batch: dedupe off                        | `(duplicates if path in unique else unique).append(path)` → `unique.append(path)` | RED  |
-| thermal: `fill_erased_mask` text lost    | `if erased is not None:` → `if False:`                                          | RED    |
-| refine: dropped-object floor 10% → 50%   | `a >= DROPPED_OBJECT_FRACTION * largest` → `a >= 0.5 * largest`                 | RED (2) |
-| suggest: empty polarity unwarned         | `if per_polarity[recommended]["component_count"] == 0:` → `if False:`           | RED    |
-| `analyses=[]` allowed                    | `if not analyses:` → `if False:` in `validate_analyses`                         | RED (2) |
+| mutant                                 | change                                                                            | result            |
+| -------------------------------------- | --------------------------------------------------------------------------------- | ----------------- |
+| noise rule never fires                 | `component_count - major_object_count >= NOISY_MINOR_COMPONENTS` → `False`        | RED (4)           |
+| noise rule ignores the dominant object | `and largest_frac < NOISY_LARGEST_FRACTION` → `and True`                          | **GREEN → fixed** |
+| per-cell `multi_specimen` removed      | `multi = multi_specimen_warning(whole_diag, scope="cell")` → `multi = None`       | RED               |
+| per-cell `multi_specimen` on the crop  | `whole_diag = analyze_mask(labeled == label)` → same on the cell's bbox slice     | **GREEN → fixed** |
+| `object_exceeds_region` always fires   | `if ratio < EXCEEDS_CELL_RATIO:` → `if True:`                                     | RED (3)           |
+| batch: noisy still blocks with a grid  | `blocking = [w … if w.code != "noisy_segmentation"]` → `blocking = blocking`      | RED               |
+| batch: merged rows returned measured   | `if r["measured"] and spill:` → `if False:`                                       | RED               |
+| batch: time budget off                 | `if max_seconds is not None and entries and elapsed > max_seconds:` → `if False:` | RED               |
+| batch: `nrows` alone accepted          | `if grid["nrows"] is None or grid["ncols"] is None:` → `if False:`                | RED               |
+| batch: `MAX_REGIONS` cap off           | `if grid["nrows"] * grid["ncols"] > MAX_REGIONS:` → `if False:`                   | RED               |
+| batch: `mode` unchecked                | `if grid["mode"] not in REGION_MODES:` → `if False:`                              | RED               |
+| batch: `radius` unchecked              | `if grid["radius"] is not None and grid["radius"] <= 0:` → `if False:`            | RED               |
+| batch: dedupe off                      | `(duplicates if path in unique else unique).append(path)` → `unique.append(path)` | RED               |
+| thermal: `fill_erased_mask` text lost  | `if erased is not None:` → `if False:`                                            | RED               |
+| refine: dropped-object floor 10% → 50% | `a >= DROPPED_OBJECT_FRACTION * largest` → `a >= 0.5 * largest`                   | RED (2)           |
+| suggest: empty polarity unwarned       | `if per_polarity[recommended]["component_count"] == 0:` → `if False:`             | RED               |
+| `analyses=[]` allowed                  | `if not analyses:` → `if False:` in `validate_analyses`                           | RED (2)           |
 
 Two of seventeen were green, and both were the same kind of hole: a rule with two
 halves, tested only from the side that fires.
@@ -171,23 +169,22 @@ real plants in one cell DO fire). Under the mutant it fails on `multi_specimen`.
 
 278 tests after this round.
 
-
 ## Round 7 — the 1.5.3 morphology guards (2026-08-29)
 
 The five guards from the first real-photo morphology round, disabled one at a
 time the day they shipped (283 tests, ~85 s each).
 
-| mutant                                      | change                                                                          | result |
-| ------------------------------------------- | ------------------------------------------------------------------------------- | ------ |
-| palette not reset on entering the section   | `pcv.params.saved_color_scale = None` → `pass` in `isolated_pcv_outputs`        | **GREEN → fixed** |
-| host's palette not restored on exit         | `pcv.params.saved_color_scale = saved_palette` → `pass`                         | **GREEN → fixed** |
-| palette not reset after the 2× prune pass   | the reset in `measure_morphology` → `pass`                                      | RED (2) |
-| crop margin zero                            | `crop_margin()` → `return 0`                                                    | RED (2) |
-| crop off                                    | `_crop_bounds(…)` → the whole frame                                             | RED    |
-| every cv2.error swallowed                   | `if not _stem_line_leaves_int32(…):` → `if False:`                              | **GREEN → fixed** |
-| coverage refusal off                        | `if coverage:` → `if False:`                                                    | RED    |
-| combine-stem remedy off                     | `if "combine stem" in str(exc).lower():` → `if False:`                          | RED    |
-| overlay pasted at the origin                | `canvas[y0:y1, x0:x1] = id_img` → `canvas[0:h, 0:w] = id_img`                   | RED    |
+| mutant                                    | change                                                                   | result            |
+| ----------------------------------------- | ------------------------------------------------------------------------ | ----------------- |
+| palette not reset on entering the section | `pcv.params.saved_color_scale = None` → `pass` in `isolated_pcv_outputs` | **GREEN → fixed** |
+| host's palette not restored on exit       | `pcv.params.saved_color_scale = saved_palette` → `pass`                  | **GREEN → fixed** |
+| palette not reset after the 2× prune pass | the reset in `measure_morphology` → `pass`                               | RED (2)           |
+| crop margin zero                          | `crop_margin()` → `return 0`                                             | RED (2)           |
+| crop off                                  | `_crop_bounds(…)` → the whole frame                                      | RED               |
+| every cv2.error swallowed                 | `if not _stem_line_leaves_int32(…):` → `if False:`                       | **GREEN → fixed** |
+| coverage refusal off                      | `if coverage:` → `if False:`                                             | RED               |
+| combine-stem remedy off                   | `if "combine stem" in str(exc).lower():` → `if False:`                   | RED               |
+| overlay pasted at the origin              | `canvas[y0:y1, x0:x1] = id_img` → `canvas[0:h, 0:w] = id_img`            | RED               |
 
 Three of nine green, and this time the pattern is "a guard with a belt and
 braces, tested only at the braces". The palette is reset in two places (on
@@ -196,41 +193,40 @@ tests only ever hit the second, so the first — and the restore that hands the
 host's palette back — were free to go. `test_isolated_section_starts_with_an_empty_palette_and_hands_the_hosts_back`
 now pins both, on the success and the error path. The vertical-stem handler
 refits the stem before it swallows a `cv2.error`; nothing asserted that a
-*different* `cv2.error` still escapes, so the verification was removable —
+_different_ `cv2.error` still escapes, so the verification was removable —
 `test_a_cv2_error_that_is_not_the_vertical_stem_still_raises` does. 285 tests.
-
 
 ## Round 8 — the 1.5.5 guards (2026-08-30)
 
-The seven guards from the panel-audit round, plus the *other half* of every
+The seven guards from the panel-audit round, plus the _other half_ of every
 rule that has one — the constants' values, not just their presence (302 tests,
 ~90 s each). Runner: the round-6 shell loop of literal `sed` mutations.
 
-| mutant                          | change                                                              | result |
-| ------------------------------- | ------------------------------------------------------------------- | ------ |
-| grid always explains noise      | `if grid_explains_components(…):` → `if True:`                       | RED    |
-| grid never explains noise       | → `if False:`                                                        | RED (2) |
-| explained-per-cell budget = 1   | `NOISE_EXPLAINED_PER_CELL = 4` → `1`                                 | **GREEN → fixed** |
-| explained-per-cell budget = 100 | → `100`                                                              | RED    |
-| unexplained sentence lost       | `elif any(noisy in blocking):` → `elif False:`                       | RED    |
-| coverage demotion off           | `if cells >= 2:` → `if False:`                                       | RED    |
-| coverage demoted for 1×1 too    | → `if True:`                                                         | **GREEN → fixed** |
-| no_region_measured off          | `if … not any(measured):` → `if False:`                              | RED (2) |
-| refuses on ANY unmeasured row   | `not any(…)` → `not all(…)`                                          | **GREEN → fixed** |
-| grid args unchecked             | `if given:` → `if False:`                                            | RED (4) |
-| dedup by string                 | `key = os.path.realpath(path)` → `key = path`                        | RED    |
-| auto_grid unwrapped             | `except (ValueError, cv2.error)` → `except ()`                       | RED (5) |
-| auto_grid catches ValueError only | → `except (ValueError,)`                                           | RED (2) |
-| auto_grid catches cv2.error only  | → `except (cv2.error,)`                                            | RED (3) |
-| owned-material guard off        | `if in_cell and owned < 0.2 * in_cell:` → `if False:`                | RED (2) |
-| owned fraction 0.2 → 0.5        | `OWNED_MATERIAL_FRACTION = 0.2` → `0.5`                              | **GREEN → fixed** |
-| owned fraction 0.2 → 0.02       | → `0.02`                                                             | RED (2) |
-| in-cell material = whole frame  | `mask[y:y+h, x:x+w]` → `mask`                                        | RED (9) |
-| crop remedy reworded            | "crop the photo so the leaf" → "photograph it so the leaf"           | **GREEN → fixed** |
+| mutant                            | change                                                     | result            |
+| --------------------------------- | ---------------------------------------------------------- | ----------------- |
+| grid always explains noise        | `if grid_explains_components(…):` → `if True:`             | RED               |
+| grid never explains noise         | → `if False:`                                              | RED (2)           |
+| explained-per-cell budget = 1     | `NOISE_EXPLAINED_PER_CELL = 4` → `1`                       | **GREEN → fixed** |
+| explained-per-cell budget = 100   | → `100`                                                    | RED               |
+| unexplained sentence lost         | `elif any(noisy in blocking):` → `elif False:`             | RED               |
+| coverage demotion off             | `if cells >= 2:` → `if False:`                             | RED               |
+| coverage demoted for 1×1 too      | → `if True:`                                               | **GREEN → fixed** |
+| no_region_measured off            | `if … not any(measured):` → `if False:`                    | RED (2)           |
+| refuses on ANY unmeasured row     | `not any(…)` → `not all(…)`                                | **GREEN → fixed** |
+| grid args unchecked               | `if given:` → `if False:`                                  | RED (4)           |
+| dedup by string                   | `key = os.path.realpath(path)` → `key = path`              | RED               |
+| auto_grid unwrapped               | `except (ValueError, cv2.error)` → `except ()`             | RED (5)           |
+| auto_grid catches ValueError only | → `except (ValueError,)`                                   | RED (2)           |
+| auto_grid catches cv2.error only  | → `except (cv2.error,)`                                    | RED (3)           |
+| owned-material guard off          | `if in_cell and owned < 0.2 * in_cell:` → `if False:`      | RED (2)           |
+| owned fraction 0.2 → 0.5          | `OWNED_MATERIAL_FRACTION = 0.2` → `0.5`                    | **GREEN → fixed** |
+| owned fraction 0.2 → 0.02         | → `0.02`                                                   | RED (2)           |
+| in-cell material = whole frame    | `mask[y:y+h, x:x+w]` → `mask`                              | RED (9)           |
+| crop remedy reworded              | "crop the photo so the leaf" → "photograph it so the leaf" | **GREEN → fixed** |
 
 Five of nineteen green, and four of the five are the same species: a calibrated
 threshold tested only from the side that fires. Every refusal had a test; no
-test stood on the *keep* side of the line, so each constant could drift to its
+test stood on the _keep_ side of the line, so each constant could drift to its
 strictest value and take the legitimate cases silently.
 
 **The per-cell budget of 4** exists for plants whose leaves are disconnected
@@ -261,7 +257,6 @@ elsewhere in the same message satisfies, so the actionable sentence could be
 reworded away. The test now matches the sentence ("crop the photo", "under
 half"), not the word. 306 tests.
 
-
 ## Round 9 — the 1.6.0 card-exclusion and clipping guards (2026-08-30)
 
 The guards from the scale+colour dogfood, disabled one at a time the day they
@@ -269,16 +264,16 @@ shipped (310 tests, ~2 min each). Predictions were logged before the run:
 `server_exclusion_off` was expected GREEN (both new exclusion tests drive
 `measure_batch`) and `card_pad_zero` uncertain.
 
-| mutant                        | change                                                   | result |
-| ----------------------------- | -------------------------------------------------------- | ------ |
-| server exclusion off          | `if card is not None:` → `if False:` (segment path)      | RED    |
-| batch exclusion off           | same, batch path                                         | RED (3) |
-| advisory suppressed           | `if not removed:` → `if True:`                           | RED (2) |
-| exclusion counts, zeroes nothing | `if removed:` → `if False:` in exclude_card           | RED (2) |
-| card padding zero             | `pad = int(np.median(extents))` → `pad = 0`              | RED (3) |
-| clipping for any component    | `and area >= 0.25 * largest` → `and True`                | RED    |
-| clipping never                | `if not touching_major:` → `if True:`                    | RED (7) |
-| clipping bar 10× largest      | `0.25 * largest` → `10 * largest`                        | RED (7) |
+| mutant                           | change                                              | result  |
+| -------------------------------- | --------------------------------------------------- | ------- |
+| server exclusion off             | `if card is not None:` → `if False:` (segment path) | RED     |
+| batch exclusion off              | same, batch path                                    | RED (3) |
+| advisory suppressed              | `if not removed:` → `if True:`                      | RED (2) |
+| exclusion counts, zeroes nothing | `if removed:` → `if False:` in exclude_card         | RED (2) |
+| card padding zero                | `pad = int(np.median(extents))` → `pad = 0`         | RED (3) |
+| clipping for any component       | `and area >= 0.25 * largest` → `and True`           | RED     |
+| clipping never                   | `if not touching_major:` → `if True:`               | RED (7) |
+| clipping bar 10× largest         | `0.25 * largest` → `10 * largest`                   | RED (7) |
 
 Eight of eight red — the first fully-red round, and both pre-logged green
 predictions were wrong in the right direction. The server-path exclusion is
@@ -296,28 +291,28 @@ The guards from the panel audit of 1.6.0, disabled one at a time (319 tests,
 `seg_exclude_flag_off`, `refine_erased_ok`, and `regrown_not_summed` were
 expected GREEN from visible test gaps; all four were, and were pinned.
 
-| mutant                    | change                                                        | result |
-| ------------------------- | ------------------------------------------------------------- | ------ |
-| pad zero                  | `pad = 2.0 * CARD_PAD_PITCHES * pitch` → `pad = 0.0`          | RED (6) |
-| pad fixed 41 px           | → `pad = 41.0` (the 1.6.0 bug resurrected)                    | RED (6) |
-| pitch fixed 20 px         | `pitch = median(NN distance)` → `pitch = 20.0`                | RED (6) |
-| axis-aligned regression   | `boxPoints(..., angle)` → `boxPoints(..., 0.0)`               | RED (2) |
-| sparse lattice accepted   | `if len(centres) < 2:` → `< 0:`                               | GREEN → pinned |
-| residual check off        | `> CARD_CHIP_RESIDUAL_MAX` → `> 1e9`                          | RED    |
-| residual loosened to 0.7  | `CARD_CHIP_RESIDUAL_MAX = 0.45` → `0.7` (erased chip is 0.6)  | RED    |
-| residual tightened to 0.05| → `0.05` (complete cards read up to 0.3)                      | RED    |
-| segment() exclude flag off| `elif exclude_color_card:` → `elif False:` (segment path)     | GREEN → pinned |
-| measure advisory off      | `if session.card_region is not None:` → `if False:` (measure) | RED    |
-| refine re-exclusion off   | same, refine path                                             | RED    |
-| refine-erased refusal off | `if regrown and not (mask > 0).any():` → `if False:`          | GREEN → pinned |
-| regrown advisory off      | `if regrown:` → `if False:`                                   | RED    |
-| regrown not accumulated   | `card_excluded_px + regrown` → `card_excluded_px`             | GREEN → pinned |
-| batch exclude flag off    | `elif exclude_color_card:` → `elif False:` (batch path)       | RED    |
-| probable_background never | `CELL_BACKGROUND_COVERAGE = 0.85` → `1.01`                    | RED    |
-| probable_background 0.5   | → `0.5` (dense fixture cells are 0.72)                        | RED (2) |
-| coverage 1×1 eligible     | `coverage_demoted = cells >= 2 and any(` → `any(`             | GREEN — EQUIVALENT |
-| noise_cluster cell off    | `elif noisy_demoted and any(` → `elif False and any(`         | RED (2) |
-| noisy image refusal off   | `if clusters:` → `if False:`                                  | RED (2) |
+| mutant                     | change                                                        | result             |
+| -------------------------- | ------------------------------------------------------------- | ------------------ |
+| pad zero                   | `pad = 2.0 * CARD_PAD_PITCHES * pitch` → `pad = 0.0`          | RED (6)            |
+| pad fixed 41 px            | → `pad = 41.0` (the 1.6.0 bug resurrected)                    | RED (6)            |
+| pitch fixed 20 px          | `pitch = median(NN distance)` → `pitch = 20.0`                | RED (6)            |
+| axis-aligned regression    | `boxPoints(..., angle)` → `boxPoints(..., 0.0)`               | RED (2)            |
+| sparse lattice accepted    | `if len(centres) < 2:` → `< 0:`                               | GREEN → pinned     |
+| residual check off         | `> CARD_CHIP_RESIDUAL_MAX` → `> 1e9`                          | RED                |
+| residual loosened to 0.7   | `CARD_CHIP_RESIDUAL_MAX = 0.45` → `0.7` (erased chip is 0.6)  | RED                |
+| residual tightened to 0.05 | → `0.05` (complete cards read up to 0.3)                      | RED                |
+| segment() exclude flag off | `elif exclude_color_card:` → `elif False:` (segment path)     | GREEN → pinned     |
+| measure advisory off       | `if session.card_region is not None:` → `if False:` (measure) | RED                |
+| refine re-exclusion off    | same, refine path                                             | RED                |
+| refine-erased refusal off  | `if regrown and not (mask > 0).any():` → `if False:`          | GREEN → pinned     |
+| regrown advisory off       | `if regrown:` → `if False:`                                   | RED                |
+| regrown not accumulated    | `card_excluded_px + regrown` → `card_excluded_px`             | GREEN → pinned     |
+| batch exclude flag off     | `elif exclude_color_card:` → `elif False:` (batch path)       | RED                |
+| probable_background never  | `CELL_BACKGROUND_COVERAGE = 0.85` → `1.01`                    | RED                |
+| probable_background 0.5    | → `0.5` (dense fixture cells are 0.72)                        | RED (2)            |
+| coverage 1×1 eligible      | `coverage_demoted = cells >= 2 and any(` → `any(`             | GREEN — EQUIVALENT |
+| noise_cluster cell off     | `elif noisy_demoted and any(` → `elif False and any(`         | RED (2)            |
+| noisy image refusal off    | `if clusters:` → `if False:`                                  | RED (2)            |
 
 Fifteen of twenty red. Four greens were the predicted test gaps, pinned by
 `test_a_lattice_of_one_chip_refuses_a_card_region` (one centre has no pitch;
@@ -343,44 +338,44 @@ gaps — `L2`, `L3`, `L6`, `L10`, `L12`, `L13`, `S7`, `S10`, `S11`, `D4`,
 `D6` minus the one judged equivalent — and exactly those ten were; no
 unpredicted green, no predicted green went red.
 
-| mutant                          | change                                                                 | result |
-| ------------------------------- | ---------------------------------------------------------------------- | ------ |
-| L1 shape = first decoded        | majority `Counter` → `decoded[0][1].shape`                             | RED    |
-| L2 size tie → smaller           | tie-break key `s[0] * s[1]` → `-s[0] * s[1]`                           | GREEN → pinned |
-| L3 minimum views 1              | `MIN_CALIBRATION_FRAMES = 3` → `1`                                     | GREEN → pinned |
-| L4 pose-diversity off           | `if spread < POSE_DIVERSITY_MIN_PX:` → `< 0.0`                         | RED    |
-| L5 pose-diversity 1000 px       | `POSE_DIVERSITY_MIN_PX = 1.0` → `1000.0`                               | RED    |
-| L6 rms gate off                 | `if not isfinite(rms) or rms > MAX:` → `if False:`                     | GREEN → pinned |
-| L7 rms gate 0.01                | `MAX_CALIBRATION_RMS = 100.0` → `0.01`                                 | RED    |
-| L8 resolution refusal off       | `if (h, w) != calib.shape:` → `if False:`                              | RED    |
-| L9 stored shape swapped         | `shape=(shape[0], shape[1])` → `(shape[1], shape[0])`                  | RED    |
-| L10 validity `> 0`              | white-frame remap `== 255` → `> 0`                                     | GREEN → pinned |
-| L11 no crop                     | `rect = _largest_valid_rectangle(valid)` → `(0, 0, w, h)`              | RED    |
-| L12 degenerate edge 0           | `_MIN_CROP_EDGE = 16` → `0`                                            | GREEN → pinned |
-| L13 degenerate voids 0          | `"residual_void_px": int((~valid).sum())` → `0`                        | GREEN → pinned |
-| L14 crop_fraction 0             | `1.0 - (rw * rh) / (w * h)` → `0.0`                                    | RED    |
-| S1 member containment off       | per-member `check_readable(path)` removed                              | RED    |
-| S2 unreadable member raises     | `except OSError: data = b""` → `raise`                                 | RED    |
-| S3 digest unprefixed            | length-prefix `update`s removed (bare name‖bytes)                      | RED    |
-| S4 cache key ignores digest     | `key = (digest, rows, cols)` → `("", rows, cols)`                      | RED    |
-| S5 O_NOFOLLOW off               | `flags \|= O_NOFOLLOW` removed (imaging.write_image)                   | RED    |
-| S6 O_EXCL off                   | `(O_EXCL if exclusive else O_TRUNC)` → `O_TRUNC`                       | RED    |
-| S7 output_path uncontained      | `out = check_readable(output_path)` → `out = output_path`              | GREEN → pinned |
-| S8 high_reprojection_error off  | `HIGH_REPROJECTION_RMS = 5.0` → `1e9`                                  | RED    |
-| S9 thin_calibration off         | `if len(frames_used) < 5:` → `< 0`                                     | RED    |
+| mutant                              | change                                                              | result             |
+| ----------------------------------- | ------------------------------------------------------------------- | ------------------ |
+| L1 shape = first decoded            | majority `Counter` → `decoded[0][1].shape`                          | RED                |
+| L2 size tie → smaller               | tie-break key `s[0] * s[1]` → `-s[0] * s[1]`                        | GREEN → pinned     |
+| L3 minimum views 1                  | `MIN_CALIBRATION_FRAMES = 3` → `1`                                  | GREEN → pinned     |
+| L4 pose-diversity off               | `if spread < POSE_DIVERSITY_MIN_PX:` → `< 0.0`                      | RED                |
+| L5 pose-diversity 1000 px           | `POSE_DIVERSITY_MIN_PX = 1.0` → `1000.0`                            | RED                |
+| L6 rms gate off                     | `if not isfinite(rms) or rms > MAX:` → `if False:`                  | GREEN → pinned     |
+| L7 rms gate 0.01                    | `MAX_CALIBRATION_RMS = 100.0` → `0.01`                              | RED                |
+| L8 resolution refusal off           | `if (h, w) != calib.shape:` → `if False:`                           | RED                |
+| L9 stored shape swapped             | `shape=(shape[0], shape[1])` → `(shape[1], shape[0])`               | RED                |
+| L10 validity `> 0`                  | white-frame remap `== 255` → `> 0`                                  | GREEN → pinned     |
+| L11 no crop                         | `rect = _largest_valid_rectangle(valid)` → `(0, 0, w, h)`           | RED                |
+| L12 degenerate edge 0               | `_MIN_CROP_EDGE = 16` → `0`                                         | GREEN → pinned     |
+| L13 degenerate voids 0              | `"residual_void_px": int((~valid).sum())` → `0`                     | GREEN → pinned     |
+| L14 crop_fraction 0                 | `1.0 - (rw * rh) / (w * h)` → `0.0`                                 | RED                |
+| S1 member containment off           | per-member `check_readable(path)` removed                           | RED                |
+| S2 unreadable member raises         | `except OSError: data = b""` → `raise`                              | RED                |
+| S3 digest unprefixed                | length-prefix `update`s removed (bare name‖bytes)                   | RED                |
+| S4 cache key ignores digest         | `key = (digest, rows, cols)` → `("", rows, cols)`                   | RED                |
+| S5 O_NOFOLLOW off                   | `flags \|= O_NOFOLLOW` removed (imaging.write_image)                | RED                |
+| S6 O_EXCL off                       | `(O_EXCL if exclusive else O_TRUNC)` → `O_TRUNC`                    | RED                |
+| S7 output_path uncontained          | `out = check_readable(output_path)` → `out = output_path`           | GREEN → pinned     |
+| S8 high_reprojection_error off      | `HIGH_REPROJECTION_RMS = 5.0` → `1e9`                               | RED                |
+| S9 thin_calibration off             | `if len(frames_used) < 5:` → `< 0`                                  | RED                |
 | S10 voids advisory: degenerate only | `if roi_degenerate or residual_void_px > 0:` → `if roi_degenerate:` | GREEN — EQUIVALENT |
-| S11 crop note never "cropped"   | `elif info["crop_fraction"] > 0:` → `elif False:`                      | GREEN → pinned |
-| D1 diagonal regression          | per-axis `and` test → union/major diagonal ratio                       | RED    |
-| D2 axes `or`                    | `union_w <= … and union_h <= …` → `or`                                 | RED    |
-| D3 ratio 1.10                   | `EXTENT_INFLATION_RATIO = 1.25` → `1.10`                               | RED    |
-| D4 ratio 2.0                    | → `2.0` (the real photo's sliver was 2.17x)                            | GREEN → pinned |
-| D5 major threshold 0            | `major_threshold=0.25` → `0.0`                                         | RED    |
-| D6 baseline = largest only      | `_extent(rows[is_major])` → extent of the single largest component     | GREEN → pinned |
-| D7 offender by area             | `max(rows[~is_major], key=_overhang)` → key = area                     | RED    |
-| D8 remedy ignores majors        | `if majors >= 2:` → `if False:`                                        | RED    |
-| D9 mask_warnings wiring off     | `inflation = minor_extent_inflation_warning(mask, diag)` → `None`      | RED    |
-| D10 refine wiring off           | same, in `refinement_warnings`                                         | RED    |
-| C1 contiguous-object sentence   | `marker_touches_crop_edge` message truncated at "the marker."          | RED    |
+| S11 crop note never "cropped"       | `elif info["crop_fraction"] > 0:` → `elif False:`                   | GREEN → pinned     |
+| D1 diagonal regression              | per-axis `and` test → union/major diagonal ratio                    | RED                |
+| D2 axes `or`                        | `union_w <= … and union_h <= …` → `or`                              | RED                |
+| D3 ratio 1.10                       | `EXTENT_INFLATION_RATIO = 1.25` → `1.10`                            | RED                |
+| D4 ratio 2.0                        | → `2.0` (the real photo's sliver was 2.17x)                         | GREEN → pinned     |
+| D5 major threshold 0                | `major_threshold=0.25` → `0.0`                                      | RED                |
+| D6 baseline = largest only          | `_extent(rows[is_major])` → extent of the single largest component  | GREEN → pinned     |
+| D7 offender by area                 | `max(rows[~is_major], key=_overhang)` → key = area                  | RED                |
+| D8 remedy ignores majors            | `if majors >= 2:` → `if False:`                                     | RED                |
+| D9 mask_warnings wiring off         | `inflation = minor_extent_inflation_warning(mask, diag)` → `None`   | RED                |
+| D10 refine wiring off               | same, in `refinement_warnings`                                      | RED                |
+| C1 contiguous-object sentence       | `marker_touches_crop_edge` message truncated at "the marker."       | RED                |
 
 Twenty-five of thirty-five red. Nine greens pinned, each watched red under
 its own mutant on live code first:
@@ -431,36 +426,36 @@ The guards from the panel audit of 1.8.2, disabled one at a time (371 tests,
 expected (`L6`, `S7`, `I3`, `I4`, `D3`); ten survived — the other five
 (`L4`, `S5`, `I1`, `D1`, `D2`) were real gaps the predictions missed.
 
-| mutant                              | change                                                                  | result |
-| ----------------------------------- | ----------------------------------------------------------------------- | ------ |
-| L1 minimum orientations 1           | `MIN_DISTINCT_ORIENTATIONS = 3` → `1`                                   | RED    |
-| L2 minimum orientations 2           | → `2`                                                                   | RED    |
-| L3 minimum orientations 4           | → `4`                                                                   | RED    |
-| L4 cluster angle 0.05°              | `ORIENTATION_DISTINCT_DEG = 5.0` → `0.05`                               | GREEN → pinned |
-| L5 cluster angle 60°                | → `60.0`                                                                | RED    |
-| L6 normal sign not folded           | `abs(dot)` → `dot` in `_distinct_orientations`                          | GREEN — EQUIVALENT |
-| L7 k3 free                          | `flags=cv2.CALIB_FIX_K3` removed                                        | RED    |
-| L8 rms gate off                     | `MAX_CALIBRATION_RMS_FRACTION = 0.03` → `1e12`                          | RED    |
-| L9 rms gate 1e-6                    | → `1e-6`                                                                | RED    |
-| L10 fraction is pixels              | `rms_fraction` → `return rms`                                           | RED    |
-| L11 EXIF-honouring decode           | `IMREAD_UNCHANGED` → `IMREAD_GRAYSCALE`                                 | RED    |
-| L12 coverage always 1.0             | `coverage=float(hull.mean())` → `1.0`                                   | RED    |
-| L13 orientation gate `<=`           | `if orientations < MIN` → `<=`                                          | RED    |
-| S1 high-rms advisory never          | `HIGH_REPROJECTION_FRACTION = 0.0015` → `1.0`                           | RED    |
-| S2 high-rms advisory always         | → `1e-9`                                                                | RED    |
-| S3 coverage advisory never          | `MIN_CALIBRATION_COVERAGE = 0.4` → `0.0`                                | RED    |
-| S4 coverage advisory always         | → `0.99`                                                                | RED    |
-| S5 member open by original name     | `os.open(real, …)` → `os.open(path, …)`                                 | GREEN → pinned |
-| S6 member open follows links        | `O_NOFOLLOW` removed from the member open                               | RED    |
-| S7 board_coverage not reported      | result key removed                                                      | GREEN → pinned |
-| I1 symlink refusal branch off       | `if stat.S_ISLNK(...)` → `if False`                                     | GREEN → pinned |
-| I2 hard-link refusal off            | `if st.st_nlink > 1` → `if False`                                       | RED    |
-| I3 exclusive path via replace       | `os.link(tmp, path)` → `os.replace(tmp, path)`                          | GREEN — EQUIVALENT by race |
-| I4 partial file left behind         | `finally: os.unlink(tmp)` removed                                       | GREEN → pinned |
-| D1 width axis gate forced on        | `if over_w:` → `if True:`                                               | GREEN → pinned |
-| D2 height axis gate forced on       | `if over_h:` → `if True:`                                               | GREEN → pinned |
-| D3 absolute overhang                | `/ major_w` removed from the width score                                | GREEN → pinned |
-| D4 trigger `and` not `or`           | `if not (over_w or over_h)` → `and`                                     | RED    |
+| mutant                          | change                                         | result                     |
+| ------------------------------- | ---------------------------------------------- | -------------------------- |
+| L1 minimum orientations 1       | `MIN_DISTINCT_ORIENTATIONS = 3` → `1`          | RED                        |
+| L2 minimum orientations 2       | → `2`                                          | RED                        |
+| L3 minimum orientations 4       | → `4`                                          | RED                        |
+| L4 cluster angle 0.05°          | `ORIENTATION_DISTINCT_DEG = 5.0` → `0.05`      | GREEN → pinned             |
+| L5 cluster angle 60°            | → `60.0`                                       | RED                        |
+| L6 normal sign not folded       | `abs(dot)` → `dot` in `_distinct_orientations` | GREEN — EQUIVALENT         |
+| L7 k3 free                      | `flags=cv2.CALIB_FIX_K3` removed               | RED                        |
+| L8 rms gate off                 | `MAX_CALIBRATION_RMS_FRACTION = 0.03` → `1e12` | RED                        |
+| L9 rms gate 1e-6                | → `1e-6`                                       | RED                        |
+| L10 fraction is pixels          | `rms_fraction` → `return rms`                  | RED                        |
+| L11 EXIF-honouring decode       | `IMREAD_UNCHANGED` → `IMREAD_GRAYSCALE`        | RED                        |
+| L12 coverage always 1.0         | `coverage=float(hull.mean())` → `1.0`          | RED                        |
+| L13 orientation gate `<=`       | `if orientations < MIN` → `<=`                 | RED                        |
+| S1 high-rms advisory never      | `HIGH_REPROJECTION_FRACTION = 0.0015` → `1.0`  | RED                        |
+| S2 high-rms advisory always     | → `1e-9`                                       | RED                        |
+| S3 coverage advisory never      | `MIN_CALIBRATION_COVERAGE = 0.4` → `0.0`       | RED                        |
+| S4 coverage advisory always     | → `0.99`                                       | RED                        |
+| S5 member open by original name | `os.open(real, …)` → `os.open(path, …)`        | GREEN → pinned             |
+| S6 member open follows links    | `O_NOFOLLOW` removed from the member open      | RED                        |
+| S7 board_coverage not reported  | result key removed                             | GREEN → pinned             |
+| I1 symlink refusal branch off   | `if stat.S_ISLNK(...)` → `if False`            | GREEN → pinned             |
+| I2 hard-link refusal off        | `if st.st_nlink > 1` → `if False`              | RED                        |
+| I3 exclusive path via replace   | `os.link(tmp, path)` → `os.replace(tmp, path)` | GREEN — EQUIVALENT by race |
+| I4 partial file left behind     | `finally: os.unlink(tmp)` removed              | GREEN → pinned             |
+| D1 width axis gate forced on    | `if over_w:` → `if True:`                      | GREEN → pinned             |
+| D2 height axis gate forced on   | `if over_h:` → `if True:`                      | GREEN → pinned             |
+| D3 absolute overhang            | `/ major_w` removed from the width score       | GREEN → pinned             |
+| D4 trigger `and` not `or`       | `if not (over_w or over_h)` → `and`            | RED                        |
 
 Eighteen of twenty-eight red. Eight greens pinned, each watched red under
 its own mutant on live code first:
@@ -511,28 +506,28 @@ The guards from the panel audit of 1.9.0, disabled one at a time (388 tests,
 Predictions logged before the run: three greens expected (`C3`, `U1`, `W5`);
 four survived — `D2` was a real gap the predictions missed.
 
-| mutant                              | change                                                                  | result |
-| ----------------------------------- | ----------------------------------------------------------------------- | ------ |
-| C1 conditioning gate off            | `MAX_FOCAL_CONDITIONING = 20.0` → `1e9`                                 | RED    |
-| C2 conditioning threshold 60        | → `60.0` (the ±7° set measures 52)                                      | RED    |
-| C3 fy instead of fx / min not max   | `sd[0]` → `sd[1]`; then `max(sd fx, sd fy)` → `min`                     | GREEN (equivalent) |
-| O1 outlier ratio off                | `OUTLIER_VIEW_RATIO = 3.0` → `1e9`                                      | RED    |
-| O2 outlier fraction floor off       | `OUTLIER_VIEW_FRACTION = 0.0025` → `0.0`                                | RED    |
-| O3 bar is the smaller of the two    | `bar = max(` → `min(`                                                   | RED    |
-| O4 no frame is ever an outlier      | `if px > bar` → `if px > 1e9`                                           | RED    |
-| U1 cluster boundary open            | `if angle <= deg` → `<`                                                 | GREEN (equivalent) |
-| U2 no transitive merge              | `parent[find(i)] = find(j)` → `pass`                                    | RED    |
-| W1 directory identity unchecked     | `if actual != directory:` → `if False:`                                 | RED    |
-| W2 no-hard-link fallback off        | `if exc.errno not in _NO_HARDLINKS:` → `if True:`                       | RED    |
-| W3 deterministic temp name          | random token → `<name>.<pid>.partial`                                   | RED    |
-| W4 blocking open                    | `O_NONBLOCK` removed from `_READ_FLAGS`                                 | RED    |
-| W5 regular-file check off           | `if not stat.S_ISREG(...)` → `if False:`                                | GREEN (equivalent) |
-| W6 opened file unchecked            | `check_open_fd(fd, path)` → `pass`                                      | RED    |
-| W7 opened file always inside        | `if _inside(real, roots):` → `if True:`                                 | RED    |
-| S1 output symlink check off         | `if os.path.islink(output_path):` → `if False:`                         | RED    |
-| S2 outlier advisory off             | `if calib.frames_outliers:` → `if False:`                               | RED    |
-| D1 fill_size from the offender only | `fill_size = max(... extenders)` → `= area`                             | RED    |
-| D2 flush components count as far    | `_overhang(r) > 0` → `>= 0`                                             | GREEN → pinned |
+| mutant                              | change                                              | result             |
+| ----------------------------------- | --------------------------------------------------- | ------------------ |
+| C1 conditioning gate off            | `MAX_FOCAL_CONDITIONING = 20.0` → `1e9`             | RED                |
+| C2 conditioning threshold 60        | → `60.0` (the ±7° set measures 52)                  | RED                |
+| C3 fy instead of fx / min not max   | `sd[0]` → `sd[1]`; then `max(sd fx, sd fy)` → `min` | GREEN (equivalent) |
+| O1 outlier ratio off                | `OUTLIER_VIEW_RATIO = 3.0` → `1e9`                  | RED                |
+| O2 outlier fraction floor off       | `OUTLIER_VIEW_FRACTION = 0.0025` → `0.0`            | RED                |
+| O3 bar is the smaller of the two    | `bar = max(` → `min(`                               | RED                |
+| O4 no frame is ever an outlier      | `if px > bar` → `if px > 1e9`                       | RED                |
+| U1 cluster boundary open            | `if angle <= deg` → `<`                             | GREEN (equivalent) |
+| U2 no transitive merge              | `parent[find(i)] = find(j)` → `pass`                | RED                |
+| W1 directory identity unchecked     | `if actual != directory:` → `if False:`             | RED                |
+| W2 no-hard-link fallback off        | `if exc.errno not in _NO_HARDLINKS:` → `if True:`   | RED                |
+| W3 deterministic temp name          | random token → `<name>.<pid>.partial`               | RED                |
+| W4 blocking open                    | `O_NONBLOCK` removed from `_READ_FLAGS`             | RED                |
+| W5 regular-file check off           | `if not stat.S_ISREG(...)` → `if False:`            | GREEN (equivalent) |
+| W6 opened file unchecked            | `check_open_fd(fd, path)` → `pass`                  | RED                |
+| W7 opened file always inside        | `if _inside(real, roots):` → `if True:`             | RED                |
+| S1 output symlink check off         | `if os.path.islink(output_path):` → `if False:`     | RED                |
+| S2 outlier advisory off             | `if calib.frames_outliers:` → `if False:`           | RED                |
+| D1 fill_size from the offender only | `fill_size = max(... extenders)` → `= area`         | RED                |
+| D2 flush components count as far    | `_overhang(r) > 0` → `>= 0`                         | GREEN → pinned     |
 
 The green that was a gap: `D2` — `_overhang` is negative for a component
 inside the majors' extent and exactly zero for one FLUSH with its edge, so
@@ -562,53 +557,53 @@ run: sixteen greens expected; fourteen survived. Three were not predicted
 (`L14`, `L24`, `L25`) and five predicted greens went red (`L15`, `L21`,
 `L23`, `L27`, `S6`).
 
-| mutant                                  | change                                                                        | result |
-| --------------------------------------- | ----------------------------------------------------------------------------- | ------ |
-| L1 multi-start off                      | the three warm starts removed from `_best_fit`                                | RED    |
-| L2 best fit is the worst                | `min(fits, key=rms)` → `max`                                                  | RED    |
-| L3 guess flag dropped                   | `CALIB_USE_INTRINSIC_GUESS` never set (every start is the cold start)         | RED    |
-| L4 start error propagates               | `except cv2.error: continue` → `raise`                                        | GREEN → pinned |
-| L5 non-finite rms wins `min`            | `f.rms if isfinite else inf` → `f.rms`                                        | GREEN → pinned |
-| L6 uncertainty gate off                 | `MAX_FOCAL_UNCERTAINTY = 0.04` → `1e9`                                        | RED    |
-| L7 uncertainty gate tight               | → `0.001`                                                                     | RED    |
-| L8 non-finite uncertainty passes        | `not isfinite(uncertainty) or` removed                                        | RED    |
-| L9 uncertainty advisory off             | `FOCAL_UNCERTAINTY_ADVISORY = 0.025` → `1e9`                                  | RED    |
-| L10 uncertainty advisory always         | → `0.0`                                                                       | RED    |
-| L11 smaller of fx/fy uncertainty        | `sd_f = max(` → `min(`                                                        | GREEN — EQUIVALENT |
-| L12 residual ratio off                  | `OUTLIER_VIEW_RATIO = 3.0` → `1e9`                                            | RED    |
-| L13 residual fraction floor off         | `OUTLIER_VIEW_FRACTION = 0.0025` → `0.0`                                      | RED    |
-| L14 residual drop from three views      | `MIN_VIEWS_FOR_RESIDUAL_DROP = 4` → `2`                                       | GREEN — EQUIVALENT in verdict |
-| L15 residual drop needs five            | → `5`                                                                         | RED    |
-| L16 median includes the view itself     | `np.median(np.delete(pv, k))` → `np.median(pv)`                               | RED    |
-| L17 influence off                       | `INFLUENCE_SHIFT = 0.03` → `1e9`                                              | RED    |
-| L18 influence shift floor off           | → `0.0`                                                                       | GREEN — design question |
-| L19 influence sigma off                 | `INFLUENCE_SIGMA = 4.0` → `0.0`                                               | RED    |
-| L20 influence from four views           | `MIN_VIEWS_FOR_INFLUENCE = 5` → `4`                                           | GREEN → pinned |
-| L21 influence from eleven views         | → `11`                                                                        | RED    |
-| L22 leave-one-out fit cold              | `guess=fit.mtx` → `guess=None`                                                | RED    |
-| L23 sigma from the full fit's sd        | `loose` from `fit.sd / fx` instead of the fit without the view                | RED    |
-| L24 first flagged, not worst            | `score > worst[0]` → `worst is None`                                          | GREEN → pinned |
-| L25 refit after a drop cold             | `fit = _best_fit(...)` → `_fit(...)` in the drop loop                         | GREEN → pinned |
-| L26 no orientation count after drops    | `if outliers:` → `if False:`                                                  | GREEN → pinned |
-| L27 packing in frame order              | `sorted(normals, key=canonical)` → `normals`                                  | RED    |
-| L28 dedup off                           | `if key in seen:` → `if False:`                                               | RED    |
-| L29 the copy is still decoded           | `continue` after the duplicate is recorded removed                            | RED    |
-| L30 too-few message without duplicates  | `if duplicates` → `if False`                                                  | RED    |
-| S1 duplicate advisory off               | `if calib.frames_duplicates:` → `if False:`                                   | RED    |
-| S2 uncertain advisory off               | `if calib.focal_uncertainty > ADVISORY:` → `if False:`                        | RED    |
-| S3 reason not in the advisory           | `f"{n} {why}"` → `f"{n}"`                                                     | GREEN → pinned |
-| S4 reason not in the response           | `"reason": why` removed from the entry                                        | GREEN → pinned |
-| S5 non-regular member vanishes          | `frames.append((name, b""))` removed                                          | RED    |
-| S6 non-regular member not digested      | the three `digest.update` calls removed                                       | RED    |
-| S7 directory output unchecked           | `if os.path.isdir(output_path):` → `if False:`                                | RED    |
-| S8 focal uncertainty not reported       | `"focal_uncertainty"` removed from the response                               | GREEN → pinned |
-| P1 roots re-resolved per call           | `if _env_snapshot is None or _env_snapshot[0] != raw:` → `if True:`           | RED    |
-| P2 snapshot never refreshed             | → `if _env_snapshot is None:`                                                 | GREEN → pinned |
-| I1 fallback ignores roots               | `if configured_roots() is not None: raise` removed                            | RED    |
-| I2 fallback always refuses              | `return dfd` → `raise`                                                        | RED    |
-| I3 no exclusive claim                   | `os.close(os.open(name, _CREATE_FLAGS, ...))` removed                         | GREEN → pinned |
-| D1 remedy count none                    | `removed = <count of minors under fill_size>` → `1`                           | RED    |
-| D2 remedy count off by one              | `{removed - 1} other` → `{removed} other`                                     | RED    |
+| mutant                                 | change                                                                | result                        |
+| -------------------------------------- | --------------------------------------------------------------------- | ----------------------------- |
+| L1 multi-start off                     | the three warm starts removed from `_best_fit`                        | RED                           |
+| L2 best fit is the worst               | `min(fits, key=rms)` → `max`                                          | RED                           |
+| L3 guess flag dropped                  | `CALIB_USE_INTRINSIC_GUESS` never set (every start is the cold start) | RED                           |
+| L4 start error propagates              | `except cv2.error: continue` → `raise`                                | GREEN → pinned                |
+| L5 non-finite rms wins `min`           | `f.rms if isfinite else inf` → `f.rms`                                | GREEN → pinned                |
+| L6 uncertainty gate off                | `MAX_FOCAL_UNCERTAINTY = 0.04` → `1e9`                                | RED                           |
+| L7 uncertainty gate tight              | → `0.001`                                                             | RED                           |
+| L8 non-finite uncertainty passes       | `not isfinite(uncertainty) or` removed                                | RED                           |
+| L9 uncertainty advisory off            | `FOCAL_UNCERTAINTY_ADVISORY = 0.025` → `1e9`                          | RED                           |
+| L10 uncertainty advisory always        | → `0.0`                                                               | RED                           |
+| L11 smaller of fx/fy uncertainty       | `sd_f = max(` → `min(`                                                | GREEN — EQUIVALENT            |
+| L12 residual ratio off                 | `OUTLIER_VIEW_RATIO = 3.0` → `1e9`                                    | RED                           |
+| L13 residual fraction floor off        | `OUTLIER_VIEW_FRACTION = 0.0025` → `0.0`                              | RED                           |
+| L14 residual drop from three views     | `MIN_VIEWS_FOR_RESIDUAL_DROP = 4` → `2`                               | GREEN — EQUIVALENT in verdict |
+| L15 residual drop needs five           | → `5`                                                                 | RED                           |
+| L16 median includes the view itself    | `np.median(np.delete(pv, k))` → `np.median(pv)`                       | RED                           |
+| L17 influence off                      | `INFLUENCE_SHIFT = 0.03` → `1e9`                                      | RED                           |
+| L18 influence shift floor off          | → `0.0`                                                               | GREEN — design question       |
+| L19 influence sigma off                | `INFLUENCE_SIGMA = 4.0` → `0.0`                                       | RED                           |
+| L20 influence from four views          | `MIN_VIEWS_FOR_INFLUENCE = 5` → `4`                                   | GREEN → pinned                |
+| L21 influence from eleven views        | → `11`                                                                | RED                           |
+| L22 leave-one-out fit cold             | `guess=fit.mtx` → `guess=None`                                        | RED                           |
+| L23 sigma from the full fit's sd       | `loose` from `fit.sd / fx` instead of the fit without the view        | RED                           |
+| L24 first flagged, not worst           | `score > worst[0]` → `worst is None`                                  | GREEN → pinned                |
+| L25 refit after a drop cold            | `fit = _best_fit(...)` → `_fit(...)` in the drop loop                 | GREEN → pinned                |
+| L26 no orientation count after drops   | `if outliers:` → `if False:`                                          | GREEN → pinned                |
+| L27 packing in frame order             | `sorted(normals, key=canonical)` → `normals`                          | RED                           |
+| L28 dedup off                          | `if key in seen:` → `if False:`                                       | RED                           |
+| L29 the copy is still decoded          | `continue` after the duplicate is recorded removed                    | RED                           |
+| L30 too-few message without duplicates | `if duplicates` → `if False`                                          | RED                           |
+| S1 duplicate advisory off              | `if calib.frames_duplicates:` → `if False:`                           | RED                           |
+| S2 uncertain advisory off              | `if calib.focal_uncertainty > ADVISORY:` → `if False:`                | RED                           |
+| S3 reason not in the advisory          | `f"{n} {why}"` → `f"{n}"`                                             | GREEN → pinned                |
+| S4 reason not in the response          | `"reason": why` removed from the entry                                | GREEN → pinned                |
+| S5 non-regular member vanishes         | `frames.append((name, b""))` removed                                  | RED                           |
+| S6 non-regular member not digested     | the three `digest.update` calls removed                               | RED                           |
+| S7 directory output unchecked          | `if os.path.isdir(output_path):` → `if False:`                        | RED                           |
+| S8 focal uncertainty not reported      | `"focal_uncertainty"` removed from the response                       | GREEN → pinned                |
+| P1 roots re-resolved per call          | `if _env_snapshot is None or _env_snapshot[0] != raw:` → `if True:`   | RED                           |
+| P2 snapshot never refreshed            | → `if _env_snapshot is None:`                                         | GREEN → pinned                |
+| I1 fallback ignores roots              | `if configured_roots() is not None: raise` removed                    | RED                           |
+| I2 fallback always refuses             | `return dfd` → `raise`                                                | RED                           |
+| I3 no exclusive claim                  | `os.close(os.open(name, _CREATE_FLAGS, ...))` removed                 | GREEN → pinned                |
+| D1 remedy count none                   | `removed = <count of minors under fill_size>` → `1`                   | RED                           |
+| D2 remedy count off by one             | `{removed - 1} other` → `{removed} other`                             | RED                           |
 
 Thirty-one of forty-five red. Eleven greens pinned in nine tests, each watched red
 under its own mutant on live code first, for the stated reason:
@@ -685,3 +680,55 @@ orientations, and accepts the same 1.5-px case either way (nothing stands
 decides which refusal is worded, and the dropped-view wording would be the
 more useful one — noted with L18 for the next audit. 411 tests after
 pinning.
+
+## Round 15 — the 1.11.1 floor, the 1.12.0 dogfood fixes, and the #80 drop-value pin (2026-09-02)
+
+Baseline: `uv run pytest -q` → 416 passed in 181 s. Every mutant was applied to
+the working tree, the FULL suite was run against it, and the file restored from a
+backup before the next; `git status --porcelain` reported only the untracked
+`tmp/` after each. The passed count is the count of catching tests (416 − passed),
+confirmed afterwards by re-applying each mutant against only the test predicted
+to catch it and recording the assertion that fired.
+
+| guard                                    | mutation applied                                                        | result         | caught by                                                        |
+| ---------------------------------------- | ----------------------------------------------------------------------- | -------------- | ---------------------------------------------------------------- |
+| W1 write refusal never fires             | the whole `if …realpath(intended) == realpath(real_dir):` → `if False:` | RED (1)        | `…not_written_into_the_checkerboard_directory` — DID NOT RAISE   |
+| W2 only an explicit `output_path` judged | the derived `<image>_undistorted.png` branch → `os.devnull`             | RED (1)        | same test, the derived-name refusal at line 1984                 |
+| W3 intended path not normalised          | `os.path.dirname(os.path.realpath(intended))` → `os.path.dirname(...)`  | RED (1)        | same test, the `..`-through-sibling path at line 2004            |
+| W4 directory not normalised              | `== os.path.realpath(real_dir)` → `== real_dir`                         | GREEN → EQUIV  | —                                                                |
+| W5 comparison inverted                   | `==` → `!=`                                                             | RED (15)       | the positive control, plus every lens test that corrects a photo |
+| S1 skip advisory removed                 | `if calib.frames_skipped:` → `if False and …`                           | RED (1)        | `…skipped_frame_is_named_even_when_the_calibration_is_thick`     |
+| S2 skip named only when thin             | `… and len(calib.frames_used) < 5:` (the pre-1.12.0 gate restored)      | RED (1)        | same test — `assert 0 == 1`                                      |
+| S3 skipped names dropped                 | `{', '.join(calib.frames_skipped)}` removed from the message            | RED (1)        | same test — `'not_a_board.png' in …`                             |
+| S4 INNER-corners hint dropped            | `(INNER corners, one less per side than squares)` removed               | RED (1)        | same test — `'INNER corners' in …`                               |
+| S5 remaining count dropped               | `used the remaining {len(calib.frames_used)}` → `used the rest`         | GREEN → pinned | —                                                                |
+| M1 corner counts transposed              | `{row_corners} x {col_corners}` → `{col_corners} x {row_corners}`       | RED (1)        | `…wrong_corner_counts_are_echoed_the_way_they_were_given`        |
+| M2 as-given clarifier dropped            | `"(row_corners x col_corners, as given)"` → `""`                        | RED (1)        | same test                                                        |
+| D1 influence rule off                    | `INFLUENCE_SHIFT = 0.005` → `1e9`                                       | RED (3)        | the floor test and the #80 pin, both by name                     |
+| D2 influence thresholds removed          | `INFLUENCE_SHIFT` → `0.0` and `INFLUENCE_SIGMA` → `1e-9`                | RED (32)       | the floor test, and the lens suite at large                      |
+| D3 floor back to the old 3%              | `INFLUENCE_SHIFT = 0.005` → `0.03`                                      | RED (1)        | `test_a_bad_view_is_not_excused_by_the_size_of_the_set`          |
+
+Thirteen of fifteen red. The three drop-rule mutants fail at the same assertion
+with three different signatures, which is what makes them worth keeping apart:
+`D1` leaves `set()` where `{'view0.png'}` is expected (nothing dropped), `D2`
+drops `view0`, `view4` and more (everything dropped), and `D3` leaves `set()`
+again — the bad view excused by the size of its set, which is exactly the
+1.11.1 decision holding. `D1` additionally fails the #80 pin on its own words,
+"the rule is expected to fire on this set".
+
+One green PINNED: `S5` — the skip advisory names how many files were left out
+but nothing asserted it names how many frames the calibration actually USED.
+That is the half of the message that says whether what survived is worth
+trusting: one skip out of fourteen views is a note, the same skip out of five is
+most of the set gone, and without the number the two read identically. Pinned
+inside `test_a_skipped_frame_is_named_even_when_the_calibration_is_thick` and
+tied to the response's own `frames_used`, so the message cannot drift from what
+was fitted. Watched red under its own mutant first — `assert 'remaining 14' in
+'1 file(s) … were left out …'` — and green on live code.
+
+One green EQUIVALENT, proven from the source rather than from a fixture: `W4`.
+`check_readable` returns `os.path.realpath(path)` (`src/plantcv_mcp/paths.py:76`)
+and `real_dir` is its return value, so the guard's second `realpath` resolves an
+already-resolved path. No input can distinguish the two forms; the call stays as
+the local statement of what the comparison needs. 416 tests after pinning (S5
+added an assertion to an existing test, not a new one).
