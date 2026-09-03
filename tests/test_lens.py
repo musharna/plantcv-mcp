@@ -2045,6 +2045,13 @@ def test_a_skipped_frame_is_named_even_when_the_calibration_is_thick(tmp_path):
     assert len(skipped) == 1
     assert "not_a_board.png" in skipped[0]["message"]
     assert "INNER corners" in skipped[0]["message"]
+    # Round 15 (S5): the count of frames the calibration actually USED is the
+    # half of the advisory that says whether what survived is worth trusting.
+    # One skip out of fourteen views is a note; the same skip out of five is
+    # most of the set gone, and the two read identically without this number.
+    # Tied to the response's own frames_used so the message cannot drift from
+    # what was fitted.
+    assert f"remaining {res['frames_used']}" in skipped[0]["message"]
 
     # Positive control: with nothing skipped the warning does not appear, so
     # it reports a real skip rather than firing on every call.
