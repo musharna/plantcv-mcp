@@ -160,10 +160,13 @@ guards withhold numbers; advisories travel with them.
 - **Wrong scale, wrong kind, changed file** — a marker measured 4.35× wrong by PlantCV's own
   ROI method; a thermal session handed to an RGB measurer; an image edited after
   segmentation. Each is refused naming the right tool.
-- **A lens calibration the boards do not determine** — checkerboards tilted only ±7° fit
-  their own corners to 0.03% of the frame yet put the corrected image 391 px wrong at the
-  corners. A set whose focal length is that weakly determined is refused naming the number;
-  a frame that fits far worse than the rest is dropped by name and the camera refitted.
+- **A lens calibration the boards do not determine** — a set whose focal length the fit
+  leaves undetermined is refused naming the number, and one that determines it only loosely
+  is accepted with the looseness said. That judgement is made per view, because the fit's
+  uncertainty falls as frames are added whether or not the geometry improves: re-saving the
+  same photographs, or shooting more of the same angle, buys nothing. A frame that fits far
+  worse than the rest, or that moves the answer far more than the others allow, is dropped
+  by name and the camera refitted.
 - **No colour card when one was asked for** — `color_correct=true` raises rather than
   returning colour traits that look corrected and are not.
 
