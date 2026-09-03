@@ -40,3 +40,12 @@ Thumbs.db
 # Local agent scratch: Codex consult threads and Claude worktrees.
 .codex-consult/
 .claude/
+
+# Audit and dogfood scratch: panel ASK files and the one-off probe scripts
+# behind measured findings. Ignored rather than merely untracked, because
+# untracked-and-unignored made `git add -A` a live hazard in a repo whose
+# commits are otherwise curated — several memory records carry a standing
+# "never git add -A here" warning that this line makes unnecessary. The probes
+# that back a published finding are copied into the project memory directory
+# alongside the record they support, so nothing load-bearing lives only here.
+tmp/
