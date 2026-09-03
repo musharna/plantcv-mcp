@@ -546,6 +546,24 @@ def calibrate_lens_from_frames(
     # because the loop goes on to drop the guilty view too. Dropping the
     # wrong view and getting a worse answer are nearly independent here.
     #
+    # SCOPE, corrected by the panel of 1.12.0: that sweep faulted ONE view per
+    # set, and the conclusion does not carry to two. Sweeping every PAIR of
+    # 2%-sheared views through six- and eight-view sets, ten pairs are worse
+    # with the rule than without — 152 px vs 79, 315 vs 7, 1409 vs 123 — and in
+    # nearly all of them an HONEST view is dropped while both faulty views
+    # stay. Every one of those drops is the influence test at 5-7 sigma; the
+    # residual test never fires. The mechanism is masking: two faults that
+    # agree with each other bend the camera and leave a TIGHT remainder when
+    # the honest view is removed, so the honest view disagrees with a tight
+    # remainder by many sigma — the exact signature this rule reads as guilt.
+    # Leave-one-out has a breakdown point of one outlier and cannot be patched
+    # into seeing past a second; separating them needs a high-breakdown fit
+    # (consensus over random subsets, LMedS-style) rather than one leave-one-out
+    # from the contaminated whole. Not attempted here: it is a redesign of this
+    # loop and needs its own measurement over every fixture set. Documented in
+    # the guide so the user is not told to read frames_outliers as an
+    # accusation when two frames may be bent.
+    #
     # Four ways to pick the guilty view more reliably were measured and none
     # beat this one: judging each leave-one-out fit against the median of the
     # leave-one-out fits rather than the all-views fit (10/24 against 11/24,

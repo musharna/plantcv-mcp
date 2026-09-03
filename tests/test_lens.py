@@ -2300,3 +2300,194 @@ def test_focal_uncertainty_judges_each_axis_against_its_own_focal_length():
     sd2 = np.array([4.0, 4.0, 0.0, 0.0, 0.0])
     assert abs(calibration_uncertainty(square, sd2) - 0.01) < 1e-9
     assert isinstance(LensCalibration, type)
+
+
+def test_the_write_refusal_survives_a_parent_symlink_retargeted_mid_call(tmp_path):
+    """Panel of 1.12.0 (codex, reproduced): output_path was resolved TWICE --
+    once by the early refusal and again by check_readable after the
+    calibration -- and it is the second value that is written. Retargeting a
+    parent symlink in that window left the early verdict stale and put the
+    correction INSIDE the checkerboard directory with the guard silent.
+    Reproduced before the fix: 'corrected.png' appeared among the frames."""
+    import plantcv_mcp.server as S
+
+    boards = tmp_path / "boards"
+    _write_frames(boards)
+    safe = tmp_path / "safe"
+    safe.mkdir()
+    scene = tmp_path / "scene.png"
+    cv2.imwrite(
+        str(scene), _distort(cv2.cvtColor(_view(*POSES[0]), cv2.COLOR_GRAY2BGR))
+    )
+    link = tmp_path / "out"
+    link.symlink_to(safe)
+
+    before = {p.name for p in boards.iterdir()}
+    real_calibration = S._lens_calibration
+
+    def retarget_then_calibrate(*args, **kwargs):
+        # Exactly the window: after the early refusal, before check_readable.
+        link.unlink()
+        link.symlink_to(boards)
+        return real_calibration(*args, **kwargs)
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(S, "_lens_calibration", retarget_then_calibrate)
+    try:
+        with pytest.raises(ValueError, match="checkerboard"):
+            S._correct_lens_impl(
+                str(scene),
+                str(boards),
+                row_corners=ROWS,
+                col_corners=COLS,
+                output_path=str(link / "corrected.png"),
+            )
+    finally:
+        monkey.undo()
+    assert {p.name for p in boards.iterdir()} == before, (
+        "the correction landed among the calibration frames"
+    )
+
+    # Positive control: with the link left alone the same call succeeds, so the
+    # guard refuses the retarget and not the tool.
+    link.unlink()
+    link.symlink_to(safe)
+    res = S._correct_lens_impl(
+        str(scene),
+        str(boards),
+        row_corners=ROWS,
+        col_corners=COLS,
+        output_path=str(link / "corrected.png"),
+    )
+    assert os.path.exists(res["corrected_image_path"])
+    assert {p.name for p in boards.iterdir()} == before
+
+
+def test_directory_identity_is_asked_of_the_filesystem(tmp_path):
+    """Panel of 1.12.0: the refusal compared realpath STRINGS. Spelling is not
+    identity — on a case-insensitive filesystem (macOS APFS by default, where
+    realpath resolves symlinks but does NOT case-fold) '/BOARDS' and '/boards'
+    are one directory whose realpaths differ as text, and the refusal missed it.
+
+    HONEST SCOPE, so a later reader does not overrate this test: on Linux
+    (st_dev, st_ino) and realpath-string agree on every case reachable here —
+    symlinks resolve to the same string, directories cannot be hard-linked, and
+    a bind mount needs root. So this pins the helper's CONTRACT, not a
+    difference from the string form; the distinguishing case cannot be built on
+    this platform, and the change is defensive. Recorded as such rather than
+    dressed up as a reproduction."""
+    from plantcv_mcp.server import _same_directory
+
+    boards = tmp_path / "boards"
+    boards.mkdir()
+    other = tmp_path / "other"
+    other.mkdir()
+    alias = tmp_path / "alias"
+    alias.symlink_to(boards)
+
+    assert _same_directory(str(boards), str(boards))
+    # A different spelling reaching the same inode.
+    assert _same_directory(str(alias), str(boards))
+    assert str(alias) != str(boards)
+    # Negative control: genuinely different directories stay different.
+    assert not _same_directory(str(other), str(boards))
+    # A path that does not exist cannot be the checkerboard directory, and a
+    # failed stat must not raise out of a guard.
+    assert not _same_directory(str(tmp_path / "nope"), str(boards))
+    # Nor may a file masquerade as its parent directory.
+    scene = boards / "f.png"
+    scene.write_bytes(b"x")
+    assert not _same_directory(str(scene), str(boards))
+
+
+def test_the_calibration_cache_is_bounded(tmp_path):
+    """Panel of 1.12.0: `_lens_cache` had no eviction, and keying on CONTENT
+    means every edit to a checkerboard directory mints an entry and orphans the
+    old one — so a server watching a directory that grows never stops
+    accumulating, each entry holding its own frames_used."""
+    import plantcv_mcp.server as S
+
+    # Drives the REAL _lens_calibration eviction path -- an earlier draft
+    # re-implemented the eviction inline and so tested only itself. The
+    # calibration and the frame reading are stubbed because neither is what is
+    # under test; each call presents a new directory digest, which is what a
+    # server watching a growing directory does.
+    calls = {"n": 0}
+
+    def fake_frames(directory):
+        calls["n"] += 1
+        return [], f"digest{calls['n']}"
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(S, "_load_checkerboard_frames", fake_frames)
+    monkey.setattr(S, "calibrate_lens_from_frames", lambda *a, **k: object())
+    with S._lens_cache_lock:
+        S._lens_cache.clear()
+    try:
+        # A literal count, not one derived from the constant: sizing the loop
+        # from LENS_CACHE_ENTRIES makes raising it a hang rather than a failure.
+        for _ in range(40):
+            S._lens_calibration("/nowhere", ROWS, COLS)
+        assert len(S._lens_cache) <= 32, (
+            f"cache grew to {len(S._lens_cache)} entries over 40 distinct "
+            "checkerboard directories"
+        )
+        # Least-recently-used went first; the most recent survived.
+        assert ("digest1", ROWS, COLS) not in S._lens_cache
+        assert ("digest40", ROWS, COLS) in S._lens_cache
+    finally:
+        monkey.undo()
+        with S._lens_cache_lock:
+            S._lens_cache.clear()
+
+
+def test_the_two_fault_masking_limit_is_measured_not_assumed(tmp_path):
+    """Panel of 1.12.0 (codex, reproduced): with TWO mildly faulty views the
+    drop rule can make the correction much worse. Views 2 and 3 of six sheared
+    2% each: the loop drops the HONEST view 0 on the influence test and lands
+    at ~1409 px, against ~123 px with dropping switched off.
+
+    This pins the LIMIT, not a fix. The #80 sweep that justified keeping the
+    rule faulted ONE view per set, and its 28-of-32 conclusion does not carry
+    to two -- leave-one-out breaks down at a single outlier, and a second one
+    masks the first. Pinned so that a future high-breakdown rewrite of the drop
+    loop has a stated, measured target to beat, and so nobody re-derives the
+    single-fault conclusion and calls the matter settled."""
+    from plantcv_mcp import lens as L
+
+    d = tmp_path / "twofault"
+    d.mkdir()
+    for i, (rvec, tvec) in enumerate(POSES[:6]):
+        img = _view(rvec, tvec)
+        if i in (2, 3):
+            img = _shear(img, 0.02)
+        cv2.imwrite(str(d / f"v{i:02d}.png"), _distort(img))
+
+    with_rule = L.calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    dropped = [name for name, _, _ in with_rule.frames_outliers]
+    assert dropped, "the rule is expected to fire on this set"
+    # The honest view is the one that goes, and both faulty views stay.
+    assert "v00.png" in dropped
+    assert "v02.png" not in dropped and "v03.png" not in dropped
+    # Influence, never residual -- which is why requiring both tests would not
+    # be a fix: the legitimate single-fault catches are influence-only too.
+    assert all(
+        "moves the focal length" in why for _, _, why in with_rule.frames_outliers
+    )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(L, "INFLUENCE_SHIFT_PX", 1e9)
+    monkeypatch.setattr(L, "OUTLIER_VIEW_RATIO", 1e9)
+    without_rule = L.calibrate_lens(str(d), row_corners=ROWS, col_corners=COLS)
+    monkeypatch.undo()
+    assert not without_rule.frames_outliers
+
+    field_with = float(_applied_field_error(with_rule).max())
+    field_without = float(_applied_field_error(without_rule).max())
+    # The documented direction: worse WITH the rule, by a wide margin.
+    assert field_with > 3 * field_without, (
+        f"the two-fault masking limit no longer reproduces: {field_with:.1f} px "
+        f"with the rule against {field_without:.1f} px without. If a drop-rule "
+        "rewrite closed it, that is good news -- update this test and the "
+        "guide's two-fault paragraph rather than deleting them."
+    )

@@ -206,11 +206,28 @@ audit of 1.12.0 found this guide crediting the drop rule with that refusal.
 On a SMALL set the view that gets dropped is often not the guilty one, and that is worth
 knowing before you read `frames_outliers` as an accusation. Six views with one sheared by
 5%: the honest view scores 11.0 sigma against the sheared view's 7.8, and the honest one
-goes. Dropping is still worth doing — measured over 32 faulted sets against the same sets
-with the rule switched off, 28 of 32 drops improve the correction, several of them three
-to ten times over, and six of the seven drops that removed an honest view still improved
-the answer, because the loop goes on to drop the guilty view as well. Four sharper rules
-were measured and none beat it. **The limit underneath is that a mildly bent board is
+goes. With ONE faulty view, dropping is still worth doing — measured over 32 such sets
+against the same sets with the rule switched off, 28 of 32 drops improve the correction,
+several of them three to ten times over, and six of the seven drops that removed an honest
+view still improved the answer, because the loop goes on to drop the guilty view as well.
+Four sharper rules were measured and none beat it.
+
+**With TWO mildly faulty views the rule can make the answer much worse, and that scoping
+matters: the 28-of-32 figure above was measured on single-fault sets only.** Sweeping every
+pair of 2%-sheared views through six- and eight-view sets, ten pairs come out worse with
+the rule than without it — 152 px against 79 px, 315 px against 7 px, 1409 px against
+123 px. In nearly every one the view dropped is an honest one while both faulty views stay,
+and every such drop comes from the influence test, never the residual test, at 5–7 sigma.
+The mechanism is masking: two faults that agree with each other bend the fitted camera and
+leave a TIGHT remainder when the honest view is removed, so the honest view "disagrees with
+a tight remainder by many sigma" — which is exactly the signature the rule reads as guilt.
+Leave-one-out cannot see past a second outlier; separating them needs a high-breakdown fit
+(a consensus over many random subsets rather than one leave-one-out from the contaminated
+whole), which is not what this code does today. Until it does: if two or more of your
+frames may be bent or rolling-shuttered, do not rely on `frames_outliers` to find them —
+shoot more views and a rigid board.
+
+**The limit underneath is that a mildly bent board is
 absorbed by the camera model** as a slightly different camera at a slightly different
 pose, so the fit's own numbers stay reassuring while the correction is wrong: sets
 measured here sit at rms 0.42–0.74 px and focal uncertainty as low as 0.46% with the

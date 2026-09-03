@@ -4,6 +4,55 @@ All notable changes to `plantcv-mcp` are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.1] — 2026-09-03
+
+The findings the 1.12.0 panel raised that 1.13.0 named but did not close.
+Every one reproduced here first.
+
+### Fixed
+
+- **The write refusal could be walked past with a symlink.** `output_path` was
+  resolved TWICE — once by the early refusal and again by `check_readable`
+  after the calibration — and it is the second value that gets written.
+  Retargeting a parent symlink in that window left the early verdict stale and
+  put the correction inside the checkerboard directory with the guard silent
+  (reproduced: `corrected.png` appeared among the calibration frames). The
+  early check stays, for a fast named refusal before the expensive work; a
+  binding check now runs on the path actually about to be written. Same split
+  as `check_readable` and `check_open_fd` in `paths.py`.
+- **Directory identity is asked of the filesystem, not of the spelling.** The
+  refusal compared realpath strings, so a path that resolves to the same
+  directory without matching as text slipped through — a case-insensitive
+  filesystem (macOS APFS by default, where realpath resolves symlinks but does
+  not case-fold), a bind mount, a second path to the same inode. It now
+  compares `(st_dev, st_ino)`. On Linux this is equivalent to the string form
+  for every case reachable in a test, so it is a defensive change, said plainly
+  rather than dressed up as a reproduction.
+- **The calibration cache is bounded** (32 entries, least-recently-used
+  evicted). Keying on directory CONTENT means every edit mints an entry and
+  orphans the old one, so a server watching a directory that grows never
+  stopped accumulating, each entry holding its own `frames_used`.
+
+### Documented
+
+- **The drop rule can make a two-fault set much worse, and the figure that
+  justified keeping it was scoped to one fault.** The 28-of-32 sweep behind
+  "dropping earns its place" faulted a SINGLE view per set. Sweeping every pair
+  of 2%-sheared views through six- and eight-view sets, ten pairs come out
+  worse with the rule than without — 152 px against 79, 315 against 7, 1409
+  against 123 — and in nearly every one an honest view is dropped while both
+  faulty views stay. Every such drop is the influence test at 5–7 sigma and the
+  residual test never fires, so requiring both would not fix it: the legitimate
+  single-fault catches are influence-only too. The mechanism is masking — two
+  faults that agree with each other bend the camera and leave a TIGHT remainder
+  when the honest view is removed, which is exactly the signature the rule
+  reads as guilt. Leave-one-out breaks down at one outlier; separating two
+  needs a high-breakdown fit (consensus over random subsets) rather than one
+  leave-one-out from the contaminated whole. That is a redesign of the drop
+  loop and is not attempted here. Pinned by a test so the limit is measured
+  rather than described, and the guide now tells users not to read
+  `frames_outliers` as an accusation when two frames may be bent.
+
 ## [1.13.0] — 2026-09-02
 
 Findings from an independent panel audit of 1.12.0 — five judges, all

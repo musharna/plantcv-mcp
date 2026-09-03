@@ -20,6 +20,7 @@ import json
 import math
 import os
 import threading
+from collections import OrderedDict
 from typing import Any, NotRequired
 
 import numpy as np
@@ -913,7 +914,18 @@ def _measure_regions_impl(
 # contents, not its path: a directory whose frames changed is a different
 # camera as far as the maths is concerned, and a stale calibration silently
 # mis-corrects every image it touches.
-_lens_cache: dict[tuple[str, int, int], LensCalibration] = {}
+#
+# Bounded, and least-recently-used first out. Keying on CONTENT means every
+# edit to a checkerboard directory mints a new entry and orphans the old one,
+# so a long-lived server watching a directory that grows never stops
+# accumulating — and each entry holds its own `frames_used`, so the total
+# filename data grows quadratically as frames are appended and the set
+# recalibrated (panel of 1.12.0). The entries are small (a 3x3 matrix, five
+# coefficients, the names), which is why this is a bound rather than an
+# eviction policy worth tuning; a miss costs one recalibration, measured at
+# 3.7 s on nine 5-MP frames.
+LENS_CACHE_ENTRIES = 32
+_lens_cache: OrderedDict[tuple[str, int, int], LensCalibration] = OrderedDict()
 _lens_cache_lock = threading.Lock()
 
 
@@ -979,6 +991,10 @@ def _lens_calibration(
     key = (digest, int(row_corners), int(col_corners))
     with _lens_cache_lock:
         cached = _lens_cache.get(key)
+        if cached is not None:
+            # Most-recently-used last, so eviction drops the directory nobody
+            # has touched in a while rather than the one in active use.
+            _lens_cache.move_to_end(key)
     if cached is not None:
         return cached
     calib = calibrate_lens_from_frames(
@@ -986,6 +1002,9 @@ def _lens_calibration(
     )
     with _lens_cache_lock:
         _lens_cache[key] = calib
+        _lens_cache.move_to_end(key)
+        while len(_lens_cache) > LENS_CACHE_ENTRIES:
+            _lens_cache.popitem(last=False)
     return calib
 
 
@@ -1186,6 +1205,53 @@ def _lens_advisories(calib: LensCalibration, info: dict, out: str) -> list[dict]
     return warnings
 
 
+def _same_directory(a: str, b: str) -> bool:
+    """Whether two paths name the SAME directory, asked of the filesystem.
+
+    Not a string comparison: spelling is not identity. A case-insensitive
+    filesystem (macOS APFS by default) resolves '/BOARDS' and '/boards' to one
+    directory whose realpaths differ as text, because realpath resolves
+    symlinks and does not case-fold; a bind mount, or a second path to the same
+    inode, does the same on Linux. (st_dev, st_ino) is what the kernel means by
+    "the same directory" (panel of 1.12.0). A path that does not exist cannot
+    be the checkerboard directory, so a failed stat is False.
+    """
+    try:
+        sa, sb = os.stat(a), os.stat(b)
+    except OSError:
+        return False
+    return (sa.st_dev, sa.st_ino) == (sb.st_dev, sb.st_ino)
+
+
+def _refuse_writing_into_the_boards(target: str, real_dir: str, named: str) -> None:
+    """Refuse a correction whose directory IS the checkerboard directory.
+
+    The checkerboard directory is calibration INPUT and nothing else: every
+    file in it is read as a frame, and the cache is keyed on the digest of its
+    contents. A correction written there becomes a candidate frame on the next
+    call -- measured on real photos, the tool's own <image>_undistorted.png
+    came back in frames_skipped, caught only by the majority-size rule because
+    the correction happened to crop; a correction that cropped nothing would be
+    fitted as a distorted view of the camera that produced it. Even skipped it
+    changes the directory's digest, so every image of a batch refits from
+    scratch (3.7 s per call on nine 5-MP frames) instead of reusing the cache
+    this tool advertises. Refused rather than filtered by name: filtering
+    leaves the directory a sink, and a renamed correction walks straight back
+    in.
+    """
+    if _same_directory(os.path.dirname(os.path.realpath(target)), real_dir):
+        raise ValueError(
+            f"The corrected image would be written into the checkerboard "
+            f"directory {named!r}, which is read as calibration "
+            "input: every file there is a candidate frame and the cached "
+            "calibration is keyed on the directory's contents, so the "
+            "correction would be offered back to the next calibration and "
+            "each image would refit from scratch. Nothing was written. Pass "
+            "output_path pointing outside that directory, or move the image "
+            "you are correcting out of it."
+        )
+
+
 def _correct_lens_impl(
     image_path: str,
     checkerboard_dir: str,
@@ -1214,17 +1280,17 @@ def _correct_lens_impl(
         if output_path is None
         else output_path
     )
-    if os.path.dirname(os.path.realpath(intended)) == os.path.realpath(real_dir):
-        raise ValueError(
-            f"The corrected image would be written into the checkerboard "
-            f"directory {checkerboard_dir!r}, which is read as calibration "
-            "input: every file there is a candidate frame and the cached "
-            "calibration is keyed on the directory's contents, so the "
-            "correction would be offered back to the next calibration and "
-            "each image would refit from scratch. Nothing was written. Pass "
-            "output_path pointing outside that directory, or move the image "
-            "you are correcting out of it."
-        )
+    # This is the EARLY, NAMED refusal — cheap, and before the calibration, so
+    # a caller who names the wrong place is told immediately. It is NOT the
+    # binding one: _refuse_writing_into_the_boards is called again on the path
+    # actually about to be written, below. Panel of 1.12.0 reproduced the gap:
+    # output_path was resolved here and AGAIN by check_readable after the
+    # calibration, and it is the second value that is written, so retargeting a
+    # parent symlink in between left this verdict stale and put the correction
+    # in the calibration directory with the guard silent. Same split as
+    # check_readable (the early named refusal) and check_open_fd (the binding
+    # one) in paths.py.
+    _refuse_writing_into_the_boards(intended, real_dir, checkerboard_dir)
 
     calib = _lens_calibration(real_dir, row_corners, col_corners)
     corrected, info = undistort_image(img, calib)
@@ -1234,6 +1300,7 @@ def _correct_lens_impl(
         # better calibration is the normal workflow); write_image refuses to
         # follow a symlink squatting on it.
         out = os.path.splitext(real_image)[0] + "_undistorted.png"
+        _refuse_writing_into_the_boards(out, real_dir, checkerboard_dir)
         write_image(out, corrected)
     else:
         # A user-supplied path pointing at an existing file is not ours to
@@ -1253,6 +1320,14 @@ def _correct_lens_impl(
                 "the file to create (it must not exist yet)."
             )
         out = check_readable(output_path)
+        # The BINDING check, on the path that is actually about to be written.
+        # check_readable above is a SECOND resolution of the caller's name, and
+        # the early refusal judged the first: between them the calibration runs,
+        # and a parent symlink retargeted in that window used to land the
+        # correction in the calibration directory with the guard silent
+        # (reproduced, panel of 1.12.0). Judged here, there is no window left
+        # that write_image does not itself close.
+        _refuse_writing_into_the_boards(out, real_dir, checkerboard_dir)
         try:
             write_image(out, corrected, exclusive=True)
         except FileExistsError as exc:
