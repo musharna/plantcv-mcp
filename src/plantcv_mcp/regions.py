@@ -568,12 +568,39 @@ def measure_regions(
     with isolated_pcv_outputs():
         labeled, n, slots = partition_regions(mask, regions)
 
-        if "size" in analyses:
-            pcv.analyze.size(img=img, labeled_mask=labeled, n_labels=n)
-        if "color" in analyses:
-            pcv.analyze.color(
-                rgb_img=img, labeled_mask=labeled, n_labels=n, colorspaces="hsv"
-            )
+        # PlantCV must never be handed a label with no pixels.
+        #
+        # `analyze.color` assigns `h, s, v = cv2.split(hsv)` INSIDE
+        # `if np.count_nonzero(mask) != 0` and then reads `s` outside it
+        # (PlantCV 4.11.3, analyze/color.py:177), so an empty label raises
+        # UnboundLocalError. `_iterate_analysis` runs once per label, so ONE
+        # empty cell raises for EVERY cell and the caller loses the whole
+        # image -- not just the empty region. `analyze.size` tolerates it and
+        # returns a full zero-valued group, which is its own trap and is why
+        # empty slots are refused by name rather than measured.
+        #
+        # So the labels are COMPACTED here: only labels carrying pixels are
+        # passed through, renumbered 1..k. Empty slots are already marked
+        # unmeasured by partition_regions and never read a trait group, so
+        # nothing downstream needs the gaps.
+        #
+        # Renumbering is exactly the operation that could mis-attribute a
+        # trait to a neighbouring plant, so `_read_group` is keyed through
+        # `compacted` below rather than by the slot's original label.
+        present = sorted({int(v) for v in np.unique(labeled)} - {0})
+        compacted = {old_label: i for i, old_label in enumerate(present, start=1)}
+        if compacted:
+            dense = np.zeros_like(labeled)
+            for old_label, new_label in compacted.items():
+                dense[labeled == old_label] = new_label
+            k = len(present)
+
+            if "size" in analyses:
+                pcv.analyze.size(img=img, labeled_mask=dense, n_labels=k)
+            if "color" in analyses:
+                pcv.analyze.color(
+                    rgb_img=img, labeled_mask=dense, n_labels=k, colorspaces="hsv"
+                )
 
         out: list[RegionMeasurement] = []
         for slot in slots:
@@ -583,7 +610,7 @@ def measure_regions(
 
             traits: dict[str, TraitValue] = {
                 name: TraitValue(value=obs.get("value"), unit=obs.get("label"))
-                for name, obs in _read_group(slot.label).items()
+                for name, obs in _read_group(compacted[slot.label]).items()
             }
             # Checked on the pixel values, before any unit conversion.
             lp_warning = implausible_longest_path_warning(traits)

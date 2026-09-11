@@ -4,6 +4,41 @@ All notable changes to `plantcv-mcp` are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **One empty grid cell refused the whole image whenever `analyses` carried
+  `"color"`.** PlantCV 4.11.3's `analyze.color` assigns `h, s, v =
+  cv2.split(hsv)` inside `if np.count_nonzero(mask) != 0` and then reads `s`
+  outside that guard (`analyze/color.py:177`), so an empty label raises
+  `UnboundLocalError`. Because `_iterate_analysis` runs once per label, ONE
+  empty cell raised for EVERY cell and the caller lost the entire frame rather
+  than the one empty region — surfacing as
+  `refused_because: "UnboundLocalError: cannot access local variable 's'"`.
+  Labels are now compacted before any analysis runs: only labels carrying
+  pixels are passed through, renumbered 1..k, so PlantCV never sees an empty
+  one. Empty slots were already refused by name and never read a trait group,
+  so nothing downstream needed the gaps.
+
+  Found dogfooding a real tray of Disa orchids: a `2 x 3` grid over 5 pots
+  always has an empty cell, and a recipe that must record senescence must carry
+  `"color"`. Either condition alone is fine — `("size",)` with an empty cell
+  works, and `("size", "color")` with every cell full works — so no existing
+  test combined them. `analyze.size` tolerates an empty label and returns a
+  full zero-valued group, which is a separate trap and is why empty regions are
+  refused by name rather than measured.
+
+  Renumbering is exactly the operation that could mis-attribute a trait to a
+  neighbouring plant, so `_read_group` is keyed through the compaction map;
+  reverting that single lookup to the original label fails 14 tests.
+
+  ⚠️ Noted while writing the fixture, NOT fixed here: a perfectly uniform
+  region makes `scipy.stats.circmean` return `numpy.float16`, which PlantCV's
+  own `add_observation` then rejects as not JSON-serialisable. A real
+  photograph is never that uniform; the test fixture is textured rather than
+  the library worked around.
+
 ## [1.13.1] — 2026-09-03
 
 The findings the 1.12.0 panel raised that 1.13.0 named but did not close.

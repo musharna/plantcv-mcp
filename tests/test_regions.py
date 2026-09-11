@@ -794,3 +794,72 @@ def test_an_intruded_upon_cell_keeps_its_own_plant():
     area = rows[0]["traits"]["area"]["value"]
     assert own * 0.95 < area < own * 1.05  # its own disc, not the intruder
     assert rows[1]["traits"]["area"]["value"] > 20000
+
+
+def test_an_empty_cell_does_not_break_the_colour_analysis():
+    """PlantCV 4.11.3 `analyze.color` raises UnboundLocalError on an EMPTY
+    labeled region when colorspaces includes HSV.
+
+    `plantcv/plantcv/analyze/color.py`: `h, s, v = cv2.split(hsv)` is assigned
+    inside `if np.count_nonzero(mask) != 0`, while line 177 reads `s` outside
+    that guard. `_iterate_analysis` calls the function once per label, so ONE
+    empty label raises for EVERY label and the whole image is refused.
+
+    Found 2026-09-11 dogfooding a real tray: a 2x3 grid over 5 pots always has
+    an empty cell, and a recipe that must record senescence must carry "color".
+    Either alone is fine; together they refused every frame.
+    """
+    img, mask = _tray()
+    results = measure_regions(
+        img, mask, _rect_grid(img, mask), analyses=("size", "color")
+    )
+
+    assert len(results) == 4
+    assert results[2]["measured"] is False, "the empty cell is still refused"
+    assert results[2]["traits"] is None
+
+    # Positive control in the same test: a fix that refused everything, or that
+    # dropped colour silently, must not pass here.
+    for i in (0, 1, 3):
+        assert results[i]["measured"] is True
+        assert results[i]["traits"]["area"]["value"] > 0
+        assert results[i]["traits"]["hue_circular_mean"]["value"] is not None
+
+
+def test_colour_traits_are_attributed_to_the_right_region_past_an_empty_cell():
+    """The regression this fix could plausibly cause.
+
+    Skipping empty labels means renumbering them for PlantCV, so a mapping
+    error would hand region 3's colour to region 2 -- silently, with entirely
+    plausible numbers. The discs are deliberately different sizes AND different
+    hues so a shift is detectable at all.
+    """
+    img, mask = _tray()
+    yy, xx = np.ogrid[:SIZE, :SIZE]
+    hues = {0: (40, 200, 40), 1: (200, 40, 40), 3: (40, 40, 200)}
+    # Textured, not flat. A PERFECTLY uniform region makes scipy's circmean
+    # return numpy.float16, which PlantCV's own add_observation then rejects
+    # as not JSON-serialisable (RuntimeError, "Data type <class
+    # 'numpy.float16'> is not compatible with JSON"). That is a second,
+    # separate PlantCV fragility, unrelated to the empty-label crash under
+    # test here; a real photograph is never that uniform, so the fixture is
+    # made realistic rather than the library worked around.
+    rng = np.random.default_rng(0)
+    for i, (cx, cy, r) in PLANTS.items():
+        sel = (xx - cx) ** 2 + (yy - cy) ** 2 <= r**2
+        base = np.array(hues[i], dtype=np.int16)
+        noise = rng.integers(-12, 13, size=(int(sel.sum()), 3))
+        img[sel] = np.clip(base + noise, 0, 255).astype(np.uint8)
+
+    results = measure_regions(
+        img, mask, _rect_grid(img, mask), analyses=("size", "color")
+    )
+
+    areas = {i: results[i]["traits"]["area"]["value"] for i in (0, 1, 3)}
+    assert areas[0] < areas[1] < areas[3], f"areas mis-attributed: {areas}"
+
+    seen = {i: results[i]["traits"]["hue_circular_mean"]["value"] for i in (0, 1, 3)}
+    assert len(set(round(v) for v in seen.values())) == 3, (
+        f"three deliberately different hues collapsed to fewer: {seen} -- "
+        "colour is being attributed to the wrong region"
+    )
