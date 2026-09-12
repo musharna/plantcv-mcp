@@ -108,3 +108,6 @@ extend-exclude = ["docs"]
 # registry-side constraints fail here rather than in the publish workflow, which
 # only runs once the tag is already cut.
 dev = ["pytest>=8.0", "ruff>=0.6", "jsonschema>=4.0"]
+
+[tool.mutmut]
+source_paths = ["src"]
