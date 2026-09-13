@@ -3,6 +3,7 @@ import json
 import numpy as np
 import pytest
 
+from plantcv_mcp.session import UnknownSessionError
 from plantcv_mcp.server import (
     _measure_impl,
     _segment_impl,
@@ -95,7 +96,7 @@ def test_segment_returns_no_traits_and_measure_needs_its_session(tmp_path):
 
 
 def test_measure_rejects_an_unknown_session_id():
-    with pytest.raises(Exception) as exc:
+    with pytest.raises(UnknownSessionError) as exc:
         _measure_impl("not-a-real-session")
     assert "not-a-real-session" in str(exc.value)
 
