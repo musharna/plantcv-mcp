@@ -3,13 +3,13 @@ import json
 import numpy as np
 import pytest
 
-from plantcv_mcp.session import UnknownSessionError
 from plantcv_mcp.server import (
     _measure_impl,
     _segment_impl,
     build_server,
     list_methods_impl,
 )
+from plantcv_mcp.session import UnknownSessionError
 
 
 def _write_green_png(tmp_path):
