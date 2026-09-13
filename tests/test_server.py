@@ -9,6 +9,7 @@ from plantcv_mcp.server import (
     build_server,
     list_methods_impl,
 )
+from plantcv_mcp.session import UnknownSessionError
 
 
 def _write_green_png(tmp_path):
@@ -95,7 +96,7 @@ def test_segment_returns_no_traits_and_measure_needs_its_session(tmp_path):
 
 
 def test_measure_rejects_an_unknown_session_id():
-    with pytest.raises(Exception) as exc:
+    with pytest.raises(UnknownSessionError) as exc:
         _measure_impl("not-a-real-session")
     assert "not-a-real-session" in str(exc.value)
 
