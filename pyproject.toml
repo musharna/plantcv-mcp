@@ -111,3 +111,4 @@ dev = ["pytest>=8.0", "ruff>=0.6", "jsonschema>=4.0"]
 
 [tool.mutmut]
 source_paths = ["src"]
+also_copy = [".editorconfig", ".github", ".gitignore", ".mcp.json", ".pre-commit-config.yaml", ".zenodo.json", "CHANGELOG.md", "CITATION.cff", "CLAUDE.md", "CONTRIBUTING.md", "LICENSE", "NOTICE", "README.md", "SECURITY.md", "docs", "glama.json", "scripts", "server.json"]
