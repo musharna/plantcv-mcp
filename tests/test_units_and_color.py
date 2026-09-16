@@ -250,3 +250,22 @@ def test_measure_over_the_real_mcp_layer_returns_structured_content():
     )
     assert payload["px_per_mm"] == 4.0
     assert payload["traits"]["area"]["unit"] == "mm2"
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        1e-200,  # positive, finite, squares to 0.0 -> ZeroDivisionError
+        1e200,  # positive, finite, squares past float range -> OverflowError
+        10**400,  # int with no float representation -> OverflowError in float()
+    ],
+)
+def test_a_scale_whose_square_leaves_the_float_range_is_refused(bad):
+    """fuzz #96: `px_per_mm <= 0 or not isfinite(px_per_mm)` passed each of
+    these, and the areal conversion then blew up on px_per_mm**2 with a raw
+    builtin exception instead of the guard's own ValueError."""
+    with pytest.raises(ValueError, match="px_per_mm"):
+        convert_units({"area": {"value": 1.0, "unit": "pixels"}}, bad)
+    # Positive control in the same test: a valid scale still converts.
+    ok = convert_units({"area": {"value": 100.0, "unit": "pixels"}}, 10.0)
+    assert ok["area"]["value"] == pytest.approx(1.0)

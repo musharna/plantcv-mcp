@@ -43,35 +43,76 @@ class ThermalLoad:
     source: str  # "flir", "csv", "npz"
 
 
+def _undecodable(path: str, expected: str, exc: BaseException) -> ValueError:
+    """The one error a decoder failure becomes, whatever the library raised.
+
+    The bytes are user content, so every way they can be malformed (empty,
+    truncated, not a zip, a pickled object array, text that is not numbers) is
+    an invalid-input case naming the file and what it should have held — the
+    same contract as every other refusal in this module. The library's own
+    type and message ride along as the reason; nothing is hidden, only named.
+    """
+    reason = str(exc).splitlines()[0][:120] if str(exc) else ""
+    return ValueError(
+        f"Could not decode {path!r} as {expected}: {type(exc).__name__}: {reason}"
+    )
+
+
+def _decode_flir(data: bytes) -> np.ndarray:
+    import flyr
+
+    with tempfile.TemporaryDirectory(prefix="plantcv-mcp-flir-") as d:
+        copy = os.path.join(d, "frame.jpg")
+        with open(copy, "wb") as fh:
+            fh.write(data)
+        return np.asarray(flyr.unpack(copy).celsius, dtype=np.float64)
+
+
+def _decode_npz(data: bytes, path: str) -> np.ndarray:
+    # Only the library call is inside the try: this module's own refusals
+    # below (no arrays, several arrays) must not be re-wrapped as "undecodable".
+    try:
+        z = np.load(io.BytesIO(data))
+    except Exception as exc:  # the decoder's failure, whatever type it picks
+        raise _undecodable(path, "a .npz holding one 2-D Celsius array", exc) from exc
+    with z:
+        names = list(z.files)
+        if not names:
+            raise ValueError(f"{path!r} holds no arrays")
+        if len(names) > 1:
+            # Picking one silently would be a guess between candidate
+            # frames; the wrong one still measures beautifully.
+            raise ValueError(
+                f"{path!r} holds {len(names)} arrays ({sorted(names)}); "
+                "a thermal .npz must hold exactly one 2-D Celsius array. "
+                "Re-save just the temperature frame."
+            )
+        try:
+            return np.asarray(z[names[0]], dtype=np.float64)
+        except Exception as exc:  # a member that is not a loadable numeric .npy
+            raise _undecodable(
+                path, f"a .npz whose array {names[0]!r} is a numeric frame", exc
+            ) from exc
+
+
 def load_thermal(path: str) -> ThermalLoad:
     data = read_image_bytes(path)
     digest = digest_bytes(data)
     ext = os.path.splitext(path)[1].lower()
     if ext in {".jpg", ".jpeg"}:
-        import flyr
-
-        with tempfile.TemporaryDirectory(prefix="plantcv-mcp-flir-") as d:
-            copy = os.path.join(d, "frame.jpg")
-            with open(copy, "wb") as fh:
-                fh.write(data)
-            celsius = np.asarray(flyr.unpack(copy).celsius, dtype=np.float64)
+        try:
+            celsius = _decode_flir(data)
+        except Exception as exc:
+            raise _undecodable(path, "a FLIR radiometric JPEG", exc) from exc
         source = "flir"
     elif ext == ".csv":
-        celsius = np.loadtxt(io.BytesIO(data), delimiter=",", dtype=np.float64)
+        try:
+            celsius = np.loadtxt(io.BytesIO(data), delimiter=",", dtype=np.float64)
+        except Exception as exc:
+            raise _undecodable(path, "a .csv of Celsius values", exc) from exc
         source = "csv"
     elif ext == ".npz":
-        with np.load(io.BytesIO(data)) as z:
-            if not z.files:
-                raise ValueError(f"{path!r} holds no arrays")
-            if len(z.files) > 1:
-                # Picking one silently would be a guess between candidate
-                # frames; the wrong one still measures beautifully.
-                raise ValueError(
-                    f"{path!r} holds {len(z.files)} arrays ({sorted(z.files)}); "
-                    "a thermal .npz must hold exactly one 2-D Celsius array. "
-                    "Re-save just the temperature frame."
-                )
-            celsius = np.asarray(z[z.files[0]], dtype=np.float64)
+        celsius = _decode_npz(data, path)
         source = "npz"
     else:
         raise ValueError(

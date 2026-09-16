@@ -113,6 +113,29 @@ def _bboxes_from(rois: Any) -> list[tuple[int, int, int, int]]:
     return boxes
 
 
+def _refuse_cells_outside(
+    cells: list[tuple[int, int, int, int]], mask: np.ndarray, ncols: int
+) -> None:
+    """Refuse any (x, y, w, h) cell that is not entirely inside the frame.
+
+    Hand-entered geometry can put a cell partly or wholly off the frame. Such a
+    rectangle does not measure nothing — it reached native OpenCV/PlantCV code
+    inside measure_regions and killed the process with SIGSEGV (PlantCV 4.11.3:
+    coord=(-10,-10), 50x50 on a 100x100 image). Refuse it before anything
+    native runs.
+    """
+    img_h, img_w = int(mask.shape[0]), int(mask.shape[1])
+    for i, (x, y, w, h) in enumerate(cells):
+        if x < 0 or y < 0 or x + w > img_w or y + h > img_h:
+            row, col = divmod(i, ncols)
+            raise RegionSpecError(
+                f"Region row {row} col {col} at ({x}, {y}) size {w}x{h} lies "
+                f"outside the {img_w}x{img_h} image. Every cell must fit "
+                "entirely inside the frame; check coord, height, width and "
+                "spacing."
+            )
+
+
 def build_regions(
     img: np.ndarray,
     mask: np.ndarray,
@@ -208,6 +231,21 @@ def build_regions(
                 "mode='rect_grid' needs `spacing` [x, y] between cell origins, "
                 "even for a single cell (use [0, 0] there)."
             )
+        # The grid is plain arithmetic (PlantCV's _grid_roi_rect: cell (r, c)
+        # starts at coord + (c, r) * spacing and is width x height), so it is
+        # checked against the frame HERE, in Python ints, before any of it is
+        # handed to native code. Doing it only afterwards, on what PlantCV
+        # drew, let a coordinate past int32 reach the cv2 binding first and
+        # raise OverflowError there instead of a refusal.
+        _refuse_cells_outside(
+            [
+                (coord[0] + c * spacing[0], coord[1] + r * spacing[1], width, height)
+                for r in range(nrows)
+                for c in range(ncols)
+            ],
+            mask,
+            ncols,
+        )
         rois = pcv.roi.multi_rect(
             img=img,
             coord=coord,
@@ -221,21 +259,10 @@ def build_regions(
     bboxes = _bboxes_from(rois)
 
     if mode == "rect_grid":
-        # Hand-entered geometry can put a cell partly or wholly off the frame.
-        # Such a rectangle does not measure nothing — it reached native
-        # OpenCV/PlantCV code inside measure_regions and killed the process
-        # with SIGSEGV (PlantCV 4.11.3: coord=(-10,-10), 50x50 on a 100x100
-        # image). Refuse it here, before anything native runs.
-        img_h, img_w = int(mask.shape[0]), int(mask.shape[1])
-        for i, (x, y, w, h) in enumerate(bboxes):
-            if x < 0 or y < 0 or x + w > img_w or y + h > img_h:
-                row, col = divmod(i, ncols)
-                raise RegionSpecError(
-                    f"Region row {row} col {col} at ({x}, {y}) size {w}x{h} lies "
-                    f"outside the {img_w}x{img_h} image. Every cell must fit "
-                    "entirely inside the frame; check coord, height, width and "
-                    "spacing."
-                )
+        # Backstop on what PlantCV actually drew: the predicted grid above was
+        # already refused if it left the frame, so this fires only if PlantCV's
+        # geometry ever stops matching the prediction.
+        _refuse_cells_outside(bboxes, mask, ncols)
     if len(bboxes) != nrows * ncols:
         # Not an error: auto_grid can return fewer if it cannot resolve the
         # layout. Say so rather than silently measuring a different grid.

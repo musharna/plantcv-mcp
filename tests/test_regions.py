@@ -794,3 +794,45 @@ def test_an_intruded_upon_cell_keeps_its_own_plant():
     area = rows[0]["traits"]["area"]["value"]
     assert own * 0.95 < area < own * 1.05  # its own disc, not the intruder
     assert rows[1]["traits"]["area"]["value"] > 20000
+
+
+@pytest.mark.parametrize(
+    "coord, spacing, ncols",
+    [
+        ((10**18, 10**18), (0, 0), 1),  # the issue's repro: past int32
+        ((-(10**18), 0), (0, 0), 1),  # negative, past int32
+        ((2**31 - 10, 0), (2**31 - 10, 0), 2),  # each inside int32, sum is not
+    ],
+)
+def test_rect_grid_refuses_geometry_past_int32_before_native_code(
+    coord, spacing, ncols
+):
+    """fuzz #96: the out-of-frame check ran on what pcv.roi.multi_rect DREW, so
+    a coordinate the cv2 binding cannot represent raised OverflowError there
+    first. The grid is predicted in Python ints and refused before any call."""
+    img, mask = _small_scene()
+    with pytest.raises(RegionSpecError, match="outside"):
+        build_regions(
+            img,
+            mask,
+            mode="rect_grid",
+            nrows=1,
+            ncols=ncols,
+            coord=coord,
+            height=10,
+            width=10,
+            spacing=spacing,
+        )
+    # Positive control: an in-frame grid with the same shape is built.
+    good = build_regions(
+        img,
+        mask,
+        mode="rect_grid",
+        nrows=1,
+        ncols=2,
+        coord=(10, 10),
+        height=30,
+        width=30,
+        spacing=(40, 0),
+    )
+    assert good.bboxes == [(10, 10, 30, 30), (50, 10, 30, 30)]

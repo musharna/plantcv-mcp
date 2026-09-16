@@ -119,6 +119,31 @@ def isolated_pcv_outputs() -> Iterator[None]:
             pcv.params.saved_color_scale = saved_palette
 
 
+def check_px_per_mm(px_per_mm: float) -> float:
+    """Return px_per_mm as a float that every conversion below can divide by.
+
+    The conversion divides by px_per_mm AND by its square, so the scale is
+    valid only if both are positive finite floats. NaN fails every comparison
+    (`<= 0` alone lets it through), a subnormal like 1e-200 is positive and
+    finite but squares to 0.0, 1e200 squares past the float range, and an int
+    beyond 1e308 cannot become a float at all. Checking the derived factors is
+    what rules all of these out; a magnitude bound would be a guess at the
+    same fact. Shared by every caller (measure, regions, images) so the rule
+    is stated once.
+    """
+    try:
+        scale = float(px_per_mm)
+        area_scale = scale**2
+    except (OverflowError, TypeError, ValueError):
+        scale = area_scale = math.inf
+    if not (0.0 < scale < math.inf and 0.0 < area_scale < math.inf):
+        raise ValueError(
+            f"px_per_mm must be a positive finite number whose square is also "
+            f"positive and finite (roughly 1e-150 to 1e150), got {px_per_mm!r}"
+        )
+    return scale
+
+
 def convert_units(
     traits: dict[str, TraitValue], px_per_mm: float
 ) -> dict[str, TraitValue]:
@@ -133,11 +158,10 @@ def convert_units(
     Positions (`center_of_mass`, `ellipse_center`) are left in pixels: without a
     defined origin, a millimetre coordinate is meaningless.
     """
-    # NaN fails every comparison, so `<= 0` alone lets it through — and every
-    # converted trait would come back NaN-but-labelled-mm. This is the shared
-    # conversion layer, so the check holds for every caller (regions included).
-    if px_per_mm <= 0 or not math.isfinite(float(px_per_mm)):
-        raise ValueError(f"px_per_mm must be a positive finite number, got {px_per_mm}")
+    # This is the shared conversion layer, so the check holds for every
+    # caller (regions included); see check_px_per_mm for what it rules out.
+    px_per_mm = check_px_per_mm(px_per_mm)
+    area_scale = px_per_mm**2
 
     out: dict[str, TraitValue] = {}
     for name, trait in traits.items():
@@ -145,7 +169,7 @@ def convert_units(
         if name in LINEAR_TRAITS and isinstance(value, int | float):
             out[name] = {"value": value / px_per_mm, "unit": "mm"}
         elif name in AREA_TRAITS and isinstance(value, int | float):
-            out[name] = {"value": value / (px_per_mm**2), "unit": "mm2"}
+            out[name] = {"value": value / area_scale, "unit": "mm2"}
         else:
             out[name] = dict(trait)
     return out
@@ -184,10 +208,8 @@ def measure_traits(
         convert_units for why the mapping is explicit rather than unit-derived.
     """
     validate_analyses(analyses)
-    if px_per_mm is not None and (
-        px_per_mm <= 0 or not math.isfinite(float(px_per_mm))
-    ):
-        raise ValueError(f"px_per_mm must be a positive finite number, got {px_per_mm}")
+    if px_per_mm is not None:
+        check_px_per_mm(px_per_mm)
 
     assert_not_degenerate(analyze_mask(mask))
 

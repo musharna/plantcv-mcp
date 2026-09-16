@@ -455,3 +455,27 @@ def test_spectral_degenerate_refusal_names_segment_hyperspectral(tmp_path):
         measure_spectral(path, np.zeros((H, W), np.uint8), indices=["ndvi"])
     assert "segment_hyperspectral" in str(exc.value)
     assert "channel" not in str(exc.value)
+
+
+# --- fuzz #96: a header PlantCV cannot read is this module's ValueError ---
+
+
+def test_a_header_without_wavelength_is_refused_naming_the_pair(tmp_path):
+    """PlantCV's ENVI reader indexes header_dict["wavelength"]; a header without
+    that field raised KeyError('wavelength') straight through load_cube, with
+    no file name and no statement of what an ENVI header must define."""
+    hdr = tmp_path / "nowl.hdr"
+    hdr.write_bytes(
+        b"ENVI\nsamples = 2\nlines = 2\nbands = 1\nheader offset = 0\n"
+        b"data type = 1\ninterleave = bsq\nbyte order = 0\n"
+    )
+    raw = tmp_path / "nowl.raw"
+    raw.write_bytes(b"\x00\x00\x00\x00")
+    with pytest.raises(
+        ValueError, match=r"nowl\.raw.*nowl\.hdr.*ENVI.*KeyError.*wavelength"
+    ) as info:
+        load_cube(str(raw))
+    assert isinstance(info.value.__cause__, KeyError)
+    # Positive control: a complete pair written the normal way still loads.
+    good = load_cube(_write_cube(tmp_path, "good", _known_cube()))
+    assert good.cube.array_data.shape == (H, W, len(WL))

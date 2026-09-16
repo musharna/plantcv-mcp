@@ -137,6 +137,10 @@ def test_fill_holes_plus_keep_largest_recovers_the_known_disc_area():
         ([{"op": "fill_holes", "size": 3}], "unknown parameter"),
         ([{"op": "dilate", "ksize": "3"}], "ksize"),  # wrong type
         ([{"op": "fill_holes"}, {"op": "erode", "ksize": 0}], "op 1"),  # index named
+        # fuzz #96: "op" is JSON off the wire, so it can be an array or an
+        # object; `[] in REFINE_OPS` was a TypeError (unhashable), not a refusal.
+        ([{"op": []}], "must be a string"),
+        ([{"op": {}}], "must be a string"),
     ],
 )
 def test_invalid_op_lists_are_refused_before_anything_runs(ops, needle):
