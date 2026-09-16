@@ -117,7 +117,23 @@ def load_cube(path: str) -> CubeLoad:
             fh.write(raw_bytes)
         with open(base + ".hdr", "wb") as fh:
             fh.write(hdr_bytes)
-        cube = pcv.readimage(base + ".raw", mode="envi")
+        try:
+            cube = pcv.readimage(base + ".raw", mode="envi")
+        except Exception as exc:
+            # The pair is user content. PlantCV's ENVI reader indexes the
+            # header fields it needs (KeyError on a missing one), reshapes the
+            # raw bytes to samples x lines x bands (ValueError on a size
+            # mismatch) and parses the numbers (ValueError). Each is an
+            # invalid-input case for THIS loader, named like every other
+            # refusal here, not a library trace for the client to decode.
+            reason = str(exc).splitlines()[0][:120] if str(exc) else ""
+            raise ValueError(
+                f"Could not decode {raw_path!r} + {hdr_path!r} as an ENVI cube: "
+                f"{type(exc).__name__}: {reason}. The header must define "
+                "samples, lines, bands, data type, interleave, byte order and "
+                "wavelength, and the .raw must hold exactly samples*lines*bands "
+                "values of that data type."
+            ) from exc
     cube.filename = raw_path
     return CubeLoad(cube=cube, digest=digest, raw_path=raw_path, hdr_path=hdr_path)
 

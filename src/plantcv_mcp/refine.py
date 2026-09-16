@@ -125,6 +125,14 @@ def validate_ops(ops: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
                 f"op {i}: each entry needs an 'op' name; got {raw!r}."
             )
         name = raw["op"]
+        # Membership is tested on the name, so the name must be a string first:
+        # ops come off the wire as JSON, where "op" can be a list or object,
+        # and `[] in dict` is a TypeError, not a refusal.
+        if not isinstance(name, str):
+            raise RefineSpecError(
+                f"op {i}: 'op' must be a string naming the operation, got "
+                f"{name!r}. Valid: {sorted(REFINE_OPS)}."
+            )
         if name not in REFINE_OPS:
             raise RefineSpecError(
                 f"op {i}: unknown op {name!r}. Valid: {sorted(REFINE_OPS)}."

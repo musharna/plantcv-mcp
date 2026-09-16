@@ -270,3 +270,35 @@ def test_a_noisy_thermal_mask_is_advised_in_thermal_terms(tmp_path):
     msg = next(w.message for w in seg.warnings if w.code == "noisy_segmentation")
     assert "segment_thermal" in msg and "band" in msg
     assert "colourspace" not in msg and "segment()" not in msg
+
+
+# --- fuzz #96: a decoder failure is this module's ValueError, not the library's ---
+
+
+def test_an_empty_npz_is_refused_naming_the_file_and_what_it_should_hold(tmp_path):
+    """np.load on zero bytes raised a bare EOFError ("No data left in file"),
+    which _loud forwarded verbatim; nothing said which file or what a thermal
+    .npz must contain."""
+    empty = tmp_path / "empty.npz"
+    empty.write_bytes(b"")
+    with pytest.raises(ValueError, match=r"empty\.npz.*Celsius.*EOFError") as info:
+        load_thermal(str(empty))
+    assert isinstance(info.value.__cause__, EOFError)
+    # Positive control: a real one-array .npz still loads on the same path.
+    frame = np.full((4, 4), 20.0)
+    assert load_thermal(_write_npz(tmp_path, frame)).source == "npz"
+
+
+def test_a_truncated_npz_is_refused_naming_the_file_and_what_it_should_hold(tmp_path):
+    """A zip local-header prefix and nothing else raised zipfile.BadZipFile
+    ("File is not a zip file") straight through load_thermal."""
+    import zipfile
+
+    stub = tmp_path / "stub.npz"
+    stub.write_bytes(b"PK\x03\x04\x00\x00\x00\x00")
+    with pytest.raises(ValueError, match=r"stub\.npz.*Celsius.*BadZipFile") as info:
+        load_thermal(str(stub))
+    assert isinstance(info.value.__cause__, zipfile.BadZipFile)
+    # Positive control: a real one-array .npz still loads on the same path.
+    frame = np.full((4, 4), 20.0)
+    assert load_thermal(_write_npz(tmp_path, frame)).source == "npz"
