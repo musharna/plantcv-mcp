@@ -4,6 +4,20 @@ All notable changes to `plantcv-mcp` are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The test suite left an isolation worker alive at session end.** Invisible
+  to a plain `pytest` (the interpreter exit kills daemon children), fatal to
+  the nightly mutation run: mutmut runs the suite in-process for its stats
+  pass, so the leaked worker became mutmut's own child, and when it exited
+  mid-run mutmut's reaper met an unregistered pid and aborted (`KeyError`,
+  4,233 of 8,576 mutants checked; reproduced locally at 3,292 of 8,669).
+  `tests/conftest.py` now shuts the shared worker down at session end and
+  turns the run red if any spawned worker is still alive, naming its pid.
+  Control: with the shutdown disabled the check catches the live worker.
+
 ## [1.13.1] — 2026-09-03
 
 The findings the 1.12.0 panel raised that 1.13.0 named but did not close.
