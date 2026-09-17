@@ -52,6 +52,15 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     if (
         os.environ.get("PLANTCV_TEST_SKIP_WORKER_SHUTDOWN") != "1"
     ):  # control seam for the leak check
+        # Kill first, then let shutdown_worker() clean the handles. The graceful
+        # stop waits up to 5 s for a worker to answer; under a mutant that broke
+        # the protocol it never does, and mutmut times a mutant's tests against
+        # the clean run, so a 5 s wait on a sub-second test subset read as 364
+        # "timeouts" in one night (2026-09-17). At session end the worker is
+        # disposable: nothing will call it again.
+        proc = getattr(workers._worker, "_proc", None)
+        if proc is not None and proc.is_alive():
+            proc.kill()
         workers.shutdown_worker()
     # The spawn context's resource_tracker is a stdlib helper that lives for the
     # whole process by design and exits with it; it is not a worker.
