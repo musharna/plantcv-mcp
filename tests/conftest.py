@@ -42,7 +42,10 @@ def _live_children() -> list[tuple[int, str]]:
             )
         except (OSError, StopIteration):
             continue  # raced with exit; a process that is gone is not a leak
-        out.append((int(entry.name), cmd[:120]))
+        # Full command line: a fixed-width cut once landed inside the word
+        # "resource_tracker" (long worktree path + mutmut's -B) and the stdlib
+        # tracker was reported as a leaked worker, failing mutmut's stats run.
+        out.append((int(entry.name), cmd))
     return out
 
 
@@ -70,7 +73,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         if "multiprocessing" in c[1] and "resource_tracker" not in c[1]
     ]
     if leaked:
-        lines = "\n".join(f"  pid {pid}: {cmd}" for pid, cmd in leaked)
+        lines = "\n".join(f"  pid {pid}: {cmd[:120]}" for pid, cmd in leaked)
         session.config.pluginmanager.get_plugin("terminalreporter").write_line(
             f"\nLEAKED WORKER PROCESSES after session teardown ({len(leaked)}):\n{lines}\n"
             "A worker left alive here is reaped by mutmut's parent and aborts the "
