@@ -29,10 +29,17 @@ def _live_children() -> list[tuple[int, str]]:
             continue
         try:
             status = (entry / "status").read_text()
-            ppid = next(line for line in status.splitlines() if line.startswith("PPid:")).split()[1]
+            ppid = next(
+                line for line in status.splitlines() if line.startswith("PPid:")
+            ).split()[1]
             if int(ppid) != me:
                 continue
-            cmd = (entry / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+            cmd = (
+                (entry / "cmdline")
+                .read_bytes()
+                .replace(b"\0", b" ")
+                .decode(errors="replace")
+            )
         except (OSError, StopIteration):
             continue  # raced with exit; a process that is gone is not a leak
         out.append((int(entry.name), cmd[:120]))
@@ -42,11 +49,17 @@ def _live_children() -> list[tuple[int, str]]:
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     from plantcv_mcp import workers
 
-    if os.environ.get("PLANTCV_TEST_SKIP_WORKER_SHUTDOWN") != "1":  # control seam for the leak check
+    if (
+        os.environ.get("PLANTCV_TEST_SKIP_WORKER_SHUTDOWN") != "1"
+    ):  # control seam for the leak check
         workers.shutdown_worker()
     # The spawn context's resource_tracker is a stdlib helper that lives for the
     # whole process by design and exits with it; it is not a worker.
-    leaked = [c for c in _live_children() if "multiprocessing" in c[1] and "resource_tracker" not in c[1]]
+    leaked = [
+        c
+        for c in _live_children()
+        if "multiprocessing" in c[1] and "resource_tracker" not in c[1]
+    ]
     if leaked:
         lines = "\n".join(f"  pid {pid}: {cmd}" for pid, cmd in leaked)
         session.config.pluginmanager.get_plugin("terminalreporter").write_line(
