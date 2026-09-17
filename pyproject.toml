@@ -111,4 +111,11 @@ dev = ["pytest>=8.0", "ruff>=0.6", "jsonschema>=4.0"]
 
 [tool.mutmut]
 source_paths = ["src"]
+# Wall/CPU limit per mutant = (estimated test time + timeout_constant) * timeout_multiplier.
+# The isolation worker is a fresh spawn per mutant child (the shared one from the stats
+# pass is shut down at session end on purpose; a shared pipe across 8 children crashed
+# mutmut). Its first analysis runs mutmut-instrumented code and cost 41 s measured, while
+# the mapped test's clean estimate was 0.19 s, so the default 1 s constant read as 375
+# "timeouts" a night. 60 s covers a cold, instrumented worker.
+timeout_constant = 60.0
 also_copy = [".editorconfig", ".github", ".gitignore", ".mcp.json", ".pre-commit-config.yaml", ".zenodo.json", "CHANGELOG.md", "CITATION.cff", "CLAUDE.md", "CONTRIBUTING.md", "LICENSE", "NOTICE", "README.md", "SECURITY.md", "docs", "glama.json", "scripts", "server.json"]
