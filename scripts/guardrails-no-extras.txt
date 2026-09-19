@@ -1,0 +1,1 @@
+sam  # torch + torchvision + segment-anything, about 2 GB; tested in the sam job in ci.yml
