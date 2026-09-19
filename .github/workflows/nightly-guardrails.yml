@@ -47,7 +47,7 @@ jobs:
           # Repo-specific system prerequisites (R for rpy2, OpenCV libs, ...) live in
           # scripts/guardrails-setup.sh so the template stays generic.
           if [ -x scripts/guardrails-setup.sh ]; then bash scripts/guardrails-setup.sh; fi
-          uv sync --all-extras --dev
+          uv sync --all-extras --no-extra sam --dev
           if [ -f requirements-dev.txt ]; then uv pip install -r requirements-dev.txt; fi
           uv pip install "mutmut==3.7.0" pytest
       - name: Baseline suite is green (a red baseline makes every mutant "killed")
@@ -332,7 +332,7 @@ jobs:
           # Repo-specific system prerequisites (R for rpy2, OpenCV libs, ...) live in
           # scripts/guardrails-setup.sh so the template stays generic.
           if [ -x scripts/guardrails-setup.sh ]; then bash scripts/guardrails-setup.sh; fi
-          uv sync --all-extras --dev
+          uv sync --all-extras --no-extra sam --dev
           if [ -f requirements-dev.txt ]; then uv pip install -r requirements-dev.txt; fi
           uv pip install hypothesis pytest
       - uses: anthropics/claude-code-action@4169884de317bc1b4cb1b47f4476d76fed92b384 # v1

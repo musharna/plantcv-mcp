@@ -215,6 +215,7 @@ async def test_server_registers_exactly_the_expected_tools():
         "measure",
         "measure_morphology",
         "count_leaves",
+        "segment_leaves_sam",
         "measure_regions",
         "calibrate_scale_from_marker",
         "correct_lens_distortion",

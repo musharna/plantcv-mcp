@@ -37,6 +37,49 @@ jobs:
       - name: Tests
         run: uv run --python ${{ matrix.python-version }} pytest -q
 
+  # The optional `sam` extra: torch (CPU wheels, from the index pinned in
+  # pyproject.toml), torchvision, segment-anything, and the 375 MB ViT-B
+  # checkpoint. Kept out of every other job on purpose; this one installs it,
+  # runs only the SAM tests, on CPU, and caches the checkpoint directory. The
+  # checkpoint is fetched by the tool's own download code, so the URL, the size
+  # and the pinned SHA-256 are checked against the real file here. One Python:
+  # the lock resolving on 3.11-3.13 is `uv lock --check` below, and the base
+  # matrix above already runs the no-model SAM tests on all three.
+  sam:
+    runs-on: ubuntu-latest
+    env:
+      PLANTCV_MCP_SAM_TESTS: "1"
+      PLANTCV_MCP_SAM_CACHE: ${{ github.workspace }}/.sam-cache
+      CUDA_VISIBLE_DEVICES: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+
+      - name: Lockfile is current
+        run: uv lock --check
+
+      - name: Install (locked) with the sam extra
+        run: uv sync --locked --extra sam --python 3.12
+
+      - name: torch is the CPU build
+        run: |
+          uv run --extra sam --python 3.12 python - <<'PY'
+          import torch
+          print("torch", torch.__version__, "cuda build:", torch.version.cuda)
+          assert torch.version.cuda is None, "a CUDA build of torch was installed"
+          PY
+
+      - name: Checkpoint cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .sam-cache
+          key: sam-vit-b-ec2df62732614e57411cdcf32a23ffdf28910380d03139ee0f4fcbe91eb8c912
+
+      - name: SAM tests (CPU)
+        run: uv run --extra sam --python 3.12 pytest -q tests/test_sam_leaves.py tests/test_sam_leaves_model.py -p no:cacheprovider
+
   package:
     runs-on: ubuntu-latest
     steps:
@@ -114,6 +157,7 @@ jobs:
                   "refine",
                   "segment",
                   "segment_hyperspectral",
+                  "segment_leaves_sam",
                   "segment_thermal",
                   "suggest_segmentation",
               ]

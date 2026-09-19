@@ -34,6 +34,7 @@ from .regions import (
     measure_regions_spectral,
     measure_regions_thermal,
 )
+from .sam_leaves import SamLeavesResult, segment_leaves_sam
 from .thermal import (
     ThermalLoad,
     ThermalResult,
@@ -122,6 +123,16 @@ def leaves(
     px_per_mm: float | None,
 ) -> LeafInstancesResult:
     return count_leaves(img, mask, min_distance=min_distance, px_per_mm=px_per_mm)
+
+
+def leaves_sam(
+    img: np.ndarray,
+    mask: np.ndarray,
+    checkpoint: str,
+    device: str,
+    px_per_mm: float | None,
+) -> SamLeavesResult:
+    return segment_leaves_sam(img, mask, checkpoint, device=device, px_per_mm=px_per_mm)
 
 
 def morphology(
@@ -239,6 +250,7 @@ REGISTRY: dict[str, Any] = {
     "regions": regions,
     "morphology": morphology,
     "leaves": leaves,
+    "leaves_sam": leaves_sam,
     "batch": batch,
     "refine": refine,
 }
