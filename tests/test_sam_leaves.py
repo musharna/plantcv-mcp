@@ -8,7 +8,9 @@ their own CI job. These run everywhere, including that job.
 import hashlib
 import importlib.util
 import io
+import itertools
 import os
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -501,19 +503,33 @@ def test_several_objects_and_a_clipped_mask_carry_their_advisories(
 
 
 def test_no_workflow_installs_the_sam_extra_except_the_sam_job():
-    """`--all-extras` would pull torch into every ordinary CI job. Each use must
-    carry `--no-extra sam`; only ci.yml's `sam` job may name `--extra sam`."""
-    workflows = Path(__file__).parent.parent / ".github" / "workflows"
-    all_extras, naming_sam = [], []
-    for path in sorted(workflows.glob("*.yml")):
+    """`--all-extras` would pull torch into every ordinary CI job. The guardrails
+    workflows take their flags from `scripts/uv_extras.py`, which must exclude
+    `sam`; a hand-written `--all-extras` must carry `--no-extra sam`; and only
+    ci.yml's `sam` job may name `--extra sam`."""
+    repo = Path(__file__).parent.parent
+    printed = subprocess.run(
+        [sys.executable, str(repo / "scripts" / "uv_extras.py"), str(repo)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    assert printed[0] == "--all-extras"
+    assert "sam" in [b for a, b in itertools.pairwise(printed) if a == "--no-extra"]
+
+    via_script, bare, naming_sam = [], [], []
+    for path in sorted((repo / ".github" / "workflows").glob("*.yml")):
         for number, line in enumerate(path.read_text().splitlines(), 1):
             if line.lstrip().startswith("#"):
                 continue
-            if "--all-extras" in line:
-                all_extras.append((path.name, number, line))
+            if "scripts/uv_extras.py" in line:
+                via_script.append(path.name)
+            if "--all-extras" in line and "--no-extra sam" not in line:
+                bare.append((path.name, number))
             if "--extra sam" in line:
                 naming_sam.append(path.name)
-    assert len(all_extras) >= 5, "the scan found no --all-extras: it is broken"
-    bare = [(f, n) for f, n, line in all_extras if "--no-extra sam" not in line]
+    assert {"guardrails.yml", "nightly-guardrails.yml"} <= set(via_script), (
+        "the scan found no uv_extras.py install: it is broken"
+    )
     assert bare == [], f"--all-extras without --no-extra sam at {bare}"
     assert naming_sam and set(naming_sam) == {"ci.yml"}
