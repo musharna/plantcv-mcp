@@ -1,4 +1,4 @@
-"""MCP server. Fourteen tools over a typed session store (rgb / hsi / thermal).
+"""MCP server. Fifteen tools over a typed session store (rgb / hsi / thermal).
 
 segment() mints a session and returns the overlay but NO traits; measure()
 requires that session. The split is deliberate: it forces the visual evidence
@@ -61,6 +61,7 @@ from .imaging import (
     render_region_overlay,
     write_image,
 )
+from .leaves import DEFAULT_MIN_DISTANCE
 from .lens import (
     FOCAL_UNCERTAINTY_ADVISORY,
     LensCalibration,
@@ -128,6 +129,10 @@ If the camera has visible lens distortion — straight edges bow, a fisheye rig 
 run correct_lens_distortion() FIRST and work on the corrected image: measured on
 a real fisheye photo, distortion inflated plant area 2.13x and the error is
 anisotropic, so no px_per_mm can compensate for it.
+
+count_leaves() splits one top-view plant into leaf instances by watershed. Its
+count is an estimate that depends on `min_distance` (pixels): look at the numbered
+overlay, and read `count_at_other_min_distance` before quoting the number.
 
 Hyperspectral ENVI cubes and thermal frames have their own segmenters
 (segment_hyperspectral, segment_thermal) and their own measurers
@@ -560,8 +565,47 @@ def _measure_morphology_impl(
     }
 
 
+def _count_leaves_impl(
+    session_id: str,
+    min_distance: int = DEFAULT_MIN_DISTANCE,
+    px_per_mm: float | None = None,
+) -> dict:
+    session = _session_of(session_id, "rgb")
+    img = _load_session_image(session)
+    res = dispatch("leaves", img, session.mask, min_distance, px_per_mm)
+    # The mask-level caveats measure() carries, minus multi_specimen: its text
+    # is about size traits and measure_regions(); count_leaves() says what
+    # several objects mean for a COUNT (multi_object_mask).
+    carried = [
+        w
+        for w in mask_warnings(session.mask, analyze_mask(session.mask))
+        if w.code != "multi_specimen"
+    ]
+    small, scale = downscale(res.overlay)
+    png = encode_png(small)
+    return {
+        "session_id": session_id,
+        "lineage": [dict(op) for op in session.lineage],
+        "method": "distance_transform_watershed",
+        "min_distance": res.min_distance,
+        "px_per_mm": px_per_mm,
+        "leaf_count": res.leaf_count,
+        "count_at_other_min_distance": res.sensitivity,
+        "instances": res.instances,
+        "units": res.units,
+        "warnings": [
+            {"code": w.code, "message": w.message} for w in [*res.warnings, *carried]
+        ],
+        "overlay_scale": scale,
+        "engine": {"name": "PlantCV", "version": plantcv_version()},
+        "_png": png,
+    }
+
+
 TOOL_FOR_KIND = {
-    "rgb": "measure(), measure_regions(), measure_morphology() or refine()",
+    "rgb": (
+        "measure(), measure_regions(), measure_morphology(), count_leaves() or refine()"
+    ),
     "hsi": "measure_spectral() or measure_regions()",
     "thermal": "measure_thermal() or measure_regions()",
 }
@@ -1632,6 +1676,46 @@ def build_server() -> MCPServer:
             prune_size=prune_size,
             tangent_size=tangent_size,
             px_per_mm=px_per_mm,
+        )
+        png = result.pop("_png")
+        return [json.dumps(result), Image(data=png, format="png")]
+
+    @mcp.tool(
+        title="Count leaf instances by watershed (returns the labelled overlay)",
+        annotations=READ_ONLY,
+    )
+    @_loud
+    def count_leaves(
+        session_id: str,
+        min_distance: int = DEFAULT_MIN_DISTANCE,
+        px_per_mm: float | None = None,
+    ) -> list:
+        """Split ONE top-view plant mask into leaf instances with PlantCV's
+        distance-transform watershed and return the count, each instance's
+        area, centroid [x, y] and bbox [x, y, w, h] (full-frame pixels), and the
+        overlay with every instance outlined and numbered — instance `id` is
+        the number drawn on the picture.
+
+        This is an ESTIMATE, not a learned segmentation. The watershed splits
+        the mask wherever two distance-transform peaks are at least
+        min_distance PIXELS apart: overlapping rosette leaves with no notch
+        between them stay merged, and a long or lobed leaf can be cut in two.
+        min_distance decides the count (measured on real Arabidopsis trays:
+        +8.5 leaves mean error at 3 px, -3.4 at 15 px, same 20 plants), so the
+        response always carries the count at half and at twice the value
+        (count_at_other_min_distance) and warns min_distance_sensitive when
+        either differs by >30%. Choose it from the overlay — about the
+        half-width of the smallest leaf to be counted — and hold it fixed
+        across images at one scale. For a side-view plant with a stem, use
+        measure_morphology() instead (its leaf_count is skeleton-based).
+        Empty and inverted (implausible_coverage) masks are refused. A mask of
+        several comparably sized objects is counted as a whole and flagged
+        multi_object_mask — normal for a rosette whose leaves segment apart,
+        wrong for a tray: isolate one plant first. px_per_mm scales `area` to
+        mm2; area_px, centroid and bbox stay in pixels.
+        """
+        result = _count_leaves_impl(
+            session_id, min_distance=min_distance, px_per_mm=px_per_mm
         )
         png = result.pop("_png")
         return [json.dumps(result), Image(data=png, format="png")]

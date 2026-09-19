@@ -103,6 +103,7 @@ jobs:
               expected = [
                   "calibrate_scale_from_marker",
                   "correct_lens_distortion",
+                  "count_leaves",
                   "list_methods",
                   "measure",
                   "measure_images",

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -213,6 +214,7 @@ async def test_server_registers_exactly_the_expected_tools():
         "refine",
         "measure",
         "measure_morphology",
+        "count_leaves",
         "measure_regions",
         "calibrate_scale_from_marker",
         "correct_lens_distortion",
@@ -645,6 +647,135 @@ async def test_measure_morphology_over_the_real_mcp_layer(tmp_path):
     assert payload["plant"]["stem_angle"] is None
     assert "stem_angle_undefined" in [w["code"] for w in payload["warnings"]]
     assert all(s["id"] == i for i, s in enumerate(payload["segments"]))
+
+
+# --- leaf instances over the real MCP layer ---
+
+
+def _three_leaf_png(tmp_path):
+    import cv2
+
+    img = np.full((400, 400, 3), 200, np.uint8)
+    for centre in ((140, 200), (200, 200), (260, 200)):  # each overlaps the next
+        cv2.ellipse(img, centre, (34, 50), 0, 0, 360, (40, 150, 40), -1)
+    return _write_png(tmp_path, "rosette.png", img)
+
+
+@pytest.mark.anyio
+async def test_count_leaves_over_the_real_mcp_layer(tmp_path):
+    """Count, instance table, numbered overlay, engine and lineage, through
+    build_server() and the isolation worker (on by default) — so the result
+    type has to survive the pipe, not only exist in-process."""
+    from plantcv_mcp import plantcv_version
+
+    mcp = build_server()
+    seg = json.loads(
+        (
+            await mcp.call_tool(
+                "segment",
+                {
+                    "image_path": _three_leaf_png(tmp_path),
+                    "channel": "a",
+                    "method": "otsu",
+                },
+            )
+        )
+        .content[0]
+        .text
+    )
+    assert seg["component_count"] == 1  # one blob: components alone would say 1
+
+    result = await mcp.call_tool(
+        "count_leaves", {"session_id": seg["session_id"], "px_per_mm": 2.0}
+    )
+    text_block, image_block = result.content
+    payload = json.loads(text_block.text)
+    assert image_block.type == "image"
+    assert "_png" not in payload
+    assert payload["leaf_count"] == 3
+    assert payload["method"] == "distance_transform_watershed"
+    assert payload["min_distance"] == 10
+    assert payload["count_at_other_min_distance"] == {"5": 3, "20": 3}
+    assert payload["engine"] == {"name": "PlantCV", "version": plantcv_version()}
+    assert payload["lineage"] == []
+    assert payload["units"]["area"] == "mm2"
+    assert [i["id"] for i in payload["instances"]] == [1, 2, 3]
+    assert sorted(round(i["centroid"][0], -1) for i in payload["instances"]) == [
+        140.0,
+        200.0,
+        260.0,
+    ]
+    for inst in payload["instances"]:
+        assert inst["area"] == pytest.approx(inst["area_px"] / 4.0)
+    assert payload["warnings"] == []
+
+
+@pytest.mark.anyio
+async def test_count_leaves_refusals_cross_the_wire_with_their_text(tmp_path):
+    """An unknown session and a bad min_distance each reach the client as a
+    named error; the same server then counts a real session."""
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    mcp = build_server()
+    with pytest.raises(ToolError, match="no-such-session"):
+        await mcp.call_tool("count_leaves", {"session_id": "no-such-session"})
+
+    seg = json.loads(
+        (
+            await mcp.call_tool(
+                "segment",
+                {
+                    "image_path": _three_leaf_png(tmp_path),
+                    "channel": "a",
+                    "method": "otsu",
+                },
+            )
+        )
+        .content[0]
+        .text
+    )
+    with pytest.raises(ToolError, match="ValueError: min_distance must be >= 1"):
+        await mcp.call_tool(
+            "count_leaves", {"session_id": seg["session_id"], "min_distance": 0}
+        )
+    ok = await mcp.call_tool("count_leaves", {"session_id": seg["session_id"]})
+    assert json.loads(ok.content[0].text)["leaf_count"] == 3
+
+
+def test_count_leaves_refuses_a_thermal_session_naming_the_right_tool():
+    from plantcv_mcp.server import (
+        WrongSessionKindError,
+        _count_leaves_impl,
+        _segment_thermal_impl,
+    )
+
+    fixture = Path(__file__).parent / "fixtures" / "plantcv" / "thermal_img.npz"
+    thermal = _segment_thermal_impl(str(fixture), min_c=30.0, max_c=34.0)
+    with pytest.raises(WrongSessionKindError, match=r"measure_thermal\(\)"):
+        _count_leaves_impl(thermal["session_id"])
+
+
+def test_count_leaves_carries_frame_clipping_from_the_mask(tmp_path):
+    """The mask-level caveat measure() carries travels with the count too."""
+    import cv2
+
+    from plantcv_mcp.server import _count_leaves_impl, _segment_impl
+
+    img = np.full((200, 200, 3), 128, np.uint8)
+    img[0:100, 50:150] = (60, 180, 60)  # plant cut by the top frame edge
+    p = str(tmp_path / "clipped.png")
+    cv2.imwrite(p, img)
+    seg = _segment_impl(p, "a", "otsu")
+    codes = [w["code"] for w in _count_leaves_impl(seg["session_id"])["warnings"]]
+    assert "frame_clipping" in codes
+
+    inside = np.full((200, 200, 3), 128, np.uint8)
+    inside[50:150, 50:150] = (60, 180, 60)
+    q = str(tmp_path / "inside.png")
+    cv2.imwrite(q, inside)
+    seg2 = _segment_impl(q, "a", "otsu")
+    codes2 = [w["code"] for w in _count_leaves_impl(seg2["session_id"])["warnings"]]
+    assert "frame_clipping" not in codes2
 
 
 def test_measure_recomputes_and_carries_mask_level_warnings(tmp_path):
