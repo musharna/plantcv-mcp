@@ -153,6 +153,23 @@ def test_min_distance_and_scale_are_validated():
     assert count_leaves(img, mask, min_distance=10, px_per_mm=2.0).leaf_count == 1
 
 
+def test_min_distance_beyond_the_mask_is_refused_before_anything_is_allocated():
+    """The ring of zeros is 2 x min_distance wide on every side, so an unbounded
+    min_distance is an unbounded allocation from one tool argument (200000 on
+    this 96 x 52 px ellipse asks for ~480 GB). A distance longer than the mask
+    is also meaningless: nothing in it can be that far apart."""
+    img, mask = _scene([(450, 300)], axes=(48, 26))
+    with pytest.raises(ValueError, match=r"min_distance=200000 exceeds .* 97 px"):
+        count_leaves(img, mask, min_distance=200000)
+    with pytest.raises(ValueError, match=r"min_distance=98 exceeds"):
+        count_leaves(img, mask, min_distance=98)
+    # The largest legal value is the mask's own extent. Its "twice" pass is
+    # capped there too, and says so by its key.
+    res = count_leaves(img, mask, min_distance=97)
+    assert res.leaf_count == 1
+    assert res.sensitivity == {"48": 1, "97": 1}
+
+
 def test_px_per_mm_scales_area_only():
     centres, angles = _separated(3, seed=7)
     img, mask = _scene(centres, angles=angles)

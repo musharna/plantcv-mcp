@@ -131,6 +131,8 @@ read) pin the numbers in the suite: 11 annotated leaves → 7 (default) and 8 (a
 | `pcv.outputs` not isolated                                         | RED — host table gained a `leaves` sample                |
 | mask-level warnings not carried by the tool                        | RED — no `frame_clipping`                                |
 | tool function not registered under its name                        | RED — tool-set assertion                                 |
+| `min_distance` ≤ mask-extent check removed (run under a 4 GB cap)  | RED — `ArrayMemoryError`, 149 GiB asked                  |
+| comparison pass not capped at the extent                           | RED — keyed `194`, not `97`                              |
 
 Each was run with `python -B -p no:cacheprovider`, green before the mutation, and the
 source's md5 checked after the restore.

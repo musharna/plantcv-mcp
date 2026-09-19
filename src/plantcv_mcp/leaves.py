@@ -14,8 +14,8 @@ distance-transform peaks are at least `min_distance` pixels apart, so
   (under-segmentation), and a long or lobed leaf with two width maxima is cut
   in two (over-segmentation);
 * `min_distance` is in PIXELS and decides the count. On real Arabidopsis trays
-  the mean count error moved from +5.7 leaves at 3 px to -3.9 at 15 px on the
-  same plants, and no rule tied to plant size did better than a fixed value,
+  (held-out tray, annotation's own mask) the mean count error moved from +8.5
+  leaves at 3 px to -3.4 at 15 px on the same 20 plants, and no rule tied to plant size did better than a fixed value,
   because a rosette's smallest leaves do not grow with the plant.
 
 So the count is an estimate to be read WITH the overlay, and the result carries
@@ -142,7 +142,21 @@ def count_leaves(
     ys, xs = np.nonzero(mask255)
     y0, y1 = int(ys.min()), int(ys.max()) + 1
     x0, x1 = int(xs.min()), int(xs.max()) + 1
-    half, double = max(min_distance // 2, 1), 2 * min_distance
+    extent = max(y1 - y0, x1 - x0)
+    if min_distance > extent:
+        # Checked against the MASK, before anything is sized by it: the ring
+        # below is 2 x min_distance wide on every side, so an unbounded value
+        # is an unbounded allocation from one tool argument (200000 asked
+        # OpenCV for 1.9 TB). It is also meaningless — no two points of the
+        # mask are that far apart, so the answer could only be "one".
+        raise ValueError(
+            f"min_distance={min_distance} exceeds the mask's own extent, "
+            f"{extent} px. Peaks cannot be further apart than the mask is wide; "
+            "use a value near the half-width of the smallest leaf to be counted."
+        )
+    # The comparison pass is capped at the extent for the same reason, and the
+    # result is keyed by the distance actually run.
+    half, double = max(min_distance // 2, 1), min(2 * min_distance, extent)
     ring = double + RING_EXTRA  # the widest distance any pass below uses
     img_c = cv2.copyMakeBorder(
         img[y0:y1, x0:x1], ring, ring, ring, ring, cv2.BORDER_CONSTANT, value=0
@@ -161,9 +175,9 @@ def count_leaves(
                 message=(
                     f"The mask has {holes} enclosed hole(s). Every hole bends the "
                     "distance transform around itself and adds peaks, so a leaf "
-                    "with pinholes is counted several times (measured on 14 real "
-                    "rosettes at min_distance=10: mean error +5.7 leaves with the "
-                    "holes, -6.1 after fill_holes — the holes were hiding an "
+                    "with pinholes is counted several times (measured on 13 real "
+                    "rosettes at min_distance=10: mean error +9.6 leaves with the "
+                    "holes, -5.4 after fill_holes — the holes were hiding an "
                     "undercount, not cancelling it). refine() with fill_holes and "
                     "count the refined session, unless the holes are real gaps "
                     "between leaves."

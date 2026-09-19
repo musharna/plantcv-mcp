@@ -76,7 +76,8 @@ def main(argv: list[str]) -> int:
         found = list(plants(gt))
         truths = [t for _, t, _ in found]
         print(f"{image_path}: {len(found)} plants, truth {truths}")
-        tmp = Path(tempfile.mkdtemp(prefix="leafeval-"))
+        holder = tempfile.TemporaryDirectory(prefix="leafeval-")
+        tmp = Path(holder.name)
         for kind in ("gt-mask", "segment()", "+fill"):
             for d in DISTANCES:
                 errors = []
@@ -102,6 +103,7 @@ def main(argv: list[str]) -> int:
                     f"  {kind:9s} min_distance={d:2d}  mean error {e.mean():+6.2f}  "
                     f"MAE {np.abs(e).mean():5.2f}  exact {int((e == 0).sum())}/{len(e)}"
                 )
+        holder.cleanup()
     shutdown_worker()
     return 0
 

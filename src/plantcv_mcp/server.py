@@ -1701,7 +1701,7 @@ def build_server() -> MCPServer:
         min_distance PIXELS apart: overlapping rosette leaves with no notch
         between them stay merged, and a long or lobed leaf can be cut in two.
         min_distance decides the count (measured on real Arabidopsis trays:
-        +5.7 leaves mean error at 3 px, -3.9 at 15 px, same plants), so the
+        +8.5 leaves mean error at 3 px, -3.4 at 15 px, same 20 plants), so the
         response always carries the count at half and at twice the value
         (count_at_other_min_distance) and warns min_distance_sensitive when
         either differs by >30%. Choose it from the overlay — about the

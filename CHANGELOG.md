@@ -39,6 +39,10 @@ half was right: nothing returned a region per leaf.
 - **`multi_object_mask`** instead of a refusal: a rosette whose petioles fall
   below the threshold is several comparably sized objects, so refusing them (as
   `measure_morphology()` does) would refuse the ordinary case.
+- **`min_distance` is bounded by the mask.** A value above the mask's own
+  extent is refused before anything is sized by it. Found in review of this
+  PR: the zero ring and skimage's peak footprint both grow with the square of
+  `min_distance`, so `200000` asked OpenCV for 1.9 TB from one tool argument.
 - Two real rosette crops with their leaf annotations as fixtures
   (`tests/fixtures/aberystwyth/`, source and licence beside them), chosen before
   any count was read.

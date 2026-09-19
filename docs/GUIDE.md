@@ -522,7 +522,11 @@ What goes wrong, and what the response does about it:
   mean error on one tray), so isolate the plant (`keep_largest`, or crop) and check
   the overlay.
 - Empty and inverted (`implausible_coverage`) masks are refused by name; an empty
-  mask is never a count of zero.
+  mask is never a count of zero. `min_distance` must be between 1 and the mask's own
+  extent in pixels: beyond that nothing in the mask can be that far apart, and the
+  working arrays grow with the square of it (200000 asked for 1.9 TB before the
+  check existed). The "twice" comparison pass is capped at the extent too, and
+  `count_at_other_min_distance` is keyed by the distances actually run.
 - PlantCV's watershed discards any peak within `min_distance` of the array border
   (skimage's `exclude_border` default), which silently drops a leaf near the edge
   of the photo. `count_leaves()` runs it inside a ring of background wider than the
