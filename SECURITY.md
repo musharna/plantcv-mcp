@@ -48,7 +48,13 @@ in full and is the authoritative description. In brief:
 - **Do not run it as root**, and do not expose it to untrusted input on a machine
   holding sensitive imagery. Run it as a user whose read access you are comfortable
   exposing to the model driving it.
-- **No network access.** The server performs no outbound requests.
+- **One outbound request, only on request.** The server performs no outbound
+  requests except in `segment_leaves_sam(download_checkpoint=true)`, which fetches
+  one fixed https URL (the Segment Anything ViT-B checkpoint), refuses anything
+  longer than the expected size or with a different SHA-256 than the one pinned in
+  the source, and writes the verified file to its cache directory. The default is
+  `download_checkpoint=false`; a base install without the `sam` extra refuses the
+  tool before any request is made.
 
 Restricting reads to a configured root directory is a candidate for a future
 release. It is deliberately **not** implemented today; this section exists so that

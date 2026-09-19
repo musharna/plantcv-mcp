@@ -59,6 +59,10 @@ fetches the current release into its own environment and runs it. Otherwise:
 pip install plantcv-mcp
 ```
 
+`segment_leaves_sam()` is the one optional tool: `pip install "plantcv-mcp[sam]"` adds torch,
+torchvision and segment-anything. Without the extra every other tool works and that one
+refuses with that command.
+
 Requires Python 3.11+. Installing pulls PlantCV and its scientific stack, so the first
 install (or first `uvx` run) is not fast. From a checkout: `uv add /path/to/plantcv-mcp`.
 
@@ -95,6 +99,7 @@ write, to your imagery: `plantcv-mcp --root /data/phenotyping`. `--no-isolate` (
 | `measure_regions(session_id, nrows, ncols, ...)`                        | one row per plant in a tray (RGB traits, thermal temperatures or HSI index stats), plus the numbered overlay       |
 | `measure_morphology(session_id, prune_size, tangent_size, ...)`         | leaf/stem skeleton traits + the numbered-segment overlay                                                           |
 | `count_leaves(session_id, min_distance, px_per_mm)`                     | leaf instances by watershed: an estimated count, per-instance area/centroid/bbox + the numbered overlay            |
+| `segment_leaves_sam(session_id, checkpoint_path, device, ...)`          | the same count from Segment Anything. Optional: needs the `sam` extra and a 375 MB checkpoint; CPU by default      |
 | `measure_images(image_paths, channel, method, ...)`                     | one recipe across many images (per plant with a grid); traits only where valid; time-budgeted                      |
 | `segment_hyperspectral(envi_path, index, threshold, ...)`               | an HSI session from a spectral-index threshold + pseudo-RGB overlay                                                |
 | `measure_spectral(session_id, indices, ...)`                            | index statistics (and, opt-in, per-band reflectance)                                                               |
@@ -178,6 +183,7 @@ Every warning code, every tool's parameters, and the measured facts behind each 
 [colour correction](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#colour-correction) ·
 [trays](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#measuring-a-tray) · [morphology](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#morphology-leaves-stem-branch-points) ·
 [leaf instances](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#leaf-instances-a-watershed-count) ·
+[leaf instances with Segment Anything](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#leaf-instances-with-segment-anything-optional) ·
 [batches](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#measuring-many-images) · [hyperspectral and thermal](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#hyperspectral-and-thermal) ·
 [warning reference](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#warnings-and-refusals).
 
