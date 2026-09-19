@@ -6,7 +6,53 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.14.0] — 2026-09-18
+
+A leaf-instance count for top-view rosettes, with its measured error. An audit
+line read "no instance leaf count"; half of that was wrong —
+`measure_morphology()` has reported a skeleton-based `leaf_count` since 0.7.0 — and
+half was right: nothing returned a region per leaf.
+
+### Added
+
+- **`count_leaves(session_id, min_distance=10, px_per_mm=None)`.** PlantCV's
+  distance-transform watershed (`pcv.watershed_segmentation`) on the session
+  mask: `leaf_count`, an `instances` table (id, area, centroid, bbox in
+  full-frame pixels; area in mm² with `px_per_mm`), and the overlay with every
+  instance outlined and numbered in fixed colours (PlantCV's own watershed
+  palette is random). Same session, stale-image, isolation-worker, lineage and
+  engine handling as `measure_morphology()`. No new dependency.
+- **Its error is stated, not implied.** Against hand-annotated leaf counts
+  (Aberystwyth Leaf Evaluation Dataset, CC BY 4.0) on a held-out tray, through
+  `segment` → `refine(fill_holes, keep_largest)` → `count_leaves` at the default:
+  −3.2 leaves mean error on 20 young rosettes (0 exact), −5.4 (MAE 7.9) on 13
+  grown ones. Overlapping leaves merge and the annotation counts hidden leaves.
+  `docs/EVAL.md` has the full table and `scripts/eval_leaf_count.py` reproduces it.
+- **`min_distance` decides the count, so the response shows it.** Every result
+  carries the count at half and at twice the value, and
+  `min_distance_sensitive` fires when either differs by more than 30%. The
+  default is PlantCV's and was not tuned; two scale-relative rules and h-maxima
+  markers were tried and were no better than a fixed value.
+- **`mask_has_holes`.** Pinholes in a thresholded leaf each add watershed
+  peaks: 13 real rosettes read +9.6 leaves with them and −5.4 without. The
+  advisory counts the holes and names `fill_holes`.
+- **`multi_object_mask`** instead of a refusal: a rosette whose petioles fall
+  below the threshold is several comparably sized objects, so refusing them (as
+  `measure_morphology()` does) would refuse the ordinary case.
+- Two real rosette crops with their leaf annotations as fixtures
+  (`tests/fixtures/aberystwyth/`, source and licence beside them), chosen before
+  any count was read.
+
 ### Fixed
+
+- **A leaf near the photo's edge is no longer dropped by the watershed.**
+  skimage's `peak_local_max`, which PlantCV calls with its defaults, discards
+  every peak within `min_distance` of the array border. Found because the
+  "no peak in a non-empty mask" refusal, written as unreachable, was reached: a
+  lone 70×24 ellipse in a tight crop returned zero instances at distance 30.
+  `count_leaves()` runs the watershed inside a ring of background wider than
+  the distance. Calling `pcv.watershed_segmentation` directly still has the
+  behaviour.
 
 - **The test suite left an isolation worker alive at session end.** Invisible
   to a plain `pytest` (the interpreter exit kills daemon children), fatal to

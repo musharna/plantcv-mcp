@@ -10,6 +10,7 @@ Everything the [README](https://github.com/musharna/plantcv-mcp#readme) does not
 - [Colour correction](#colour-correction)
 - [Measuring a tray](#measuring-a-tray)
 - [Morphology: leaves, stem, branch points](#morphology-leaves-stem-branch-points)
+- [Leaf instances: a watershed count](#leaf-instances-a-watershed-count)
 - [Measuring many images](#measuring-many-images)
 - [Hyperspectral and thermal](#hyperspectral-and-thermal)
 - [Warnings and refusals](#warnings-and-refusals)
@@ -472,6 +473,63 @@ Multi-plant masks are refused by name — `refine(keep_largest)` isolates one pl
 how the picture above was made from the four-view render). Lengths scale with `px_per_mm`;
 angles are always degrees.
 
+## Leaf instances: a watershed count
+
+`count_leaves(session_id, min_distance=10, px_per_mm=None)` splits one **top-view**
+plant mask into instances with PlantCV's distance-transform watershed
+(`pcv.watershed_segmentation`) and returns `leaf_count`, an `instances` table
+(`id`, `area`, `area_px`, `centroid` `[x, y]`, `bbox` `[x, y, w, h]`, all in
+full-frame pixels; `area` in mm² with `px_per_mm`) and the overlay with every
+instance outlined and numbered. For a side-view plant with a stem,
+`measure_morphology()` already reports a skeleton-based `leaf_count`; this is the
+counterpart for rosettes, where the skeleton has no stem to sort against.
+
+**It is an estimate, and not a good one on overlapping leaves.** The watershed knows
+nothing about leaves: it cuts the mask wherever two distance-transform peaks are at
+least `min_distance` pixels apart. Measured against hand-annotated leaf counts on the
+Aberystwyth Leaf Evaluation Dataset ([`docs/EVAL.md`](EVAL.md#leaf-instances)), on a
+held-out tray, through `segment()` → `refine(fill_holes, keep_largest)` →
+`count_leaves()` at the default `min_distance`:
+
+| plants                           | annotated leaves | mean error | mean abs. error | exact |
+| -------------------------------- | ---------------- | ---------- | --------------- | ----- |
+| 20 young rosettes (8–16 leaves)  | 10.6 mean        | −3.2       | 3.2             | 0/20  |
+| 13 grown rosettes (18–25 leaves) | 20.9 mean        | −5.4       | 7.9             | 0/13  |
+
+What goes wrong, and what the response does about it:
+
+- **`min_distance` decides the count.** On the same 20 young plants, counted on the annotation's
+  own mask, the mean error ran from +8.5 leaves at 3 px to −3.4 at 15 px. It is in pixels, so it is a property of the
+  camera height; no rule tied to plant size did better than a fixed value (a
+  rosette's smallest leaves do not grow with the plant). The default is PlantCV's
+  own (10) and was not tuned. Every response carries `count_at_other_min_distance`
+  (the count at half and at twice the value) and warns `min_distance_sensitive`
+  when either differs by more than 30%. Pick it from the overlay — about the
+  half-width of the smallest leaf you want counted — and hold it fixed across
+  images at one scale.
+- **Overlapping leaves merge; long leaves split.** Two leaves with no notch between
+  them are one instance, and the annotated counts include leaves mostly hidden
+  under others, which no mask-based method can see — hence the undercount. A single
+  70×24 px ellipse is cut in two at the default distance (pinned in the tests).
+- **Pinholes inflate the count.** Each hole in a thresholded leaf bends the distance
+  transform and adds peaks: the grown rosettes read +9.6 leaves with the holes and
+  −5.4 after `fill_holes`. `mask_has_holes` says so with the number of holes;
+  `refine()` with `fill_holes` first unless the holes are real gaps between leaves.
+- **Several objects are counted together** and flagged `multi_object_mask`. That is
+  the ordinary case for a rosette whose petioles fall below the threshold, so it is
+  not refused the way `measure_morphology()` refuses it — but slivers of a
+  neighbouring plant at the crop edge are chopped into many instances (+15 leaves
+  mean error on one tray), so isolate the plant (`keep_largest`, or crop) and check
+  the overlay.
+- Empty and inverted (`implausible_coverage`) masks are refused by name; an empty
+  mask is never a count of zero.
+- PlantCV's watershed discards any peak within `min_distance` of the array border
+  (skimage's `exclude_border` default), which silently drops a leaf near the edge
+  of the photo. `count_leaves()` runs it inside a ring of background wider than the
+  distance, so a plant at the frame edge is counted the same as one in the middle.
+
+A learned instance segmenter would do better on overlapping leaves; none is bundled.
+
 ## Measuring many images
 
 `measure_images(image_paths, channel, method, ...)` applies one fixed recipe across up to 200
@@ -601,7 +659,7 @@ instead of a result.
 | `fill_erased_mask`                                                  | any segmenter                                          | thresholding found objects; `fill_size` deleted them all — names the size to use                                                                                                         | blocking |
 | `noisy_segmentation`                                                | any segmenter, `suggest`                               | ≥50 non-major components and no dominant object — background texture                                                                                                                     | blocking |
 | `multi_specimen`                                                    | any segmenter, `measure`, `measure_regions` (per cell) | several comparably-sized objects; the number describes the group → `measure_regions`                                                                                                     | advisory |
-| `frame_clipping`                                                    | any segmenter, `measure`                               | a major object touches the frame edge; size traits are lower bounds (background slivers at the edge do not count)                                                                        | advisory |
+| `frame_clipping`                                                    | any segmenter, `measure`, `count_leaves`               | a major object touches the frame edge; size traits are lower bounds (background slivers at the edge do not count)                                                                        | advisory |
 | `color_card_excluded`                                               | `segment`, `refine`, `measure`, `measure_images`       | the detected colour card's region was removed from the mask — the card is the instrument                                                                                                 | advisory |
 | `probable_background` (per cell)                                    | `measure_images` with a grid                           | in a mask covering most of the frame, this cell's object fills ≥ 85% of it: background between dividers, not a plant                                                                     | withheld |
 | `noise_cluster` (per cell)                                          | `measure_images` with a grid                           | several comparable specks in one cell of a mask that is texture overall; the image is refused as `noisy_segmentation`                                                                    | refused  |
@@ -618,6 +676,9 @@ instead of a result.
 | `stem_angle_undefined`                                              | `measure_morphology`                                   | a vertical stem; PlantCV's angle is not an angle → `null`                                                                                                                                | —        |
 | `insertion_angle_undefined`                                         | `measure_morphology`                                   | a vertical stem; the stem line cannot be drawn, every `insertion_angle` → `null`                                                                                                         | —        |
 | `tangent_window_exceeds_segment`                                    | `measure_morphology`                                   | `tangent_size` longer than half a segment; its angles collapse to 0                                                                                                                      | —        |
+| `min_distance_sensitive`                                            | `count_leaves`                                         | instance count changes > 30% at half or twice `min_distance`; both counts are in the response                                                                                            | —        |
+| `mask_has_holes`                                                    | `count_leaves`                                         | enclosed holes in the mask; each adds watershed peaks and inflates the count → `refine` `fill_holes`                                                                                      | —        |
+| `multi_object_mask`                                                 | `count_leaves`                                         | several comparably-sized objects counted together: one rosette in pieces, or several plants — the overlay tells which                                                                    | —        |
 | `prune_size_sensitive`                                              | `measure_morphology`                                   | segment count changes > 30% at 2× `prune_size`                                                                                                                                           | —        |
 | `skeleton_has_cycles`, `no_leaf_segments`, `no_stem_segment`        | `measure_morphology`                                   | skeleton topology PlantCV's leaf/stem split cannot use                                                                                                                                   | —        |
 | `marker_touches_crop_edge`, `marker_not_round`, `marker_fills_crop` | `calibrate_scale_from_marker`                          | the detected marker is probably not the marker                                                                                                                                           | —        |
@@ -635,6 +696,7 @@ instead of a result.
 Refusals you will meet: a degenerate mask at `measure` (`DegenerateMaskError`), a refinement
 that erases the plant (`RefinementErasedMaskError`) or an invalid op list (`RefineSpecError`,
 nothing applied), a skeleton PlantCV cannot analyse (`MorphologyRefusedError`, with counts),
+an inverted mask at `count_leaves` (`LeafCountRefusedError`),
 the wrong session kind (`WrongSessionKindError`), a file that changed since segmentation
 (`ImageChangedSinceSegmentationError`, SHA-256), a grayscale or undecodable file
 (`NotColorImageError`), no colour card when one was asked for (`ColorCardNotFoundError`), a
@@ -722,7 +784,9 @@ no execution of anything but PlantCV, and the only write is
 ## Limitations
 
 Morphology traits are single-plant (`measure_morphology()` refuses a tray); per-region
-morphology is not implemented. Hyperspectral support covers ENVI cubes; other cube
+morphology is not implemented. `count_leaves()` is a distance-transform watershed, not a
+learned leaf segmenter: it undercounts overlapping rosette leaves (measured, see
+[Leaf instances](#leaf-instances-a-watershed-count)) and there is no per-region leaf count. Hyperspectral support covers ENVI cubes; other cube
 formats (nd2, ArcGIS) and photosynthesis (PSII) data are not exposed.
 
 The batch is serial and in-process: real photographs take seconds each, which is what

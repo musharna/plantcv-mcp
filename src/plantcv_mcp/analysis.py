@@ -23,6 +23,7 @@ from .hyperspectral import (
     prepare_cube,
     segment_hyperspectral,
 )
+from .leaves import LeafInstancesResult, count_leaves
 from .measurement import measure_traits
 from .morphology import MorphologyResult, measure_morphology
 from .refine import DroppedObject, apply_refinements_traced
@@ -112,6 +113,15 @@ def regions(
         "ncols": region_set.ncols,
         "warnings": [(w.code, w.message) for w in set_warnings],
     }
+
+
+def leaves(
+    img: np.ndarray,
+    mask: np.ndarray,
+    min_distance: int,
+    px_per_mm: float | None,
+) -> LeafInstancesResult:
+    return count_leaves(img, mask, min_distance=min_distance, px_per_mm=px_per_mm)
 
 
 def morphology(
@@ -228,6 +238,7 @@ REGISTRY: dict[str, Any] = {
     "measure": measure,
     "regions": regions,
     "morphology": morphology,
+    "leaves": leaves,
     "batch": batch,
     "refine": refine,
 }
