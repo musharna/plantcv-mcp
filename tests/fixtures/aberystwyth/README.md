@@ -19,6 +19,7 @@ lossless).
 `*_gt.png` is the matching crop of `tv/gt/<name>_gt.png`: each leaf of the plant
 is one colour, so the leaf count is the number of distinct non-black colours
 (`tests/test_leaves.py` recounts it rather than trusting this table).
+`tests/test_sam_leaves_model.py` runs Segment Anything on the same two crops.
 
 **How they were chosen:** plant 0 (first in raster order) of each of the two
 tray images used as the held-out set in `docs/EVAL.md` — fixed before any

@@ -11,6 +11,7 @@ Everything the [README](https://github.com/musharna/plantcv-mcp#readme) does not
 - [Measuring a tray](#measuring-a-tray)
 - [Morphology: leaves, stem, branch points](#morphology-leaves-stem-branch-points)
 - [Leaf instances: a watershed count](#leaf-instances-a-watershed-count)
+- [Leaf instances with Segment Anything (optional)](#leaf-instances-with-segment-anything-optional)
 - [Measuring many images](#measuring-many-images)
 - [Hyperspectral and thermal](#hyperspectral-and-thermal)
 - [Warnings and refusals](#warnings-and-refusals)
@@ -532,7 +533,68 @@ What goes wrong, and what the response does about it:
   of the photo. `count_leaves()` runs it inside a ring of background wider than the
   distance, so a plant at the frame edge is counted the same as one in the middle.
 
-A learned instance segmenter would do better on overlapping leaves; none is bundled.
+`segment_leaves_sam()` below is a learned alternative. It is optional and not bundled
+with the base install.
+
+## Leaf instances with Segment Anything (optional)
+
+`segment_leaves_sam(session_id, checkpoint_path=None, download_checkpoint=False,
+device="cpu", px_per_mm=None)` counts the same thing as `count_leaves()` with a learned
+model, Segment Anything ViT-B (Kirillov et al., 2023,
+<https://doi.org/10.1109/ICCV51070.2023.00371>; code and checkpoint Apache-2.0). It
+returns the same `instances` table and numbered overlay, plus `mask_coverage`,
+`candidate_masks`, `device` and a `model` block naming the checkpoint and its SHA-256.
+The session, stale-image, isolation-worker, lineage and engine handling are those of
+`count_leaves()`.
+
+**Install.** `pip install "plantcv-mcp[sam]"` adds torch, torchvision and
+segment-anything. Without the extra the tool is still listed and refuses with
+`SamNotInstalledError` and that command. It never runs the watershed in its place.
+
+**Checkpoint.** The tool needs `sam_vit_b_01ec64.pth` (375 MB). Either download it
+yourself from `https://dl.fbaipublicfiles.com/segment_anything/` and pass
+`checkpoint_path`, or pass `download_checkpoint=true` once and the server fetches it
+into `~/.cache/plantcv-mcp` (`PLANTCV_MCP_SAM_CACHE` or `XDG_CACHE_HOME` move it). That
+download is the only network request this server makes, and it happens only when asked
+for. Either way the file's SHA-256 must equal the one pinned in the source, or it is
+refused (`CheckpointVerificationError`) and never loaded; a download longer than the
+expected size is abandoned, and a failed one is `CheckpointDownloadError`. Upstream
+publishes no SHA-256, so the pin is the hash of the file fetched from the official URL
+on 2026-09-19. The file is loaded with `torch.load(weights_only=True)`. With `--root`
+configured, the checkpoint and the cache directory must be inside a root.
+
+**Device.** CPU unless you pass `device="cuda"` or `"cuda:N"`. A GPU that was asked for
+and is not available is `SamDeviceError`, not a quiet run on the CPU.
+
+**Measured** on the same held-out tray and hand counts as the watershed
+([`docs/EVAL.md`](EVAL.md#leaf-instances-segment-anything)), through `segment()` →
+`refine(fill_holes, keep_largest)` → the tool, both at their defaults:
+
+| Tray 032 (held out)              | method               | mean error | mean abs. error | exact | s/plant, CPU |
+| -------------------------------- | -------------------- | ---------- | --------------- | ----- | ------------ |
+| 20 young rosettes (8–16 leaves)  | `count_leaves`       | −3.2       | 3.2             | 0/20  | under 0.1    |
+|                                  | `segment_leaves_sam` | −0.6       | 1.1             | 6/20  | 21           |
+| 13 grown rosettes (18–25 leaves) | `count_leaves`       | −5.4       | 7.9             | 0/13  | under 0.1    |
+|                                  | `segment_leaves_sam` | +0.2       | 1.8             | 2/13  | 19           |
+
+It is closer on both, and still an estimate: exact on fewer than a third of plants, on
+one dataset of one species. The model was not trained on leaves and is not fine-tuned.
+Budget about 20 s per plant on a 6-thread CPU and about 4 GB of memory.
+
+- **Read `mask_coverage` and the overlay.** Leaves that got no leaf-sized mask from the
+  model are not in the count. `mask_coverage` is the share of the plant mask that
+  received an instance (0.83–0.92 on the held-out tray); under 0.50 the response
+  carries `low_instance_coverage`.
+- **What is kept.** Prompts are a 32×32 grid over the plant's crop, kept where they
+  fall on the mask. A candidate is kept when SAM scores it at least 0.80 (predicted
+  IoU) and 0.85 (stability), at least 80% of it is on the mask, and it is between 0.2%
+  and 40% of the plant's area; smaller masks win, and a mask more than half covered by
+  kept ones is dropped. None of this is tunable per call: the constants are what was
+  measured.
+- Isolate one plant first, as for `count_leaves()`: the area limits are fractions of
+  the whole mask. Several comparable objects are counted together and flagged
+  `multi_object_mask`. Empty and inverted masks are refused by name, and a result
+  with no surviving instance is `LeafCountRefusedError`, never a count of zero.
 
 ## Measuring many images
 
@@ -681,8 +743,9 @@ instead of a result.
 | `insertion_angle_undefined`                                         | `measure_morphology`                                   | a vertical stem; the stem line cannot be drawn, every `insertion_angle` → `null`                                                                                                         | —        |
 | `tangent_window_exceeds_segment`                                    | `measure_morphology`                                   | `tangent_size` longer than half a segment; its angles collapse to 0                                                                                                                      | —        |
 | `min_distance_sensitive`                                            | `count_leaves`                                         | instance count changes > 30% at half or twice `min_distance`; both counts are in the response                                                                                            | —        |
-| `mask_has_holes`                                                    | `count_leaves`                                         | enclosed holes in the mask; each adds watershed peaks and inflates the count → `refine` `fill_holes`                                                                                      | —        |
-| `multi_object_mask`                                                 | `count_leaves`                                         | several comparably-sized objects counted together: one rosette in pieces, or several plants — the overlay tells which                                                                    | —        |
+| `low_instance_coverage`                                             | `segment_leaves_sam`                                   | the instances cover under 50% of the plant mask; leaves in the rest are not in the count                                                                                                 | —        |
+| `mask_has_holes`                                                    | `count_leaves`                                         | enclosed holes in the mask; each adds watershed peaks and inflates the count → `refine` `fill_holes`                                                                                     | —        |
+| `multi_object_mask`                                                 | `count_leaves`, `segment_leaves_sam`                   | several comparably-sized objects counted together: one rosette in pieces, or several plants — the overlay tells which                                                                    | —        |
 | `prune_size_sensitive`                                              | `measure_morphology`                                   | segment count changes > 30% at 2× `prune_size`                                                                                                                                           | —        |
 | `skeleton_has_cycles`, `no_leaf_segments`, `no_stem_segment`        | `measure_morphology`                                   | skeleton topology PlantCV's leaf/stem split cannot use                                                                                                                                   | —        |
 | `marker_touches_crop_edge`, `marker_not_round`, `marker_fills_crop` | `calibrate_scale_from_marker`                          | the detected marker is probably not the marker                                                                                                                                           | —        |
@@ -700,7 +763,10 @@ instead of a result.
 Refusals you will meet: a degenerate mask at `measure` (`DegenerateMaskError`), a refinement
 that erases the plant (`RefinementErasedMaskError`) or an invalid op list (`RefineSpecError`,
 nothing applied), a skeleton PlantCV cannot analyse (`MorphologyRefusedError`, with counts),
-an inverted mask at `count_leaves` (`LeafCountRefusedError`),
+an inverted mask at `count_leaves` or `segment_leaves_sam` (`LeafCountRefusedError`), a
+missing `sam` extra, checkpoint or GPU, or a checkpoint whose SHA-256 is not the pinned one
+(`SamNotInstalledError`, `CheckpointMissingError`, `SamDeviceError`,
+`CheckpointVerificationError`),
 the wrong session kind (`WrongSessionKindError`), a file that changed since segmentation
 (`ImageChangedSinceSegmentationError`, SHA-256), a grayscale or undecodable file
 (`NotColorImageError`), no colour card when one was asked for (`ColorCardNotFoundError`), a
@@ -780,17 +846,23 @@ Practical consequences:
 - Do not run it as root, and do not expose it to untrusted input on a machine
   holding sensitive imagery.
 
-The read-root allow-list is the whole of the sandboxing; there is no network access,
-no execution of anything but PlantCV, and the only write is
-`correct_lens_distortion`'s corrected image — next to its input, or at an explicit
-`output_path` that must not already exist and must not be a symlink.
+The read-root allow-list is the whole of the sandboxing. A base install has no network
+access, executes nothing but PlantCV, and writes only `correct_lens_distortion`'s
+corrected image — next to its input, or at an explicit `output_path` that must not
+already exist and must not be a symlink. The optional `segment_leaves_sam()` adds one
+exception to each: with `download_checkpoint=true` it fetches one fixed https URL and
+writes the file to its cache directory after checking its size and SHA-256, and it runs
+the Segment Anything model (loaded with `torch.load(weights_only=True)`, so the
+checkpoint cannot execute code). With read roots configured, the checkpoint and the
+cache directory must lie inside them.
 
 ## Limitations
 
 Morphology traits are single-plant (`measure_morphology()` refuses a tray); per-region
 morphology is not implemented. `count_leaves()` is a distance-transform watershed, not a
 learned leaf segmenter: it undercounts overlapping rosette leaves (measured, see
-[Leaf instances](#leaf-instances-a-watershed-count)) and there is no per-region leaf count. Hyperspectral support covers ENVI cubes; other cube
+[Leaf instances](#leaf-instances-a-watershed-count)); the optional `segment_leaves_sam()` is closer and
+still an estimate, measured on one Arabidopsis dataset only. There is no per-region leaf count. Hyperspectral support covers ENVI cubes; other cube
 formats (nd2, ArcGIS) and photosynthesis (PSII) data are not exposed.
 
 The batch is serial and in-process: real photographs take seconds each, which is what

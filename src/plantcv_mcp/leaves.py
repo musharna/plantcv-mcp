@@ -94,6 +94,72 @@ def _watershed(img_c: np.ndarray, mask_c: np.ndarray, distance: int) -> np.ndarr
     )
 
 
+def describe_instances(
+    img: np.ndarray,
+    mask255: np.ndarray,
+    labels_c: np.ndarray,
+    y0: int,
+    x0: int,
+    px_per_mm: float | None,
+) -> tuple[list[dict[str, Any]], np.ndarray]:
+    """The instance table and the numbered overlay for a label image.
+
+    `labels_c` is a CROP whose top-left corner sits at (x0, y0) of the full
+    frame (either may be negative: the watershed's crop carries a zero ring).
+    Shared by count_leaves() and segment_leaves_sam(), so an instance `id`
+    means the same thing on both pictures.
+    """
+    area_scale = 1.0 if px_per_mm is None else 1.0 / (px_per_mm * px_per_mm)
+    instances: list[dict[str, Any]] = []
+    overlay = render_overlay(img, mask255)
+    n = int(labels_c.max())
+    for i in range(1, n + 1):
+        # Per-instance work stays on the crop (a full-frame comparison per leaf
+        # is what made morphology slow on 16 MP photos); coordinates are moved
+        # back to the full frame here.
+        region = labels_c == i
+        area_px = int(region.sum())
+        ry, rx = np.nonzero(region)
+        ry, rx = ry + y0, rx + x0
+        cx, cy = float(rx.mean()), float(ry.mean())
+        instances.append(
+            {
+                "id": i,
+                "area": area_px * area_scale,
+                "area_px": area_px,
+                "centroid": [round(cx, 1), round(cy, 1)],
+                "bbox": [
+                    int(rx.min()),
+                    int(ry.min()),
+                    int(rx.max() - rx.min() + 1),
+                    int(ry.max() - ry.min() + 1),
+                ],
+            }
+        )
+        contours, _ = cv2.findContours(
+            region.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
+        )
+        cv2.drawContours(overlay, contours, -1, _instance_color(i), 2, offset=(x0, y0))
+    # Numbers last, so no later contour paints over an earlier label.
+    for inst in instances:
+        cx, cy = inst["centroid"]
+        org = (int(cx) - 6, int(cy) + 5)
+        cv2.putText(
+            overlay, str(inst["id"]), org, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 3
+        )
+        cv2.putText(
+            overlay,
+            str(inst["id"]),
+            org,
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            1,
+        )
+
+    return instances, overlay
+
+
 def count_leaves(
     img: np.ndarray,
     mask: np.ndarray,
@@ -199,52 +265,7 @@ def count_leaves(
             "Check the overlay from segment()."
         )
 
-    area_scale = 1.0 if px_per_mm is None else 1.0 / (px_per_mm * px_per_mm)
-    instances: list[dict[str, Any]] = []
-    overlay = render_overlay(img, mask255)
-    for i in range(1, n + 1):
-        # Per-instance work stays on the crop (a full-frame comparison per leaf
-        # is what made morphology slow on 16 MP photos); coordinates are moved
-        # back to the full frame here.
-        region = labels_c == i
-        area_px = int(region.sum())
-        ry, rx = np.nonzero(region)
-        ry, rx = ry + y0, rx + x0
-        cx, cy = float(rx.mean()), float(ry.mean())
-        instances.append(
-            {
-                "id": i,
-                "area": area_px * area_scale,
-                "area_px": area_px,
-                "centroid": [round(cx, 1), round(cy, 1)],
-                "bbox": [
-                    int(rx.min()),
-                    int(ry.min()),
-                    int(rx.max() - rx.min() + 1),
-                    int(ry.max() - ry.min() + 1),
-                ],
-            }
-        )
-        contours, _ = cv2.findContours(
-            region.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
-        )
-        cv2.drawContours(overlay, contours, -1, _instance_color(i), 2, offset=(x0, y0))
-    # Numbers last, so no later contour paints over an earlier label.
-    for inst in instances:
-        cx, cy = inst["centroid"]
-        org = (int(cx) - 6, int(cy) + 5)
-        cv2.putText(
-            overlay, str(inst["id"]), org, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 3
-        )
-        cv2.putText(
-            overlay,
-            str(inst["id"]),
-            org,
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (255, 255, 255),
-            1,
-        )
+    instances, overlay = describe_instances(img, mask255, labels_c, y0, x0, px_per_mm)
 
     if max(abs(n_half - n), abs(n_double - n)) / n > SENSITIVITY_FRACTION:
         warnings.append(

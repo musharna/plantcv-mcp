@@ -5,6 +5,10 @@ name: guardrails
 #   test      pytest, then pytest again with NO network (empty netns)
 #   security  pip-audit + bandit
 #   review    Claude code review posted on the PR (needs CLAUDE_CODE_OAUTH_TOKEN)
+# LOCAL CHANGE (not in repo-template): every `--all-extras` carries `--no-extra sam`.
+# The `sam` extra is torch + torchvision (~200 MB of CPU wheels); it is installed and
+# tested by the `sam` job in ci.yml only. tests/test_sam_leaves.py fails these jobs if
+# torch ever appears in them. A template resync must keep the exclusion.
 # Action SHAs verified to exist on 2026-09-11.
 
 on:
@@ -37,7 +41,7 @@ jobs:
           # Repo-specific system prerequisites (R for rpy2, OpenCV libs, ...) live in
           # scripts/guardrails-setup.sh so the template stays generic.
           if [ -x scripts/guardrails-setup.sh ]; then bash scripts/guardrails-setup.sh; fi
-          uv sync --all-extras --dev
+          uv sync --all-extras --no-extra sam --dev
           if [ -f requirements-dev.txt ]; then uv pip install -r requirements-dev.txt; fi
           if [ -x .venv/bin/ruff ]; then echo "repo ruff: "; .venv/bin/ruff check .
           else echo "template ruff 0.16.7"; uvx ruff@0.16.7 check .; fi
@@ -60,8 +64,8 @@ jobs:
           # Repo-specific system prerequisites (R for rpy2, OpenCV libs, ...) live in
           # scripts/guardrails-setup.sh so the template stays generic.
           if [ -x scripts/guardrails-setup.sh ]; then bash scripts/guardrails-setup.sh; fi
-          if [ -f uv.lock ]; then uv sync --locked --all-extras --dev
-          else uv sync --all-extras --dev; fi
+          if [ -f uv.lock ]; then uv sync --locked --all-extras --no-extra sam --dev
+          else uv sync --all-extras --no-extra sam --dev; fi
           # repos that pin test deps outside pyproject (taxon3d)
           if [ -f requirements-dev.txt ]; then uv pip install -r requirements-dev.txt; fi
       - name: Tests
@@ -123,11 +127,11 @@ jobs:
           # Repo-specific system prerequisites (R for rpy2, OpenCV libs, ...) live in
           # scripts/guardrails-setup.sh so the template stays generic.
           if [ -x scripts/guardrails-setup.sh ]; then bash scripts/guardrails-setup.sh; fi
-          uv sync --all-extras --dev
+          uv sync --all-extras --no-extra sam --dev
           if [ -f requirements-dev.txt ]; then uv pip install -r requirements-dev.txt; fi
           # Audit the resolved dependency set, not the project itself (which may
           # not be on PyPI; --strict treats an unauditable/editable dist as failure).
-          uv export --all-extras --dev --no-emit-project --no-hashes -o /tmp/req.txt
+          uv export --all-extras --no-extra sam --dev --no-emit-project --no-hashes -o /tmp/req.txt
           # requirements-dev.txt is installed above but is not in the export: audit it too.
           if [ -f requirements-dev.txt ]; then uv pip freeze | grep -v '^-e ' > /tmp/req-env.txt; else : > /tmp/req-env.txt; fi
           uvx pip-audit -r /tmp/req.txt --strict --desc on

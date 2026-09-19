@@ -1,6 +1,6 @@
 [project]
 name = "plantcv-mcp"
-version = "1.14.0"
+version = "1.15.0"
 description = "MCP server exposing PlantCV as a measurement instrument — traits plus the segmentation overlay they came from"
 readme = "README.md"
 license = "MIT"
@@ -52,6 +52,14 @@ dependencies = [
     # raises PydanticUserError on typing.TypedDict under Python < 3.12.
     "typing-extensions>=4.12",
 ]
+
+[project.optional-dependencies]
+# segment_leaves_sam() only. NOT installed by default and not needed by any
+# other tool: torch is ~200 MB of CPU wheels. The server imports and runs
+# without it, and the tool then refuses with the install command.
+# segment-anything is pinned because its mask generator's behaviour is what
+# docs/EVAL.md measured; torchvision is its undeclared dependency (batched NMS).
+sam = ["segment-anything==1.0", "torch>=2.4", "torchvision>=0.19"]
 
 [project.urls]
 Homepage = "https://github.com/musharna/plantcv-mcp"
@@ -108,6 +116,19 @@ extend-exclude = ["docs"]
 # registry-side constraints fail here rather than in the publish workflow, which
 # only runs once the tag is already cut.
 dev = ["pytest>=8.0", "ruff>=0.6", "jsonschema>=4.0"]
+
+# Inside THIS repository (uv sync / uv.lock) torch comes from PyTorch's CPU
+# index, so the lock carries no CUDA wheels and the SAM CI job downloads ~200 MB
+# rather than ~2.5 GB. This does not reach a published wheel's metadata: a user
+# running `pip install "plantcv-mcp[sam]"` gets PyPI's torch for their platform.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.mutmut]
 source_paths = ["src"]

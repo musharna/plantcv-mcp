@@ -78,6 +78,13 @@ from .refine import (
     validate_ops,
 )
 from .regions import REGION_MODES, RegionSpecError
+from .sam_leaves import (
+    CHECKPOINT_NAME,
+    CHECKPOINT_SHA256,
+    MODEL_TYPE,
+    require_sam,
+    resolve_checkpoint,
+)
 from .scale import calibrate_scale
 from .segmentation import CHANNELS, METHODS, OBJECT_TYPES, threshold_mask
 from .session import SessionStore
@@ -133,6 +140,12 @@ anisotropic, so no px_per_mm can compensate for it.
 count_leaves() splits one top-view plant into leaf instances by watershed. Its
 count is an estimate that depends on `min_distance` (pixels): look at the numbered
 overlay, and read `count_at_other_min_distance` before quoting the number.
+segment_leaves_sam() counts the same thing with a learned model (Segment
+Anything) and was measured closer to hand counts on overlapping rosettes, but it
+needs the optional `sam` extra and a 375 MB checkpoint, takes 10-25 s per plant
+on CPU, and is the one tool that can reach the network — only when called with
+download_checkpoint=true. Without the extra it refuses with the install command;
+it never substitutes the watershed.
 
 Hyperspectral ENVI cubes and thermal frames have their own segmenters
 (segment_hyperspectral, segment_thermal) and their own measurers
@@ -602,9 +615,58 @@ def _count_leaves_impl(
     }
 
 
+def _segment_leaves_sam_impl(
+    session_id: str,
+    checkpoint_path: str | None = None,
+    download_checkpoint: bool = False,
+    device: str = "cpu",
+    px_per_mm: float | None = None,
+) -> dict:
+    session = _session_of(session_id, "rgb")
+    # Before any image is read or any file fetched: a base install answers with
+    # the install command, not with a 375 MB download it cannot use.
+    require_sam()
+    img = _load_session_image(session)
+    checkpoint = resolve_checkpoint(checkpoint_path, download_checkpoint)
+    res = dispatch("leaves_sam", img, session.mask, checkpoint, device, px_per_mm)
+    carried = [
+        w
+        for w in mask_warnings(session.mask, analyze_mask(session.mask))
+        if w.code != "multi_specimen"
+    ]
+    small, scale = downscale(res.overlay)
+    png = encode_png(small)
+    return {
+        "session_id": session_id,
+        "lineage": [dict(op) for op in session.lineage],
+        "method": "segment_anything_point_grid",
+        "model": {
+            "name": "Segment Anything",
+            "type": MODEL_TYPE,
+            "checkpoint": CHECKPOINT_NAME,
+            "sha256": CHECKPOINT_SHA256,
+            "license": "Apache-2.0",
+        },
+        "device": res.device,
+        "px_per_mm": px_per_mm,
+        "leaf_count": res.leaf_count,
+        "candidate_masks": res.candidates,
+        "mask_coverage": res.mask_coverage,
+        "instances": res.instances,
+        "units": res.units,
+        "warnings": [
+            {"code": w.code, "message": w.message} for w in [*res.warnings, *carried]
+        ],
+        "overlay_scale": scale,
+        "engine": {"name": "PlantCV", "version": plantcv_version()},
+        "_png": png,
+    }
+
+
 TOOL_FOR_KIND = {
     "rgb": (
-        "measure(), measure_regions(), measure_morphology(), count_leaves() or refine()"
+        "measure(), measure_regions(), measure_morphology(), count_leaves(), "
+        "segment_leaves_sam() or refine()"
     ),
     "hsi": "measure_spectral() or measure_regions()",
     "thermal": "measure_thermal() or measure_regions()",
@@ -1438,9 +1500,11 @@ def build_server() -> MCPServer:
     # version= is what a client sees at initialize; MCPServer defaults it to "".
     mcp = MCPServer("plantcv-mcp", instructions=INSTRUCTIONS, version=__version__)
 
-    # Every tool here only reads from disk and computes. None mutates anything,
-    # none reaches the network. Saying so lets a client decide what is safe to
-    # run without asking, instead of treating all four as opaque.
+    # A tool marked READ_ONLY only reads from disk and computes: it mutates
+    # nothing and does not reach the network. Saying so lets a client decide
+    # what is safe to run without asking. The two exceptions carry their own
+    # annotations: correct_lens_distortion (writes the corrected image) and
+    # segment_leaves_sam (may download and cache one pinned checkpoint).
     #
     # snake_case since mcp 2.x. The camelCase spellings still work here as
     # constructor kwargs — pydantic keeps them as aliases — but the ATTRIBUTES
@@ -1716,6 +1780,64 @@ def build_server() -> MCPServer:
         """
         result = _count_leaves_impl(
             session_id, min_distance=min_distance, px_per_mm=px_per_mm
+        )
+        png = result.pop("_png")
+        return [json.dumps(result), Image(data=png, format="png")]
+
+    @mcp.tool(
+        title="Count leaf instances with Segment Anything (optional extra; returns the labelled overlay)",
+        annotations=ToolAnnotations(
+            # Not read-only and not closed-world, unlike every other tool: with
+            # download_checkpoint=true it fetches one pinned file over https and
+            # writes it to the cache directory.
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=True,
+            open_world_hint=True,
+        ),
+    )
+    @_loud
+    def segment_leaves_sam(
+        session_id: str,
+        checkpoint_path: str | None = None,
+        download_checkpoint: bool = False,
+        device: str = "cpu",
+        px_per_mm: float | None = None,
+    ) -> list:
+        """Split ONE top-view plant mask into leaf instances with Segment
+        Anything (ViT-B, Apache-2.0) and return the count, each instance's
+        area, centroid [x, y] and bbox [x, y, w, h] (full-frame pixels), and the
+        overlay with every instance outlined and numbered, as count_leaves()
+        does. The model is prompted on a 32x32 point grid restricted to the
+        mask; masks are kept when leaf-sized (0.2%-40% of the plant), mostly on
+        the mask, and not already covered by smaller kept masks.
+
+        OPTIONAL: needs `pip install "plantcv-mcp[sam]"` (torch, torchvision,
+        segment-anything). Without it this refuses with SamNotInstalledError;
+        it never runs count_leaves() instead. It also needs the 375 MB ViT-B
+        checkpoint: pass checkpoint_path, or download_checkpoint=true to let
+        the server fetch the official file into its cache (the only network
+        access in this server, and the only write besides
+        correct_lens_distortion's image). Either way the file's SHA-256 must
+        equal the pinned one or it is not loaded.
+
+        Measured on a held-out Arabidopsis tray against hand counts (see
+        docs/EVAL.md for the figures and the watershed's on the same plants):
+        closer than count_leaves() on both young and grown rosettes, still
+        rarely exact on grown ones, and 10-25 s per plant on CPU. The model was
+        not trained on leaves: read `mask_coverage` (the share of the plant
+        mask that got an instance; low_instance_coverage fires under 50%) and
+        the overlay before quoting the count. device is 'cpu' unless you pass
+        'cuda' or 'cuda:N' explicitly; an unavailable device is an error, not a
+        fallback. Empty and inverted masks are refused; several plants in one
+        mask are flagged multi_object_mask. px_per_mm scales `area` to mm2.
+        """
+        result = _segment_leaves_sam_impl(
+            session_id,
+            checkpoint_path=checkpoint_path,
+            download_checkpoint=download_checkpoint,
+            device=device,
+            px_per_mm=px_per_mm,
         )
         png = result.pop("_png")
         return [json.dumps(result), Image(data=png, format="png")]

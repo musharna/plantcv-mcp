@@ -136,3 +136,136 @@ read) pin the numbers in the suite: 11 annotated leaves → 7 (default) and 8 (a
 
 Each was run with `python -B -p no:cacheprovider`, green before the mutation, and the
 source's md5 checked after the restore.
+
+## Leaf instances: Segment Anything
+
+`segment_leaves_sam()` (optional `sam` extra) is scored on the same plants, boxes and
+hand counts as the watershed above, through the path a user takes: the plant's box
+written to disk, `segment(a, otsu)`, `refine(fill_holes, keep_largest 1)`, then the
+tool. `scripts/eval_leaf_count_sam.py` reproduces it; it imports the plant boxes and
+the truth from `scripts/eval_leaf_count.py`. It is not run in CI (data size).
+
+**Model.** Segment Anything, ViT-B (Kirillov et al., 2023,
+<https://doi.org/10.1109/ICCV51070.2023.00371>), used as released: not fine-tuned and
+not trained on leaves. Code and checkpoints are Apache-2.0 (the upstream repository's
+`LICENSE` and README). `segment-anything==1.0`, torch 2.14.0 CPU build, 6 threads, no
+GPU. The checkpoint is `sam_vit_b_01ec64.pth` from
+`https://dl.fbaipublicfiles.com/segment_anything/`. Upstream publishes no SHA-256 for
+it (none in its README or repository, checked 2026-09-19); the six hex digits in the
+file name are the start of its MD5, which the file fetched here matches. The SHA-256
+pinned in `sam_leaves.py`
+(`ec2df62732614e57411cdcf32a23ffdf28910380d03139ee0f4fcbe91eb8c912`, 375,042,383
+bytes) is the hash of the file fetched from that URL on 2026-09-19. It is loaded with
+`torch.load(weights_only=True)`, which this checkpoint allows: it is a plain
+`state_dict` of tensors.
+
+**Method.** The image is cropped to the mask's bounding box plus a margin, a 32×32
+grid of point prompts is laid over the crop and only the points on the mask are
+kept, and SAM's candidate masks are filtered: predicted IoU ≥ 0.80 and stability
+≥ 0.85, at least 80% on the plant mask, between 0.2% and 40% of the plant's area,
+then smallest first, dropping a mask once more than half of it is already covered.
+
+**What was chosen on which tray.** Every constant was chosen on Tray 031. The grid
+and the filter were fixed from SAM's raw masks on Tray 031 before Tray 032 was run.
+The crop margin was then chosen on Tray 031 through the finished tool, from three
+values, by grown-rosette MAE:
+
+| Tray 031 (development), crop margin | 20 young: mean / MAE / exact | 14 grown: mean / MAE / exact |
+| ----------------------------------- | ---------------------------- | ---------------------------- |
+| 0.10 (adopted)                      | −0.65 / 1.35 / 2             | −1.00 / 2.00 / 2             |
+| 0.25                                | −0.55 / 1.25 / 2             | −1.36 / 2.21 / 3             |
+| 0.50                                | −0.50 / 1.20 / 5             | −1.36 / 2.21 / 3             |
+
+The three differ by less than a quarter of a leaf on 14 plants, and the young plants
+rank them the other way. The margin is not a sensitive choice and the table should not
+be read as showing that 0.10 is better.
+
+**Tray 032 was then run once through the finished tool**, with nothing changed
+afterwards. SAM's raw masks on Tray 032 had been scored once before, with the same
+filter and no crop-margin step (young −0.75 / 0.95 / 10, grown −0.38 / 2.08 / 1), to
+decide whether the tool was worth building; no constant was chosen from that run. Both
+methods at their defaults, same sessions:
+
+| tray, plants                       | method               | mean error | MAE  | exact | s/plant (CPU) |
+| ---------------------------------- | -------------------- | ---------- | ---- | ----- | ------------- |
+| 032 (held out), 20 young, 8–16 lvs | `count_leaves`       | −3.20      | 3.20 | 0/20  | under 0.1     |
+|                                    | `segment_leaves_sam` | −0.60      | 1.10 | 6/20  | 20.8 (max 32) |
+| 032 (held out), 13 grown, 18–25    | `count_leaves`       | −5.38      | 7.85 | 0/13  | under 0.1     |
+|                                    | `segment_leaves_sam` | +0.23      | 1.77 | 2/13  | 19.3 (max 21) |
+| 031 (development), 20 young        | `count_leaves`       | −3.80      | 3.80 | 0/20  |               |
+|                                    | `segment_leaves_sam` | −0.65      | 1.35 | 2/20  | see below     |
+| 031 (development), 14 grown        | `count_leaves`       | −6.07      | 6.21 | 0/14  |               |
+|                                    | `segment_leaves_sam` | −1.00      | 2.00 | 2/14  | see below     |
+
+Seconds per plant cover the tool call only, with the model already loaded; the first
+call adds the load (about 2 s more here). The Tray 031 runs shared the machine with
+other jobs (load average over 40) and took 28–35 s per plant at margin 0.10, against
+13–21 s at 0.50 on a quieter machine, so they are not a timing measurement. Peak
+resident memory of the evaluation process was 3.8 GB.
+
+Read plainly: about one leaf wrong on young rosettes and two on grown ones, against
+three and eight for the watershed, and still exact on fewer than a third of plants.
+The annotation counts leaves mostly hidden under others, which no top-view method
+sees. `mask_coverage` (the share of the plant mask that received an instance) ran
+0.83–0.92 on Tray 032 and never fell under 0.64 on either tray, so the
+`low_instance_coverage` advisory (under 0.50) did not fire on this dataset; it is
+tested with a stubbed model. One dataset, one species, one camera: the figures say
+nothing about other plants.
+
+**Dataset.** Aberystwyth Leaf Evaluation Dataset (Bell and Dee, 2016,
+<https://doi.org/10.5281/zenodo.168158>), CC BY 4.0, as above.
+
+### Seen to fail (Segment Anything)
+
+Tests that need no model (`tests/test_sam_leaves.py`, run in every CI job):
+
+| mutant                                                 | result                                                  |
+| ------------------------------------------------------ | ------------------------------------------------------- |
+| require_sam never raises                               | RED — no `SamNotInstalledError` in the tool error       |
+| extra checked after the checkpoint is resolved         | RED — the cache directory exists: a download came first |
+| open_verified skips the hash comparison                | RED — did not raise `CheckpointVerificationError`       |
+| open_verified skips the read-root check                | SURVIVED — see below                                    |
+| download ignores the permission flag                   | RED — did not raise `CheckpointMissingError`            |
+| download hash not checked                              | RED — did not raise `CheckpointVerificationError`       |
+| download size cap removed                              | RED — no "more than the expected" in the error          |
+| OSError not wrapped as CheckpointDownloadError         | RED — bare `OSError: network is unreachable`            |
+| cache not held to read roots before download           | RED — did not raise `PathOutsideRootsError`             |
+| unavailable cuda silently becomes cpu                  | RED — did not raise `SamDeviceError`                    |
+| overlap rule removed                                   | RED — 3 instances, not 2                                |
+| max-area rule removed                                  | SURVIVED — see below                                    |
+| on-plant rule removed                                  | RED — 3 instances, not 2                                |
+| kept mask relabels taken pixels                        | RED — labels `{1, 2}` where `{1}` was kept              |
+| session kind not checked                               | RED — `WrongSessionKindError` on the RGB control        |
+| tool annotated read-only closed-world                  | RED — `read_only_hint` is True                          |
+| crop offset dropped from instances                     | RED — bbox x 33, not 76                                 |
+| area scaled by px_per_mm not its square                | RED — 1157.5 vs 2315 / 4                                |
+| low coverage never flagged                             | RED — no `low_instance_coverage`                        |
+| zero instances returned as a count                     | RED — did not raise `LeafCountRefusedError`             |
+| inverted-mask refusal removed                          | RED — did not raise `LeafCountRefusedError`             |
+| empty-mask guard removed                               | RED — numpy `ValueError`, not `DegenerateMaskError`     |
+| model loaded before the mask checks                    | RED — `load_model` called on a refused mask             |
+| multi_object_mask never raised                         | RED — no `multi_object_mask`                            |
+| mask-level warnings not carried by the tool            | RED — no `frame_clipping`                               |
+| tool not registered under its name                     | RED — tool-set assertion                                |
+| torch present in the base environment (guard inverted) | RED — "torch is installed in the base test environment" |
+
+Tests that load the model (`tests/test_sam_leaves_model.py`, the `sam` CI job), on CPU:
+
+| mutant                                                    | result                                                                |
+| --------------------------------------------------------- | --------------------------------------------------------------------- |
+| load_model opens the file unverified                      | RED — did not raise `CheckpointVerificationError` on the flipped byte |
+| weights_only=False                                        | RED — `torch.load` saw `[False]`, not `[True]`                        |
+| stale-image check bypassed                                | RED — did not raise `ImageChangedSinceSegmentationError`              |
+| instances not clipped to the plant mask                   | RED — labels off the mask                                             |
+| labels written at the frame origin, not the crop          | RED — labels off the mask                                             |
+| unavailable cuda silently becomes cpu (with the model)    | RED — did not raise `SamDeviceError`                                  |
+| prompt grid ignores the mask                              | RED — 0 candidates, `LeafCountRefusedError`                           |
+| max-area rule removed (re-run after the added assertions) | RED — 1 instance from a rosette-sized mask, not 0                     |
+| both read-root checks on the checkpoint removed           | RED — did not raise `PathOutsideRootsError`                           |
+
+Each was run with `python -B -p no:cacheprovider`, green before the mutation, and the
+source's md5 checked after the restore. Two mutants survived their first run and the
+tests were changed: removing the 40% area ceiling was hidden by the overlap rule until
+the ceiling was asserted with a single candidate, and removing `check_readable` from
+`open_verified` is still caught by `check_open_fd` on the open handle, so the two were
+removed together.

@@ -6,6 +6,61 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.15.0] — 2026-09-19
+
+An optional learned leaf-instance count. 1.14.0 measured `count_leaves()` and found it
+three to eight leaves wrong on real rosettes, and its guide ended "a learned instance
+segmenter would do better; none is bundled". This release adds one as an optional extra
+and measures it on the same plants.
+
+### Added
+
+- **`segment_leaves_sam(session_id, checkpoint_path=None, download_checkpoint=False,
+  device="cpu", px_per_mm=None)`.** Segment Anything ViT-B (Apache-2.0), prompted on a
+  32×32 point grid restricted to the session mask, with a fixed post-filter (SAM's own
+  scores, at least 80% on the mask, 0.2%–40% of the plant, smallest first, dropped once
+  half covered). Same `instances` table, numbered overlay, session, stale-image,
+  isolation-worker, lineage and engine handling as `count_leaves()`, plus
+  `mask_coverage`, `candidate_masks`, `device` and a `model` block. New advisory
+  `low_instance_coverage` (instances cover under 50% of the mask); `multi_object_mask`
+  and the carried mask-level warnings apply as they do to `count_leaves()`.
+- **The `sam` extra.** `pip install "plantcv-mcp[sam]"` adds torch, torchvision and
+  `segment-anything==1.0`. The base install has no new dependency, imports and runs
+  without them, lists the tool, and refuses a call with `SamNotInstalledError` and the
+  install command. It never substitutes the watershed.
+- **Its error is measured.** Held-out Aberystwyth Tray 032, through `segment` →
+  `refine(fill_holes, keep_largest)` → the tool, against the watershed at its default
+  on the same sessions: 20 young rosettes, mean error −0.60, MAE 1.10, 6 exact
+  (watershed −3.20 / 3.20 / 0); 13 grown rosettes, +0.23 / 1.77 / 2 (watershed −5.38 /
+  7.85 / 0). About 20 s per plant on a 6-thread CPU and 3.8 GB peak memory, against
+  under 0.1 s. Every constant was chosen on Tray 031. `docs/EVAL.md` has the method,
+  the development-tray table and the mutants; `scripts/eval_leaf_count_sam.py`
+  reproduces the figures.
+- **The checkpoint is never loaded unverified.** Its SHA-256 is pinned in the source
+  and checked on the open file handle that is then loaded, with
+  `torch.load(weights_only=True)`. A mismatch is `CheckpointVerificationError`. Upstream
+  publishes no SHA-256; the pin is the hash of the file fetched from the official URL
+  on 2026-09-19 (its MD5 matches the prefix in the upstream file name).
+- **A download only when asked for.** `download_checkpoint=true` fetches the one fixed
+  https URL into the cache directory; a response longer than the expected size is
+  abandoned, a wrong hash is discarded and not cached, and a network failure is
+  `CheckpointDownloadError`. With read roots configured, the checkpoint and the cache
+  must be inside them, checked before any request. This is the server's only network
+  access, and the tool is annotated `open_world_hint=true`, `read_only_hint=false`.
+- **CPU unless told otherwise.** `device` defaults to `"cpu"`; `"cuda"` or `"cuda:N"`
+  must be passed explicitly, and an unavailable device is `SamDeviceError`, not a
+  fallback.
+
+### Changed
+
+- `describe_instances()` in `leaves.py` now builds the instance table and numbered
+  overlay for both tools; `count_leaves()` output is unchanged (its tests did not move).
+- CI: a separate `sam` job installs the extra (CPU wheels from PyTorch's index, pinned
+  in `uv.lock`), caches the checkpoint, and runs only the SAM tests. Every
+  `--all-extras` in `guardrails.yml` and `nightly-guardrails.yml` carries
+  `--no-extra sam`, and a test fails those jobs if torch appears in them.
+- `SECURITY.md` and the guide's trust-boundary section state the one outbound request.
+
 ## [1.14.0] — 2026-09-18
 
 A leaf-instance count for top-view rosettes, with its measured error. An audit
