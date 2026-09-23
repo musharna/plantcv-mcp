@@ -6,6 +6,57 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+Fixes from the MCP bug audit of 2026-09-22. Each one is reproduced through a
+real in-process MCP client in `tests/test_tool_boundary.py`, and each test was
+seen to fail on the old code.
+
+### Fixed
+
+- **`measure_images` structured output kept only part of the result.** Its
+  output schema was a narrower copy of what `batch.py` returns, and pydantic
+  drops keys a TypedDict does not declare. A grid batch came back on the
+  structured channel with `traits: null`, no `regions`, and no
+  `not_run_paths`/`duplicates_dropped`. The contract now lives in `batch.py`.
+  Every output TypedDict forbids undeclared keys, so any future drift fails the
+  call instead of dropping data, and every structured tool publishes
+  `additionalProperties: false`.
+- **A bad batch recipe is one error.** `px_per_mm` ≤ 0 and an adaptive
+  `ksize` < 3 used to return `isError: false` with every image refused for the
+  same reason. They are now checked before any image is read.
+- **A failed call no longer evicts a live session.** `segment`, `refine`,
+  `segment_hyperspectral` and `segment_thermal` stored the session before
+  rendering its overlay, so a render failure inserted an unseen session and
+  evicted the oldest one from the 8-session store.
+- **Non-finite pixels no longer break ranges.** One ±Inf pixel made thermal
+  `frame_range` (and a hyperspectral `index_range`) print `Infinity`. It also
+  failed `measure_thermal`'s output schema and rendered the thermal overlay
+  black. Ranges now cover the finite values only.
+- **16-bit colour images are refused at decode**, with the conversion to make.
+  They used to pass the channel check and crash inside OpenCV.
+- **Thin images get a preview.** A 2×3000 image made `segment` fail on a
+  zero-size resize. A 1 px image did the same to `suggest_segmentation`.
+- **`indices=[]` is refused** by `measure_spectral` and `measure_regions`.
+  It used to measure NDVI silently.
+
+### Changed
+
+- **Size, count and iteration arguments have ceilings as well as floors**, all
+  stated in the new `limits.py` (#117):
+  - `refine` kernel ops may not reach, as (ksize − 1) × iterations + 1, past
+    the mask's longest edge. A 3×3 dilation 200000 times asked OpenCV for
+    160 GB, and `ksize=2e9` leaked a MemoryError.
+  - Checkerboard corners are limited to 2–200 per side (10⁶ × 10⁶ sized a
+    10.9 TiB grid).
+  - The adaptive-threshold `ksize` is limited to 3–1001 and `offset` to ±255.
+  - `fill_size` < 0 is refused by all four segmenters. PlantCV used to treat
+    it silently as 0.
+- **`calibrate_scale_from_marker` never returns a scale `measure` would
+  refuse.** `marker_length_mm` must be finite. The resulting `px_per_mm`
+  passes the same `check_px_per_mm` rule as `measure`: 1e-320 mm used to give
+  `inf`, and NaN/inf used to pass the `> 0` check (#117).
+- `pydantic` is declared as a direct dependency (it was already installed
+  through `mcp`).
+
 ## [1.15.0] — 2026-09-19
 
 An optional learned leaf-instance count. 1.14.0 measured `count_leaves()` and found it

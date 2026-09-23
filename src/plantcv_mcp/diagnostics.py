@@ -619,3 +619,20 @@ def threshold_outside_range_warning(
             "says nothing about the plant. Choose a value inside that range."
         ),
     )
+
+
+def finite_range(values: np.ndarray, what: str) -> tuple[float, float]:
+    """(min, max) over the FINITE values only.
+
+    np.nanmin/np.nanmax skip NaN but not ±Inf: one infinite pixel in a thermal
+    frame, or a ratio index over a zero band, made every reported range
+    `Infinity` — not JSON, and null once validated, so the structured result
+    failed the client's schema — and scaled the thermal overlay to black
+    (audit of 2026-09-22, M4). A range is a statement about the data a mask can
+    select, and a non-finite pixel is never selectable. Raises when nothing is
+    finite: there is no range to report.
+    """
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        raise ValueError(f"No finite {what} values; nothing to segment.")
+    return float(finite.min()), float(finite.max())

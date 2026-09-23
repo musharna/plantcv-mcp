@@ -37,10 +37,12 @@ from .diagnostics import (
     MaskDiagnostics,
     analyze_mask,
     assert_not_degenerate,
+    finite_range,
     segmentation_warnings,
     threshold_outside_range_warning,
 )
 from .imaging import read_image_bytes, render_overlay
+from .limits import require_fill_size
 from .measurement import isolated_pcv_outputs
 
 LABEL = "hsi"
@@ -272,6 +274,7 @@ def segment_hyperspectral(
     white_load: CubeLoad | None = None,
     dark_load: CubeLoad | None = None,
 ) -> HsiSegmentation:
+    require_fill_size(fill_size)
     if object_type not in ("light", "dark"):
         raise ValueError(f"object_type must be 'light' or 'dark', got {object_type!r}")
     load = cube_load or load_cube(path)
@@ -284,7 +287,7 @@ def segment_hyperspectral(
     prepared, calibration, warnings = prepare_cube(load.cube, white_load, dark_load)
     idx = compute_index(prepared, index)
     values = idx.array_data.astype(np.float64)
-    lo, hi = float(np.nanmin(values)), float(np.nanmax(values))
+    lo, hi = finite_range(values, f"{index} index")
     with isolated_pcv_outputs():
         pre_fill = pcv.threshold.binary(
             gray_img=values, threshold=float(threshold), object_type=object_type

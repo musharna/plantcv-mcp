@@ -27,10 +27,12 @@ from .diagnostics import (
     MaskDiagnostics,
     analyze_mask,
     assert_not_degenerate,
+    finite_range,
     segmentation_warnings,
     threshold_outside_range_warning,
 )
 from .imaging import digest_bytes, read_image_bytes, render_overlay
+from .limits import require_fill_size
 from .measurement import isolated_pcv_outputs
 
 LABEL = "thermal"
@@ -128,9 +130,11 @@ def load_thermal(path: str) -> ThermalLoad:
 
 def grey_frame(celsius: np.ndarray) -> np.ndarray:
     """Min-max scaled BGR rendering of a temperature frame, for overlays."""
-    lo, hi = float(np.nanmin(celsius)), float(np.nanmax(celsius))
+    lo, hi = finite_range(celsius, "temperature")
     scaled = np.zeros_like(celsius) if hi <= lo else (celsius - lo) / (hi - lo)
-    grey = (np.nan_to_num(scaled) * 255).astype(np.uint8)
+    # Scaled over the finite range; a non-finite pixel is clipped to an end
+    # (NaN to 0) instead of stretching the scale until the plant is black.
+    grey = (np.clip(np.nan_to_num(scaled), 0.0, 1.0) * 255).astype(np.uint8)
     return cv2.cvtColor(grey, cv2.COLOR_GRAY2BGR)
 
 
@@ -153,6 +157,7 @@ def segment_thermal(
     fill_size: int = 200,
     load: ThermalLoad | None = None,
 ) -> ThermalSegmentation:
+    require_fill_size(fill_size)
     if min_c is not None and max_c is not None and min_c >= max_c:
         raise ValueError(f"min_c must be below max_c, got {min_c} >= {max_c}")
     load = load or load_thermal(path)
@@ -160,7 +165,7 @@ def segment_thermal(
     finite = c[np.isfinite(c)]
     if finite.size == 0:
         raise ValueError(f"No finite temperatures in {path!r}; nothing to segment.")
-    lo, hi = float(finite.min()), float(finite.max())
+    lo, hi = finite_range(c, "temperature")
     if min_c is None and max_c is None:
         # Refusing without the range made the first call a blind guess; the
         # percentiles show where the plant (usually the cool tail) sits.
@@ -234,7 +239,7 @@ def segment_thermal(
         overlay=render_overlay(grey_frame(c), mask),
         diagnostics=diag,
         warnings=warnings,
-        frame_range=(float(np.nanmin(c)), float(np.nanmax(c))),
+        frame_range=finite_range(c, "temperature"),
         min_c=min_c,
         max_c=max_c,
         source=load.source,
@@ -300,6 +305,6 @@ def measure_thermal(
     return ThermalResult(
         temperature=temperature,
         pixel_count=int((mask > 0).sum()),
-        frame_range=(float(np.nanmin(c)), float(np.nanmax(c))),
+        frame_range=finite_range(c, "temperature"),
         histogram=histogram,
     )

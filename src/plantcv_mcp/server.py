@@ -1,4 +1,4 @@
-"""MCP server. Fifteen tools over a typed session store (rgb / hsi / thermal).
+"""MCP server: the tools over a typed session store (rgb / hsi / thermal).
 
 segment() mints a session and returns the overlay but NO traits; measure()
 requires that session. The split is deliberate: it forces the visual evidence
@@ -37,20 +37,21 @@ from plantcv import plantcv as pcv
 from typing_extensions import TypedDict
 
 from . import __version__, plantcv_version
-from .batch import DEFAULT_MAX_SECONDS
+from .batch import DEFAULT_MAX_SECONDS, BatchResult
 from .color import (
     color_card_excluded_advisory,
     correct_color,
     detect_card_region,
     exclude_card,
 )
+from .contracts import WarningItem, closed
 from .diagnostics import (
     analyze_mask,
     implausible_longest_path_warning,
     mask_warnings,
     segmentation_warnings,
 )
-from .hyperspectral import load_cube
+from .hyperspectral import IndexUnavailableError, load_cube
 from .imaging import (
     downscale,
     encode_png,
@@ -69,6 +70,7 @@ from .lens import (
     rms_fraction,
     undistort_image,
 )
+from .limits import require_fill_size, require_threshold_params
 from .measurement import ANALYSES, TraitValue, validate_analyses
 from .paths import check_readable, configured_roots, set_roots
 from .refine import (
@@ -159,6 +161,7 @@ the returned overlay before trusting any number.\
 """
 
 
+@closed
 class MeasureResult(TypedDict):
     """Return type of measure(). Annotated so MCP can publish an output_schema."""
 
@@ -183,13 +186,7 @@ class MeasureResult(TypedDict):
     warnings: list[dict]
 
 
-class WarningItem(TypedDict):
-    """One advisory attached to a result."""
-
-    code: str
-    message: str
-
-
+@closed
 class ScaleResult(TypedDict):
     """Return type of calibrate_scale_from_marker()."""
 
@@ -201,53 +198,7 @@ class ScaleResult(TypedDict):
     warnings: list[WarningItem]
 
 
-class BatchRecipe(TypedDict):
-    """The one segmentation recipe a batch applied to every image."""
-
-    channel: str
-    method: str
-    object_type: str
-    fill_size: int
-    # The 'mean'/'gaussian' kernel parameters and the colour-correction flag are
-    # part of the recipe: without them the record cannot say what produced the
-    # numbers, and a batch could not reproduce a settled segment() call.
-    ksize: int
-    offset: int
-    color_correct: bool
-    analyses: list[str]
-    px_per_mm: float | None
-
-
-class BatchSummary(TypedDict):
-    """Counts, plus the paths that still need a human with an overlay."""
-
-    submitted: int
-    measured: int
-    needs_review: int
-    review_paths: list[str]
-
-
-class BatchImageResult(TypedDict):
-    """One image's outcome. traits is null whenever measured is false."""
-
-    image_path: str
-    measured: bool
-    mask_fraction: float | None
-    component_count: int | None
-    warnings: list[WarningItem]
-    traits: dict[str, TraitValue] | None
-    refused_because: str | None
-
-
-class BatchResult(TypedDict):
-    """Return type of measure_images()."""
-
-    recipe: BatchRecipe
-    summary: BatchSummary
-    results: list[BatchImageResult]
-    engine: dict[str, str]
-
-
+@closed
 class SpectralMeasureResult(TypedDict):
     """Return type of measure_spectral()."""
 
@@ -264,6 +215,7 @@ class SpectralMeasureResult(TypedDict):
     engine: dict[str, str]
 
 
+@closed
 class ThermalMeasureResult(TypedDict):
     """Return type of measure_thermal()."""
 
@@ -276,6 +228,7 @@ class ThermalMeasureResult(TypedDict):
     engine: dict[str, str]
 
 
+@closed
 class MethodsInfo(TypedDict):
     """Return type of list_methods()."""
 
@@ -342,6 +295,9 @@ def _segment_impl(
     color_correct: bool = False,
     exclude_color_card: bool = False,
 ) -> dict:
+    # Every argument that needs no pixels is checked before any are read.
+    require_fill_size(fill_size)
+    require_threshold_params(method, ksize, offset)
     # The digest is of the SAME bytes the mask is about to be drawn on. Hashing
     # the path afterwards left a window in which a same-shape replacement was
     # recorded as this mask's identity.
@@ -378,6 +334,12 @@ def _segment_impl(
     if card_note is not None:
         warnings.append(card_note)
 
+    # The overlay is rendered BEFORE the session is stored. The store is an LRU
+    # of 8: storing first let a call that then failed in the render insert a
+    # session nobody was told about and evict the oldest live one (audit
+    # 2026-09-22, M3). Nothing reaches the store until the response exists.
+    overlay, scale = downscale(render_overlay(img, mask))
+    png = encode_png(overlay)
     session = _store.create(
         image_path,
         mask,
@@ -388,8 +350,6 @@ def _segment_impl(
         card_region=card,
         card_excluded_px=removed,
     )
-    overlay, scale = downscale(render_overlay(img, mask))
-    png = encode_png(overlay)
     return {
         "session_id": session.session_id,
         "channel": channel,
@@ -481,7 +441,8 @@ def _measure_impl(
 
 def _refine_impl(session_id: str, ops: list[dict]) -> dict:
     session = _session_of(session_id, "rgb")
-    validated = validate_ops(ops)  # all-or-nothing, before anything runs
+    # all-or-nothing, before anything runs; kernel reach checked against the mask
+    validated = validate_ops(ops, shape=session.mask.shape)
     # refuses a degenerate result; reports every major object an op threw away
     mask, dropped = dispatch("refine", session.mask, validated)
     regrown = 0
@@ -514,6 +475,9 @@ def _refine_impl(session_id: str, ops: list[dict]) -> dict:
     # session whose file changed underneath would draw the overlay on pixels
     # the mask was never made from.
     img = _load_session_image(session)
+    # Rendered before the child is stored; see _segment_impl.
+    overlay, scale = downscale(render_overlay(img, mask))
+    png = encode_png(overlay)
     child = _store.create(
         session.image_path,
         mask,
@@ -526,8 +490,6 @@ def _refine_impl(session_id: str, ops: list[dict]) -> dict:
         lineage=[*session.lineage, *validated],
         parent_id=session.session_id,
     )
-    overlay, scale = downscale(render_overlay(img, mask))
-    png = encode_png(overlay)
 
     def _summary(d) -> dict:
         return {
@@ -752,6 +714,9 @@ def _segment_hsi_impl(
         dark_load=dark_load,
         fill_size=fill_size,
     )
+    # Rendered before the session is stored; see _segment_impl.
+    small, scale = downscale(seg.overlay)
+    png = encode_png(small)
     session = _store.create(
         load.raw_path,
         seg.mask,
@@ -767,8 +732,6 @@ def _segment_hsi_impl(
             "calibration_args": seg.calibration_args,
         },
     )
-    small, scale = downscale(seg.overlay)
-    png = encode_png(small)
     return {
         "session_id": session.session_id,
         "kind": "hsi",
@@ -805,7 +768,13 @@ def _measure_spectral_impl(
         "hsi_measure",
         load,
         session.mask,
-        indices=tuple(indices) if indices else (session.extra.get("index", "ndvi"),),
+        # None is "not given"; [] is a request for nothing and is refused by
+        # measure_spectral, not replaced by the default (audit 2026-09-22, L10).
+        indices=(
+            tuple(indices)
+            if indices is not None
+            else (session.extra.get("index", "ndvi"),)
+        ),
         calibration=cal,
         white_load=load_cube(wref) if wref is not None else None,
         dark_load=load_cube(dref) if dref is not None else None,
@@ -831,6 +800,9 @@ def _segment_thermal_impl(
     seg = dispatch(
         "thermal_segment", load, path, min_c=min_c, max_c=max_c, fill_size=fill_size
     )
+    # Rendered before the session is stored; see _segment_impl.
+    small, scale = downscale(seg.overlay)
+    png = encode_png(small)
     session = _store.create(
         path,
         seg.mask,
@@ -840,8 +812,6 @@ def _segment_thermal_impl(
         kind="thermal",
         extra={"min_c": min_c, "max_c": max_c, "source": seg.source},
     )
-    small, scale = downscale(seg.overlay)
-    png = encode_png(small)
     return {
         "session_id": session.session_id,
         "kind": "thermal",
@@ -972,7 +942,16 @@ def _measure_regions_impl(
         img = np.ascontiguousarray(load.cube.pseudo_rgb)
         cal = session.extra.get("calibration_args") or {}
         wref, dref = cal.get("white_reference"), cal.get("dark_reference")
-        wanted = tuple(indices) if indices else (session.extra.get("index", "ndvi"),)
+        if indices is not None and not indices:
+            raise IndexUnavailableError(
+                "No indices requested; omit indices to measure the session's "
+                f"index ({session.extra.get('index', 'ndvi')!r})."
+            )
+        wanted = (
+            tuple(indices)
+            if indices is not None
+            else (session.extra.get("index", "ndvi"),)
+        )
         regions = dispatch(
             "hsi_regions",
             load,
@@ -1572,7 +1551,8 @@ def build_server() -> MCPServer:
         'light'); the wrong one returns the background with plausible-looking
         traits, so call suggest_segmentation() if unsure. fill_size drops
         components smaller than itself and will erase a genuinely small
-        specimen. ksize and offset apply to the 'mean' and 'gaussian' methods.
+        specimen (0 disables it; negative is refused). ksize (3-1001) and
+        offset (-255 to 255) apply to the 'mean' and 'gaussian' methods.
         color_correct requires a ColorChecker card in the frame and RAISES if it
         cannot find one; it makes colour traits comparable across lighting. The
         card's own region is then excluded from the mask (`color_card_excluded`

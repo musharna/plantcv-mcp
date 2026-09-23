@@ -13,11 +13,13 @@ selected, because nothing outside the box is passed in. That removes the mechani
 rather than compensating for it.
 """
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
 
 from .diagnostics import Advisory
+from .measurement import check_px_per_mm
 from .segmentation import threshold_mask
 
 
@@ -56,8 +58,12 @@ def calibrate_scale(
     it against what they expect, because a wrong scale silently rescales every
     subsequent trait.
     """
-    if marker_length_mm <= 0:
-        raise ValueError(f"marker_length_mm must be > 0, got {marker_length_mm}")
+    # `<= 0` alone let NaN through (every comparison with NaN is False) and inf
+    # (#117); the scale it produced is checked again below by measure()'s rule.
+    if not (0.0 < float(marker_length_mm) < math.inf):
+        raise ValueError(
+            f"marker_length_mm must be a positive finite number, got {marker_length_mm}"
+        )
     if w <= 0 or h <= 0:
         raise ValueError(f"crop must have positive size, got w={w} h={h}")
 
@@ -168,8 +174,13 @@ def calibrate_scale(
     if marker_length_px <= 0:
         raise MarkerNotFoundError("Detected marker has zero length in pixels.")
 
+    # A positive finite length can still give an unusable scale: 1e-320 mm made
+    # px_per_mm inf (serialised as null), 1e308 made one whose square is 0.
+    # The scale is held to the same rule measure() applies to it, here, so the
+    # calibration never hands out a number the measurement would refuse
+    # (audit 2026-09-22, L8).
     return ScaleEstimate(
-        px_per_mm=side_long / float(marker_length_mm),
+        px_per_mm=check_px_per_mm(side_long / float(marker_length_mm)),
         marker_length_px=marker_length_px,
         marker_length_mm=float(marker_length_mm),
         marker_area_px=marker_area_px,

@@ -22,9 +22,12 @@ import os
 import time
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, NotRequired
 
 from plantcv import plantcv as pcv
+
+# typing.TypedDict breaks pydantic schema generation below Python 3.12.
+from typing_extensions import TypedDict
 
 from . import plantcv_version
 from .color import (
@@ -33,6 +36,7 @@ from .color import (
     detect_card_region,
     exclude_card,
 )
+from .contracts import WarningItem, closed
 from .diagnostics import (
     BLOCKING_CODES,
     NOISE_EXPLAINED_PER_CELL,
@@ -42,7 +46,14 @@ from .diagnostics import (
     segmentation_warnings,
 )
 from .imaging import load_image
-from .measurement import ANALYSES, UnknownAnalysisError, measure_traits
+from .limits import require_fill_size, require_threshold_params
+from .measurement import (
+    ANALYSES,
+    TraitValue,
+    UnknownAnalysisError,
+    check_px_per_mm,
+    measure_traits,
+)
 from .regions import (
     MAX_REGIONS,
     REGION_MODES,
@@ -81,6 +92,80 @@ DEFAULT_MAX_SECONDS = 300.0
 CELL_BACKGROUND_COVERAGE = 0.85
 
 
+# The result's contract lives beside the code that builds it, and is closed
+# (contracts.py): measure_batch() is annotated to return BatchResult and the
+# tool validates what it returns against it, so a key added to one without the
+# other fails the call instead of vanishing from the structured channel. The
+# server used to keep its own, narrower copy; every per-plant number of a grid
+# batch was dropped there (audit of 2026-09-22, H1).
+
+
+@closed
+class BatchRecipe(TypedDict):
+    """The one segmentation recipe a batch applied to every image."""
+
+    channel: str
+    method: str
+    object_type: str
+    fill_size: int
+    # The 'mean'/'gaussian' kernel parameters and the colour-correction flag are
+    # part of the recipe: without them the record cannot say what produced the
+    # numbers, and a batch could not reproduce a settled segment() call.
+    ksize: int
+    offset: int
+    color_correct: bool
+    exclude_color_card: bool
+    analyses: list[str]
+    px_per_mm: float | None
+    max_seconds: float | None
+    # The grid geometry that was given, or null without a grid.
+    regions: dict[str, Any] | None
+
+
+@closed
+class BatchSummary(TypedDict):
+    """Counts, plus the paths that still need a human with an overlay."""
+
+    submitted: int
+    unique: int
+    duplicates_dropped: list[str]
+    measured: int
+    with_advisories: int
+    advisory_counts: dict[str, int]
+    needs_review: int
+    review_paths: list[str]
+    not_run: int
+    not_run_paths: list[str]
+
+
+@closed
+class BatchImageResult(TypedDict):
+    """One image's outcome. traits is null whenever measured is false, and
+    under a grid, where the per-plant rows are in `regions`."""
+
+    image_path: str
+    measured: bool
+    mask_fraction: float | None
+    component_count: int | None
+    warnings: list[WarningItem]
+    traits: dict[str, TraitValue] | None
+    refused_because: str | None
+    seconds: float | None
+    regions: NotRequired[list[dict[str, Any]]]
+    regions_measured: NotRequired[int]
+
+
+@closed
+class BatchResult(TypedDict):
+    """Return type of measure_batch() and of the measure_images() tool."""
+
+    recipe: BatchRecipe
+    elapsed_s: float
+    engine: dict[str, str]
+    summary: BatchSummary
+    results: list[BatchImageResult]
+
+
 class BatchTooLargeError(Exception):
     """Raised when more images are submitted than MAX_BATCH."""
 
@@ -106,12 +191,25 @@ def _validate_recipe(
     analyses: tuple[str, ...],
     max_seconds: float | None,
     grid: dict[str, Any] | None,
+    *,
+    fill_size: int,
+    ksize: int,
+    offset: int,
+    px_per_mm: float | None,
 ) -> None:
     """A recipe error is ONE error, raised before any image is loaded.
 
     Found on a real batch: channel='zz' ran every image and returned N
-    identical UnknownChannelError rows with measured=0.
+    identical UnknownChannelError rows with measured=0. The same held for
+    every recipe value checked only where it was used, inside the per-image
+    try/except: px_per_mm=0 and ksize=1 came back as isError=false with every
+    image "refused" for one identical reason (audit of 2026-09-22, M2). Every
+    argument that does not depend on the pixels is therefore checked here.
     """
+    require_fill_size(fill_size)
+    require_threshold_params(method, ksize, offset)
+    if px_per_mm is not None:
+        check_px_per_mm(px_per_mm)
     if channel not in CHANNELS:
         raise UnknownChannelError(
             f"Unknown channel {channel!r}. Valid channels: {sorted(CHANNELS)}."
@@ -188,7 +286,7 @@ def measure_batch(
     width: int | None = None,
     spacing: tuple[int, int] | None = None,
     radius: int | None = None,
-) -> dict:
+) -> BatchResult:
     """Segment and measure many images with one fixed recipe.
 
     With nrows/ncols the mask of each image is measured per region exactly as
@@ -253,7 +351,18 @@ def measure_batch(
             "spacing": spacing,
             "radius": radius,
         }
-    _validate_recipe(channel, method, object_type, analyses, max_seconds, grid)
+    _validate_recipe(
+        channel,
+        method,
+        object_type,
+        analyses,
+        max_seconds,
+        grid,
+        fill_size=fill_size,
+        ksize=ksize,
+        offset=offset,
+        px_per_mm=px_per_mm,
+    )
 
     # The same file twice is measured once; the summary says what was dropped.
     # Compared by the file, not the spelling: ./a.png, a symlink and the
