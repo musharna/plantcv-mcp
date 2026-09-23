@@ -425,3 +425,43 @@ async def test_hyperspectral_index_range_ignores_non_finite_pixels(tmp_path):
             ranges.append(_strict_json(r.content[0].text)["index_range"])
     assert ranges[0] == pytest.approx([2 / 3, 4.0], rel=1e-5)
     assert ranges[1] == ranges[0]
+
+
+# --- M5: the decode gate checks bit depth as well as channel count
+
+
+async def test_sixteen_bit_colour_images_are_refused_at_decode(tmp_path):
+    """The gate at the one place pixels enter checked for 3 channels but not
+    for 8 bits, so a 16-bit colour PNG passed it and died in cvtColor inside
+    PlantCV with an OpenCV assertion (audit 2026-09-22, M5). Every RGB tool
+    reads through the gate; three are driven here, with the same picture at
+    8 bits as the positive control."""
+    eight = cv2.imread(_plant(tmp_path, "p8.png"))
+    p16 = _png(tmp_path / "p16.png", eight.astype(np.uint16) * 257)
+    p8 = str(tmp_path / "p8.png")
+    calls = {
+        "segment": lambda p: {"image_path": p, "channel": "a", "method": "otsu"},
+        "suggest_segmentation": lambda p: {"image_path": p},
+        "calibrate_scale_from_marker": lambda p: {
+            "image_path": p,
+            "x": 100,
+            "y": 100,
+            "w": 100,
+            "h": 100,
+            "marker_length_mm": 10.0,
+        },
+    }
+    async with Client(build_server()) as client:
+        for tool, args in calls.items():
+            ok = await client.call_tool(tool, args(p8))
+            assert not ok.is_error, (tool, _text(ok))
+            r = await client.call_tool(tool, args(p16))
+            assert r.is_error, (tool, _text(r))
+            assert "16-bit" in _text(r) and "OpenCV" not in _text(r), (tool, _text(r))
+        batch = await client.call_tool(
+            "measure_images",
+            {"image_paths": [p8, p16], "channel": "a", "method": "otsu"},
+        )
+    rows = {r["image_path"]: r for r in batch.structured_content["results"]}
+    assert rows[p8]["measured"] is True
+    assert "16-bit" in rows[p16]["refused_because"], rows[p16]

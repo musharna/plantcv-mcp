@@ -106,6 +106,18 @@ def decode_image(data: bytes, path: str) -> np.ndarray:
             "RGB tools measure. If this is a thermal frame, use segment_thermal(); if "
             "it is a mask or a single band, it is not an image to segment."
         )
+    if img.dtype != np.uint8:
+        # The channel count was only half the gate. A 16-bit colour PNG has three
+        # channels, passed, and died in PlantCV's LAB/HSV conversion with an
+        # OpenCV assertion (audit of 2026-09-22, M5). Every threshold and
+        # colour trait here is defined on 8-bit channels; rescaling silently
+        # would measure pixels that are not the ones on disk.
+        bits = img.dtype.itemsize * 8
+        raise NotColorImageError(
+            f"{path} is a {bits}-bit colour image ({img.dtype}); the RGB tools "
+            "measure 8-bit colour photographs. Convert it to 8 bits per channel "
+            "(for 16-bit data, divide by 257) and pass that file."
+        )
     return img
 
 
