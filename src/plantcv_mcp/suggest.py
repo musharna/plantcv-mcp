@@ -15,6 +15,11 @@ def colorspace_sheet(img: np.ndarray) -> np.ndarray:
 def threshold_sheet(img: np.ndarray, channel: str) -> np.ndarray:
     """Grid of auto-threshold methods on one channel — which method works here."""
     gray = to_gray(img, channel)
+    if min(gray.shape[:2]) < 2:
+        # PlantCV halves the sheet internally, which is a zero-size resize for
+        # a 1 px edge. Doubling every pixel keeps the histogram's proportions,
+        # so each method picks the same threshold (audit of 2026-09-22, L9).
+        gray = np.repeat(np.repeat(gray, 2, axis=0), 2, axis=1)
     result = pcv.visualize.auto_threshold_methods(gray_img=gray, grid_img=True)
     return result[0] if isinstance(result, list) else result
 

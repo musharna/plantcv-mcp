@@ -1,4 +1,4 @@
-"""MCP server. Fifteen tools over a typed session store (rgb / hsi / thermal).
+"""MCP server: the tools over a typed session store (rgb / hsi / thermal).
 
 segment() mints a session and returns the overlay but NO traits; measure()
 requires that session. The split is deliberate: it forces the visual evidence
@@ -51,7 +51,7 @@ from .diagnostics import (
     mask_warnings,
     segmentation_warnings,
 )
-from .hyperspectral import load_cube
+from .hyperspectral import IndexUnavailableError, load_cube
 from .imaging import (
     downscale,
     encode_png,
@@ -768,7 +768,13 @@ def _measure_spectral_impl(
         "hsi_measure",
         load,
         session.mask,
-        indices=tuple(indices) if indices else (session.extra.get("index", "ndvi"),),
+        # None is "not given"; [] is a request for nothing and is refused by
+        # measure_spectral, not replaced by the default (audit 2026-09-22, L10).
+        indices=(
+            tuple(indices)
+            if indices is not None
+            else (session.extra.get("index", "ndvi"),)
+        ),
         calibration=cal,
         white_load=load_cube(wref) if wref is not None else None,
         dark_load=load_cube(dref) if dref is not None else None,
@@ -936,7 +942,16 @@ def _measure_regions_impl(
         img = np.ascontiguousarray(load.cube.pseudo_rgb)
         cal = session.extra.get("calibration_args") or {}
         wref, dref = cal.get("white_reference"), cal.get("dark_reference")
-        wanted = tuple(indices) if indices else (session.extra.get("index", "ndvi"),)
+        if indices is not None and not indices:
+            raise IndexUnavailableError(
+                "No indices requested; omit indices to measure the session's "
+                f"index ({session.extra.get('index', 'ndvi')!r})."
+            )
+        wanted = (
+            tuple(indices)
+            if indices is not None
+            else (session.extra.get("index", "ndvi"),)
+        )
         regions = dispatch(
             "hsi_regions",
             load,

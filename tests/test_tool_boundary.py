@@ -465,3 +465,82 @@ async def test_sixteen_bit_colour_images_are_refused_at_decode(tmp_path):
     rows = {r["image_path"]: r for r in batch.structured_content["results"]}
     assert rows[p8]["measured"] is True
     assert "16-bit" in rows[p16]["refused_because"], rows[p16]
+
+
+# --- L9: thin images get a preview, not a zero-size resize
+
+
+async def test_thin_and_tiny_images_render_their_previews(tmp_path):
+    """downscale() computed int(edge * scale), which is 0 for a 2 px edge of a
+    3000 px image, and OpenCV refused the resize: segment() failed after
+    thresholding (audit 2026-09-22, L9). suggest_segmentation() on a 1 px
+    image failed the same way inside PlantCV's own half-size sheet."""
+    thin = np.full((2, 3000, 3), 240, np.uint8)
+    thin[:, 1000:1500] = (40, 160, 40)
+    thin_p = _png(tmp_path / "thin.png", thin)
+    dot_p = _png(tmp_path / "dot.png", np.full((1, 1, 3), 40, np.uint8))
+    plant = _plant(tmp_path)
+    async with Client(build_server()) as client:
+        for p in (plant, thin_p):  # plant: positive control
+            r = await client.call_tool(
+                "segment",
+                {"image_path": p, "channel": "a", "method": "otsu", "fill_size": 1},
+            )
+            assert not r.is_error, (p, _text(r))
+            assert any(c.type == "image" for c in r.content)
+        for p in (plant, thin_p, dot_p):
+            r = await client.call_tool("suggest_segmentation", {"image_path": p})
+            assert not r.is_error, (p, _text(r))
+
+    from plantcv_mcp.imaging import downscale
+
+    small, scale = downscale(thin)
+    assert small.shape[0] >= 1 and small.shape[1] == 1024, (small.shape, scale)
+
+
+# --- L10: an empty indices list is a request for nothing, not for the default
+
+
+async def test_empty_indices_is_refused_not_replaced_by_the_default(tmp_path):
+    """`tuple(indices) if indices else (default,)` read [] as 'not given' and
+    silently measured NDVI (audit 2026-09-22, L10). measure_spectral() and
+    measure_regions() both refuse it; omitting indices still measures the
+    session's index."""
+    async with Client(build_server()) as client:
+        seg = await client.call_tool(
+            "segment_hyperspectral", {"envi_path": _hsi_cube(tmp_path)}
+        )
+        sid = json.loads(seg.content[0].text)["session_id"]
+        grid = {
+            "nrows": 1,
+            "ncols": 1,
+            "mode": "rect_grid",
+            "coord": [10, 5],
+            "height": 50,
+            "width": 60,
+            "spacing": [0, 0],
+        }
+        for tool, extra in (("measure_spectral", {}), ("measure_regions", grid)):
+            ok = await client.call_tool(tool, {"session_id": sid, **extra})
+            assert not ok.is_error, (tool, _text(ok))
+            r = await client.call_tool(
+                tool, {"session_id": sid, "indices": [], **extra}
+            )
+            assert r.is_error, (tool, _text(r))
+            assert "No indices requested" in _text(r), (tool, _text(r))
+
+
+async def test_module_docstring_does_not_miscount_the_tools():
+    """server.py opened with 'Fifteen tools' after the sixteenth was added."""
+    import re
+
+    from plantcv_mcp import server
+
+    words = "one two three four five six seven eight nine ten eleven twelve "
+    words += "thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty"
+    number = {w: i for i, w in enumerate(words.split(), start=1)}
+    async with Client(build_server()) as client:
+        n_tools = len(await _tools(client))
+    stated = re.findall(r"\b(\w+) tools\b", server.__doc__.lower())
+    assert n_tools >= 16
+    assert all(number.get(w, n_tools) == n_tools for w in stated), stated

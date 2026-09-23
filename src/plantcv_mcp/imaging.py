@@ -300,9 +300,12 @@ def downscale(
     longest = max(img.shape[:2])
     if longest > max_edge:
         scale = max_edge / longest
+        # Never below 1 px: int(2 * 0.34) is 0, and OpenCV refuses a zero-size
+        # target, so a 2x3000 image failed segment() after thresholding
+        # (audit of 2026-09-22, L9).
         resized = cv2.resize(
             img,
-            (int(img.shape[1] * scale), int(img.shape[0] * scale)),
+            (max(1, int(img.shape[1] * scale)), max(1, int(img.shape[0] * scale))),
             interpolation=cv2.INTER_AREA,
         )
         return resized, scale
