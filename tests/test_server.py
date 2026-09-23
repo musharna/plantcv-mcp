@@ -581,7 +581,9 @@ async def test_refine_that_erases_the_plant_is_a_tool_error_and_mints_nothing(tm
             "refine",
             {
                 "session_id": seg["session_id"],
-                "ops": [{"op": "erode", "ksize": 5, "iterations": 60}],
+                # Reach (5-1)*30+1 = 121 px: inside the 200 px frame's bound,
+                # and past the 100 px square's half-width, so it erases it.
+                "ops": [{"op": "erode", "ksize": 5, "iterations": 30}],
             },
         )
     assert len(_store) == n_before
