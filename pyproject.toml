@@ -51,6 +51,9 @@ dependencies = [
     # outputSchema TypedDicts MUST come from typing_extensions, because pydantic
     # raises PydanticUserError on typing.TypedDict under Python < 3.12.
     "typing-extensions>=4.12",
+    # Imported directly (contracts.py closes every output TypedDict with
+    # pydantic.with_config), so declared rather than leaned on through mcp.
+    "pydantic>=2.11",
 ]
 
 [project.optional-dependencies]

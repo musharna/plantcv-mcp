@@ -37,13 +37,14 @@ from plantcv import plantcv as pcv
 from typing_extensions import TypedDict
 
 from . import __version__, plantcv_version
-from .batch import DEFAULT_MAX_SECONDS
+from .batch import DEFAULT_MAX_SECONDS, BatchResult
 from .color import (
     color_card_excluded_advisory,
     correct_color,
     detect_card_region,
     exclude_card,
 )
+from .contracts import WarningItem, closed
 from .diagnostics import (
     analyze_mask,
     implausible_longest_path_warning,
@@ -159,6 +160,7 @@ the returned overlay before trusting any number.\
 """
 
 
+@closed
 class MeasureResult(TypedDict):
     """Return type of measure(). Annotated so MCP can publish an output_schema."""
 
@@ -183,13 +185,7 @@ class MeasureResult(TypedDict):
     warnings: list[dict]
 
 
-class WarningItem(TypedDict):
-    """One advisory attached to a result."""
-
-    code: str
-    message: str
-
-
+@closed
 class ScaleResult(TypedDict):
     """Return type of calibrate_scale_from_marker()."""
 
@@ -201,53 +197,7 @@ class ScaleResult(TypedDict):
     warnings: list[WarningItem]
 
 
-class BatchRecipe(TypedDict):
-    """The one segmentation recipe a batch applied to every image."""
-
-    channel: str
-    method: str
-    object_type: str
-    fill_size: int
-    # The 'mean'/'gaussian' kernel parameters and the colour-correction flag are
-    # part of the recipe: without them the record cannot say what produced the
-    # numbers, and a batch could not reproduce a settled segment() call.
-    ksize: int
-    offset: int
-    color_correct: bool
-    analyses: list[str]
-    px_per_mm: float | None
-
-
-class BatchSummary(TypedDict):
-    """Counts, plus the paths that still need a human with an overlay."""
-
-    submitted: int
-    measured: int
-    needs_review: int
-    review_paths: list[str]
-
-
-class BatchImageResult(TypedDict):
-    """One image's outcome. traits is null whenever measured is false."""
-
-    image_path: str
-    measured: bool
-    mask_fraction: float | None
-    component_count: int | None
-    warnings: list[WarningItem]
-    traits: dict[str, TraitValue] | None
-    refused_because: str | None
-
-
-class BatchResult(TypedDict):
-    """Return type of measure_images()."""
-
-    recipe: BatchRecipe
-    summary: BatchSummary
-    results: list[BatchImageResult]
-    engine: dict[str, str]
-
-
+@closed
 class SpectralMeasureResult(TypedDict):
     """Return type of measure_spectral()."""
 
@@ -264,6 +214,7 @@ class SpectralMeasureResult(TypedDict):
     engine: dict[str, str]
 
 
+@closed
 class ThermalMeasureResult(TypedDict):
     """Return type of measure_thermal()."""
 
@@ -276,6 +227,7 @@ class ThermalMeasureResult(TypedDict):
     engine: dict[str, str]
 
 
+@closed
 class MethodsInfo(TypedDict):
     """Return type of list_methods()."""
 

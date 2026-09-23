@@ -14,9 +14,11 @@ from plantcv import plantcv as pcv
 # back our output_schema must come from typing_extensions on every version.
 from typing_extensions import TypedDict
 
+from .contracts import closed
 from .diagnostics import analyze_mask, assert_not_degenerate
 
 
+@closed
 class TraitValue(TypedDict):
     """A single measured trait and the unit it is expressed in."""
 
