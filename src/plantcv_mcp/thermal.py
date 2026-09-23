@@ -31,6 +31,7 @@ from .diagnostics import (
     threshold_outside_range_warning,
 )
 from .imaging import digest_bytes, read_image_bytes, render_overlay
+from .limits import require_fill_size
 from .measurement import isolated_pcv_outputs
 
 LABEL = "thermal"
@@ -153,6 +154,7 @@ def segment_thermal(
     fill_size: int = 200,
     load: ThermalLoad | None = None,
 ) -> ThermalSegmentation:
+    require_fill_size(fill_size)
     if min_c is not None and max_c is not None and min_c >= max_c:
         raise ValueError(f"min_c must be below max_c, got {min_c} >= {max_c}")
     load = load or load_thermal(path)

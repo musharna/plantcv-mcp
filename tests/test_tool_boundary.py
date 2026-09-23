@@ -99,3 +99,93 @@ async def test_every_structured_tool_publishes_a_closed_output_schema():
         n for n, s in structured.items() if s.get("additionalProperties") is not False
     )
     assert open_ == [], f"output schemas that silently drop keys: {open_}"
+
+
+def _thermal_csv(tmp_path, name="t.csv", frame=None) -> str:
+    if frame is None:
+        frame = np.full((60, 80), 20.0)
+        frame[20:40, 30:50] = 30.0
+    path = tmp_path / name
+    np.savetxt(path, frame, delimiter=",")
+    return str(path)
+
+
+def _hsi_cube(tmp_path) -> str:
+    from test_hyperspectral import _known_cube, _write_cube
+
+    return _write_cube(tmp_path, "cube", _known_cube())
+
+
+def _text(result) -> str:
+    return " ".join(getattr(c, "text", "") for c in result.content)
+
+
+# --- M2: a recipe error is one tool error, not N identical per-image refusals
+
+
+@pytest.mark.parametrize(
+    ("bad", "good", "named"),
+    [
+        ({"px_per_mm": 0}, {"px_per_mm": 2.0}, "px_per_mm"),
+        ({"px_per_mm": -1}, {"px_per_mm": 2.0}, "px_per_mm"),
+        ({"method": "mean", "ksize": 1}, {"method": "mean", "ksize": 31}, "ksize"),
+    ],
+)
+async def test_measure_images_refuses_a_bad_recipe_value_as_one_error(
+    tmp_path, bad, good, named
+):
+    """px_per_mm and ksize were checked per image, inside the per-image
+    try/except, so every image was 'refused' with the same ValueError and the
+    call reported isError=false with measured=0 — a failure dressed as a
+    result (audit 2026-09-22, M2)."""
+    paths = [_plant(tmp_path, "a.png"), _plant(tmp_path, "b.png")]
+    base = {"image_paths": paths, "channel": "a", "method": "otsu"}
+    async with Client(build_server()) as client:
+        ok = await client.call_tool("measure_images", {**base, **good})
+        refused = await client.call_tool("measure_images", {**base, **bad})
+    # Positive control: the same batch with a valid value measures both images.
+    assert not ok.is_error, _text(ok)
+    assert ok.structured_content["summary"]["measured"] == 2
+    assert refused.is_error, refused.structured_content
+    assert named in _text(refused)
+
+
+# --- bounds on the segmentation recipe (L10 fill_size; the threshold kernel)
+
+
+async def test_negative_fill_size_is_refused_by_every_segmenter(tmp_path):
+    """PlantCV treats fill(size<0) as 'remove nothing', so fill_size=-5 ran,
+    recorded fill_size=-5 in the recipe, and meant 0 (audit 2026-09-22, L10).
+    Four tools take fill_size; all four refuse, and 0 is still accepted."""
+    plant = _plant(tmp_path)
+    calls = {
+        "segment": {"image_path": plant, "channel": "a", "method": "otsu"},
+        "measure_images": {"image_paths": [plant], "channel": "a", "method": "otsu"},
+        "segment_thermal": {"path": _thermal_csv(tmp_path), "min_c": 25},
+        "segment_hyperspectral": {"envi_path": _hsi_cube(tmp_path)},
+    }
+    async with Client(build_server()) as client:
+        for tool, args in calls.items():
+            ok = await client.call_tool(tool, {**args, "fill_size": 0})
+            assert not ok.is_error, (tool, _text(ok))
+            bad = await client.call_tool(tool, {**args, "fill_size": -5})
+            assert bad.is_error, (tool, _text(bad))
+            assert "fill_size" in _text(bad), (tool, _text(bad))
+
+
+async def test_adaptive_threshold_kernel_has_a_ceiling(tmp_path):
+    """ksize had a floor (PlantCV's own, 3) and no ceiling: a 'gaussian' block
+    of 10^6 took 40 s on a 300 px image and 2^31 overflowed inside OpenCV.
+    The same bound applies to segment() and measure_images()."""
+    plant = _plant(tmp_path)
+    seg = {"image_path": plant, "channel": "a", "method": "mean"}
+    batch = {"image_paths": [plant], "channel": "a", "method": "mean"}
+    async with Client(build_server()) as client:
+        assert not (await client.call_tool("segment", {**seg, "ksize": 31})).is_error
+        for tool, args in (("segment", seg), ("measure_images", batch)):
+            r = await client.call_tool(tool, {**args, "ksize": 10**6})
+            assert r.is_error, (tool, _text(r))
+            assert "ksize must be between 3 and 1001" in _text(r), _text(r)
+        # The global methods ignore ksize; a default carried along is fine.
+        r = await client.call_tool("segment", {**seg, "method": "otsu", "ksize": 10**6})
+        assert not r.is_error, _text(r)

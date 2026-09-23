@@ -7,6 +7,8 @@ explicitly. suggest_segmentation() exists to make that choice informed.
 import numpy as np
 from plantcv import plantcv as pcv
 
+from .limits import require_threshold_params
+
 CHANNELS: dict[str, str] = {
     "l": "lab",
     "a": "lab",
@@ -101,6 +103,7 @@ def threshold_mask(
             "'dark' selects pixels below the threshold, 'light' above it. "
             "Call suggest_segmentation() to see which one yields the plant."
         )
+    require_threshold_params(method, ksize, offset)
     gray = to_gray(img, channel)
     if method == "otsu":
         return pcv.threshold.otsu(gray_img=gray, object_type=object_type)

@@ -70,6 +70,7 @@ from .lens import (
     rms_fraction,
     undistort_image,
 )
+from .limits import require_fill_size, require_threshold_params
 from .measurement import ANALYSES, TraitValue, validate_analyses
 from .paths import check_readable, configured_roots, set_roots
 from .refine import (
@@ -294,6 +295,9 @@ def _segment_impl(
     color_correct: bool = False,
     exclude_color_card: bool = False,
 ) -> dict:
+    # Every argument that needs no pixels is checked before any are read.
+    require_fill_size(fill_size)
+    require_threshold_params(method, ksize, offset)
     # The digest is of the SAME bytes the mask is about to be drawn on. Hashing
     # the path afterwards left a window in which a same-shape replacement was
     # recorded as this mask's identity.
@@ -1524,7 +1528,8 @@ def build_server() -> MCPServer:
         'light'); the wrong one returns the background with plausible-looking
         traits, so call suggest_segmentation() if unsure. fill_size drops
         components smaller than itself and will erase a genuinely small
-        specimen. ksize and offset apply to the 'mean' and 'gaussian' methods.
+        specimen (0 disables it; negative is refused). ksize (3-1001) and
+        offset (-255 to 255) apply to the 'mean' and 'gaussian' methods.
         color_correct requires a ColorChecker card in the frame and RAISES if it
         cannot find one; it makes colour traits comparable across lighting. The
         card's own region is then excluded from the mask (`color_card_excluded`

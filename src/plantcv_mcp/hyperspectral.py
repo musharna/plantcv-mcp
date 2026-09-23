@@ -41,6 +41,7 @@ from .diagnostics import (
     threshold_outside_range_warning,
 )
 from .imaging import read_image_bytes, render_overlay
+from .limits import require_fill_size
 from .measurement import isolated_pcv_outputs
 
 LABEL = "hsi"
@@ -272,6 +273,7 @@ def segment_hyperspectral(
     white_load: CubeLoad | None = None,
     dark_load: CubeLoad | None = None,
 ) -> HsiSegmentation:
+    require_fill_size(fill_size)
     if object_type not in ("light", "dark"):
         raise ValueError(f"object_type must be 'light' or 'dark', got {object_type!r}")
     load = cube_load or load_cube(path)
