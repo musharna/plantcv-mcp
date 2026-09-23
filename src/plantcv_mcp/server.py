@@ -334,6 +334,12 @@ def _segment_impl(
     if card_note is not None:
         warnings.append(card_note)
 
+    # The overlay is rendered BEFORE the session is stored. The store is an LRU
+    # of 8: storing first let a call that then failed in the render insert a
+    # session nobody was told about and evict the oldest live one (audit
+    # 2026-09-22, M3). Nothing reaches the store until the response exists.
+    overlay, scale = downscale(render_overlay(img, mask))
+    png = encode_png(overlay)
     session = _store.create(
         image_path,
         mask,
@@ -344,8 +350,6 @@ def _segment_impl(
         card_region=card,
         card_excluded_px=removed,
     )
-    overlay, scale = downscale(render_overlay(img, mask))
-    png = encode_png(overlay)
     return {
         "session_id": session.session_id,
         "channel": channel,
@@ -471,6 +475,9 @@ def _refine_impl(session_id: str, ops: list[dict]) -> dict:
     # session whose file changed underneath would draw the overlay on pixels
     # the mask was never made from.
     img = _load_session_image(session)
+    # Rendered before the child is stored; see _segment_impl.
+    overlay, scale = downscale(render_overlay(img, mask))
+    png = encode_png(overlay)
     child = _store.create(
         session.image_path,
         mask,
@@ -483,8 +490,6 @@ def _refine_impl(session_id: str, ops: list[dict]) -> dict:
         lineage=[*session.lineage, *validated],
         parent_id=session.session_id,
     )
-    overlay, scale = downscale(render_overlay(img, mask))
-    png = encode_png(overlay)
 
     def _summary(d) -> dict:
         return {
@@ -709,6 +714,9 @@ def _segment_hsi_impl(
         dark_load=dark_load,
         fill_size=fill_size,
     )
+    # Rendered before the session is stored; see _segment_impl.
+    small, scale = downscale(seg.overlay)
+    png = encode_png(small)
     session = _store.create(
         load.raw_path,
         seg.mask,
@@ -724,8 +732,6 @@ def _segment_hsi_impl(
             "calibration_args": seg.calibration_args,
         },
     )
-    small, scale = downscale(seg.overlay)
-    png = encode_png(small)
     return {
         "session_id": session.session_id,
         "kind": "hsi",
@@ -788,6 +794,9 @@ def _segment_thermal_impl(
     seg = dispatch(
         "thermal_segment", load, path, min_c=min_c, max_c=max_c, fill_size=fill_size
     )
+    # Rendered before the session is stored; see _segment_impl.
+    small, scale = downscale(seg.overlay)
+    png = encode_png(small)
     session = _store.create(
         path,
         seg.mask,
@@ -797,8 +806,6 @@ def _segment_thermal_impl(
         kind="thermal",
         extra={"min_c": min_c, "max_c": max_c, "source": seg.source},
     )
-    small, scale = downscale(seg.overlay)
-    png = encode_png(small)
     return {
         "session_id": session.session_id,
         "kind": "thermal",

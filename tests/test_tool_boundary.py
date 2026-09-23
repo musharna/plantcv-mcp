@@ -315,3 +315,47 @@ def test_calibrate_scale_library_refuses_non_finite_marker_lengths(tmp_path, mm)
     assert calibrate_scale(img, 100, 100, 100, 100, 20.0).px_per_mm > 0
     with pytest.raises(ValueError, match="positive finite"):
         calibrate_scale(img, 100, 100, 100, 100, mm)
+
+
+# --- M3: a call that fails after the mask is built leaves the store untouched
+
+
+async def test_a_failed_render_mints_no_session_and_evicts_none(tmp_path, monkeypatch):
+    """segment(), refine(), segment_hyperspectral() and segment_thermal() each
+    created the store session BEFORE rendering the overlay. The store is an LRU
+    of 8, so a call that then failed in the render (a 2x3000 image did, in
+    downscale) still inserted a session nobody was told about and evicted the
+    oldest live one — measure() on it then answered UnknownSessionError (audit
+    2026-09-22, M3). A render failure is simulated at encode_png, the last step
+    of every one of these calls."""
+    from plantcv_mcp import server
+
+    plant = _plant(tmp_path)
+    async with Client(build_server()) as client:
+        seg = await client.call_tool(
+            "segment", {"image_path": plant, "channel": "a", "method": "otsu"}
+        )
+        sid = json.loads(seg.content[0].text)["session_id"]
+        calls = {
+            "segment": {"image_path": plant, "channel": "a", "method": "otsu"},
+            "refine": {"session_id": sid, "ops": [{"op": "fill_holes"}]},
+            "segment_thermal": {"path": _thermal_csv(tmp_path), "min_c": 25},
+            "segment_hyperspectral": {"envi_path": _hsi_cube(tmp_path)},
+        }
+        real_encode = server.encode_png
+
+        def broken_encode(img):
+            raise RuntimeError("render failed")
+
+        for tool, args in calls.items():
+            before = set(server._store._sessions)
+            monkeypatch.setattr(server, "encode_png", broken_encode)
+            r = await client.call_tool(tool, args)
+            assert r.is_error and "render failed" in _text(r), (tool, _text(r))
+            assert set(server._store._sessions) == before, tool
+            # Positive control: the same call, rendering, mints exactly one.
+            monkeypatch.setattr(server, "encode_png", real_encode)
+            r = await client.call_tool(tool, args)
+            assert not r.is_error, (tool, _text(r))
+            minted = set(server._store._sessions) - before
+            assert minted == {json.loads(r.content[0].text)["session_id"]}, tool
