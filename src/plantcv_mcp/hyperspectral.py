@@ -37,6 +37,7 @@ from .diagnostics import (
     MaskDiagnostics,
     analyze_mask,
     assert_not_degenerate,
+    finite_range,
     segmentation_warnings,
     threshold_outside_range_warning,
 )
@@ -286,7 +287,7 @@ def segment_hyperspectral(
     prepared, calibration, warnings = prepare_cube(load.cube, white_load, dark_load)
     idx = compute_index(prepared, index)
     values = idx.array_data.astype(np.float64)
-    lo, hi = float(np.nanmin(values)), float(np.nanmax(values))
+    lo, hi = finite_range(values, f"{index} index")
     with isolated_pcv_outputs():
         pre_fill = pcv.threshold.binary(
             gray_img=values, threshold=float(threshold), object_type=object_type

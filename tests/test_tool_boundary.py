@@ -359,3 +359,69 @@ async def test_a_failed_render_mints_no_session_and_evicts_none(tmp_path, monkey
             assert not r.is_error, (tool, _text(r))
             minted = set(server._store._sessions) - before
             assert minted == {json.loads(r.content[0].text)["session_id"]}, tool
+
+
+# --- M4: a frame's range is the range of its finite values
+
+
+def _strict_json(text: str):
+    """json.loads that refuses the non-standard Infinity/NaN tokens."""
+
+    def refuse(token):
+        raise ValueError(f"non-standard JSON token {token}")
+
+    return json.loads(text, parse_constant=refuse)
+
+
+async def test_thermal_frame_range_and_overlay_ignore_non_finite_pixels(tmp_path):
+    """frame_range was np.nanmin/np.nanmax, which skip NaN but not ±Inf: one
+    inf pixel made segment_thermal print `Infinity` (not JSON) and
+    measure_thermal fail the client's output-schema check (inf serialises as
+    null); grey_frame scaled by that inf and rendered the plant black (audit
+    2026-09-22, M4)."""
+    from plantcv_mcp.thermal import grey_frame
+
+    frame = np.full((60, 80), 20.0)
+    frame[20:40, 30:50] = 30.0
+    clean = _thermal_csv(tmp_path, "clean.csv", frame)
+    dirty = frame.copy()
+    dirty[0, 0], dirty[0, 1] = np.inf, -np.inf
+    bad = _thermal_csv(tmp_path, "inf.csv", dirty)
+    async with Client(build_server()) as client:
+        for path in (clean, bad):  # clean is the positive control
+            seg = await client.call_tool("segment_thermal", {"path": path, "min_c": 25})
+            assert not seg.is_error, _text(seg)
+            out = _strict_json(seg.content[0].text)
+            assert out["frame_range"] == [20.0, 30.0], (path, out["frame_range"])
+            m = await client.call_tool(
+                "measure_thermal", {"session_id": out["session_id"]}
+            )
+            assert not m.is_error, _text(m)
+            assert m.structured_content["frame_range"] == [20.0, 30.0]
+            assert m.structured_content["temperature"]["mean"] == 30.0
+
+    grey = grey_frame(dirty)
+    assert grey[30, 40].tolist() == [255, 255, 255]  # the plant, at the top
+    assert grey[50, 5].tolist() == [0, 0, 0]
+
+
+async def test_hyperspectral_index_range_ignores_non_finite_pixels(tmp_path):
+    """Same class in the cube path: one pixel with a zero 670 nm band made a
+    ratio index infinite, and index_range printed `Infinity`."""
+    from test_hyperspectral import _known_cube, _write_cube
+
+    cube = _known_cube()
+    clean = _write_cube(tmp_path, "clean", cube)
+    cube[0, 0, 1] = 0.0  # 670 nm; pssr_chla = r800 / r680
+    bad = _write_cube(tmp_path, "zero670", cube)
+    async with Client(build_server()) as client:
+        ranges = []
+        for path in (clean, bad):
+            r = await client.call_tool(
+                "segment_hyperspectral",
+                {"envi_path": path, "index": "pssr_chla", "threshold": 2.0},
+            )
+            assert not r.is_error, _text(r)
+            ranges.append(_strict_json(r.content[0].text)["index_range"])
+    assert ranges[0] == pytest.approx([2 / 3, 4.0], rel=1e-5)
+    assert ranges[1] == ranges[0]
