@@ -31,6 +31,7 @@ from .diagnostics import (
     minor_extent_inflation_warning,
     multi_specimen_warning,
 )
+from .limits import ParameterRangeError, require_kernel_extent
 
 
 class RefineSpecError(Exception):
@@ -40,6 +41,15 @@ class RefineSpecError(Exception):
 class RefinementErasedMaskError(Exception):
     """Raised when the refined mask is degenerate; no session is minted."""
 
+
+# The kernel ops' ceiling. It depends on the mask, so it is stated in each doc
+# rather than as a fixed `max`: a structuring element that already spans the
+# mask changes nothing more, and past it OpenCV builds the (reach x reach)
+# kernel anyway (a 3x3 dilation 200000 times asked for 160 GB).
+_REACH = (
+    "Its reach, (ksize - 1) x iterations + 1 pixels, may not exceed the mask's "
+    "longest edge."
+)
 
 # Published verbatim by list_methods(): name -> {doc, params: {name -> constraint}}.
 # `example` is a value that must run on any non-empty mask; the test suite applies
@@ -54,29 +64,31 @@ REFINE_OPS: dict[str, dict[str, Any]] = {
         "params": {"size": {"type": "int", "min": 1, "example": 50}},
     },
     "erode": {
-        "doc": "Shrink the mask by a `ksize` x `ksize` kernel, `iterations` times.",
+        "doc": "Shrink the mask by a `ksize` x `ksize` kernel, `iterations` times. "
+        + _REACH,
         "params": {
             "ksize": {"type": "int", "min": 2, "example": 3},
             "iterations": {"type": "int", "min": 1, "default": 1, "example": 1},
         },
     },
     "dilate": {
-        "doc": "Grow the mask by a `ksize` x `ksize` kernel, `iterations` times.",
+        "doc": "Grow the mask by a `ksize` x `ksize` kernel, `iterations` times. "
+        + _REACH,
         "params": {
             "ksize": {"type": "int", "min": 2, "example": 3},
             "iterations": {"type": "int", "min": 1, "default": 1, "example": 1},
         },
     },
     "opening": {
-        "doc": "Erode then dilate: removes specks and thin bridges.",
+        "doc": "Erode then dilate: removes specks and thin bridges. " + _REACH,
         "params": {"ksize": {"type": "int", "min": 2, "example": 3}},
     },
     "closing": {
-        "doc": "Dilate then erode: closes small gaps and holes.",
+        "doc": "Dilate then erode: closes small gaps and holes. " + _REACH,
         "params": {"ksize": {"type": "int", "min": 2, "example": 3}},
     },
     "median_blur": {
-        "doc": "Median filter; `ksize` must be odd.",
+        "doc": "Median filter; `ksize` must be odd. " + _REACH,
         "params": {"ksize": {"type": "int", "min": 3, "odd": True, "example": 3}},
     },
     "keep_largest": {
@@ -110,11 +122,17 @@ class DroppedObject:
     split_by_op_name: str | None
 
 
-def validate_ops(ops: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+def validate_ops(
+    ops: Sequence[Mapping[str, Any]], shape: tuple[int, ...] | None = None
+) -> list[dict[str, Any]]:
     """Check every op and return the normalised list (defaults filled in).
 
     Raises RefineSpecError naming the first offending op by index. Nothing is
-    applied here, so a bad third op costs nothing.
+    applied here, so a bad third op costs nothing. With `shape` (the mask the
+    ops will act on) each kernel op's reach is also checked against it; every
+    path that applies ops passes it. Without, only the mask-independent rules
+    run: the kernel ops had a floor and no ceiling (#117; audit 2026-09-22,
+    M7) because the ceiling needs the mask.
     """
     if not ops:
         raise RefineSpecError("ops is empty; give at least one operation.")
@@ -166,6 +184,13 @@ def validate_ops(ops: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
                     f"op {i} ({name}): {pname} must be odd, got {value}."
                 )
             out[pname] = value
+        if shape is not None and "ksize" in out:
+            try:
+                require_kernel_extent(
+                    f"op {i} ({name})", out["ksize"], out.get("iterations", 1), shape
+                )
+            except ParameterRangeError as exc:
+                raise RefineSpecError(str(exc)) from exc
         normalised.append(out)
     return normalised
 
@@ -242,7 +267,7 @@ def apply_refinements_traced(
     Raises RefineSpecError (nothing applied) or RefinementErasedMaskError (the
     result is degenerate and must not become a session).
     """
-    validated = validate_ops(ops)
+    validated = validate_ops(ops, shape=mask.shape)
     out = np.where(mask > 0, 255, 0).astype(np.uint8)
     dropped: list[DroppedObject] = []
     split_by: tuple[int, str] | None = None

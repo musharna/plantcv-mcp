@@ -437,7 +437,8 @@ def _measure_impl(
 
 def _refine_impl(session_id: str, ops: list[dict]) -> dict:
     session = _session_of(session_id, "rgb")
-    validated = validate_ops(ops)  # all-or-nothing, before anything runs
+    # all-or-nothing, before anything runs; kernel reach checked against the mask
+    validated = validate_ops(ops, shape=session.mask.shape)
     # refuses a degenerate result; reports every major object an op threw away
     mask, dropped = dispatch("refine", session.mask, validated)
     regrown = 0

@@ -52,6 +52,13 @@ from typing import NamedTuple
 import cv2
 import numpy as np
 
+from .limits import (
+    CHECKERBOARD_CORNERS_MAX,
+    CHECKERBOARD_CORNERS_MIN,
+    ParameterRangeError,
+    require_int,
+)
+
 # OpenCV's own guidance is ~10 views; the tutorial camera ships 9. Below three
 # the optimiser will still return numbers, and they are numbers about nothing.
 MIN_CALIBRATION_FRAMES = 3
@@ -366,11 +373,20 @@ def calibrate_lens_from_frames(
     thumbnails that sorted first hijack the calibration away from eight
     full-resolution views.
     """
-    if row_corners < 2 or col_corners < 2:
-        raise LensCalibrationError(
-            f"row_corners={row_corners} col_corners={col_corners}: both must be "
-            "at least 2, counting INNER corners of the checkerboard."
-        )
+    # Both sides are bounded above as well as below: they size the object-point
+    # grid, and 10^6 x 10^6 asked for 10.9 TiB (audit 2026-09-22, M6).
+    for name, value in (("row_corners", row_corners), ("col_corners", col_corners)):
+        try:
+            require_int(
+                name,
+                value,
+                lo=CHECKERBOARD_CORNERS_MIN,
+                hi=CHECKERBOARD_CORNERS_MAX,
+                why="It counts INNER corners of the checkerboard (9x6 for a "
+                "10x7-square board).",
+            )
+        except ParameterRangeError as exc:
+            raise LensCalibrationError(str(exc)) from exc
 
     decoded: list[tuple[str, np.ndarray]] = []
     skipped: list[str] = []

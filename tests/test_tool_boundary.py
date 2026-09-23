@@ -189,3 +189,129 @@ async def test_adaptive_threshold_kernel_has_a_ceiling(tmp_path):
         # The global methods ignore ksize; a default carried along is fine.
         r = await client.call_tool("segment", {**seg, "method": "otsu", "ksize": 10**6})
         assert not r.is_error, _text(r)
+
+
+# --- M7 + #117: refine kernels bounded by the mask they act on
+
+
+async def test_refine_kernel_reach_is_bounded_by_the_mask(tmp_path):
+    """REFINE_OPS had a floor on every integer and no ceiling. A 3x3 dilation
+    200000 times made OpenCV ask for 160 GB (audit 2026-09-22, M7); an erode
+    ksize of 2e9 raised a raw MemoryError (#117). Both are now refused by
+    validation, naming the op, before anything runs; the same ops at a sane
+    size still refine."""
+    plant = _plant(tmp_path)
+    async with Client(build_server()) as client:
+        seg = await client.call_tool(
+            "segment", {"image_path": plant, "channel": "a", "method": "otsu"}
+        )
+        sid = json.loads(seg.content[0].text)["session_id"]
+
+        async def refine(op):
+            return await client.call_tool("refine", {"session_id": sid, "ops": [op]})
+
+        ok = await refine({"op": "dilate", "ksize": 3, "iterations": 2})
+        assert not ok.is_error, _text(ok)
+        for op in (
+            {"op": "dilate", "ksize": 3, "iterations": 200000},
+            {"op": "erode", "ksize": 2_000_000_000, "iterations": 1},
+            {"op": "opening", "ksize": 2_000_000_000},
+            {"op": "closing", "ksize": 100_000},
+            {"op": "median_blur", "ksize": 100_001},
+        ):
+            r = await refine(op)
+            assert r.is_error, (op, _text(r))
+            assert "wider than the mask's longest edge (300 px)" in _text(r), (
+                op,
+                _text(r),
+            )
+
+
+def test_refine_library_entry_point_applies_the_same_bound():
+    """#117's repro was the library call, not the tool: apply_refinements()
+    must refuse with the RefineSpecError every other malformed op gets, not
+    leak MemoryError."""
+    from plantcv_mcp.refine import RefineSpecError, apply_refinements
+
+    mask = np.zeros((100, 100), np.uint8)
+    mask[30:70, 30:70] = 255
+    assert (apply_refinements(mask, [{"op": "erode", "ksize": 3}]) > 0).any()
+    with pytest.raises(RefineSpecError, match="longest edge"):
+        apply_refinements(mask, [{"op": "erode", "ksize": 2_000_000_000}])
+
+
+# --- M6: checkerboard corner counts
+
+
+async def test_checkerboard_corner_counts_have_a_ceiling(tmp_path):
+    """row_corners/col_corners had a floor of 2 and no ceiling; 10^6 x 10^6
+    sized a 10.9 TiB object-point grid (audit 2026-09-22, M6)."""
+    from test_lens import POSES, _distort, _view, _write_frames
+
+    boards = tmp_path / "boards"
+    _write_frames(boards)
+    scene = tmp_path / "scene.png"
+    cv2.imwrite(
+        str(scene), cv2.cvtColor(_distort(_view(*POSES[0])), cv2.COLOR_GRAY2BGR)
+    )
+    base = {"image_path": str(scene), "checkerboard_dir": str(boards)}
+    async with Client(build_server()) as client:
+        ok = await client.call_tool(
+            "correct_lens_distortion",
+            {**base, "row_corners": 6, "col_corners": 9},
+        )
+        assert not ok.is_error, _text(ok)
+        for rc, cc in ((10**6, 10**6), (6, 201)):
+            r = await client.call_tool(
+                "correct_lens_distortion",
+                {
+                    **base,
+                    "row_corners": rc,
+                    "col_corners": cc,
+                    "output_path": str(tmp_path / f"o_{rc}_{cc}.png"),
+                },
+            )
+            assert r.is_error, _text(r)
+            assert "must be between 2 and 200" in _text(r), _text(r)
+
+
+# --- L8 + #117: a marker scale that is not a usable px_per_mm
+
+
+def _marker(tmp_path) -> str:
+    img = np.full((300, 300, 3), 240, np.uint8)
+    cv2.circle(img, (150, 150), 40, (30, 30, 30), -1)
+    return _png(tmp_path / "marker.png", img)
+
+
+async def test_calibrate_scale_never_returns_an_unusable_scale(tmp_path):
+    """marker_length_mm=1e-320 passed the `> 0` guard and returned
+    px_per_mm=inf, which serialised as null and failed the client's schema
+    check (audit 2026-09-22, L8); 1e308 returned 8e-307, which measure()
+    itself refuses. The tool now refuses both with measure()'s own rule."""
+    base = {"image_path": _marker(tmp_path), "x": 100, "y": 100, "w": 100, "h": 100}
+    async with Client(build_server()) as client:
+        ok = await client.call_tool(
+            "calibrate_scale_from_marker", {**base, "marker_length_mm": 20.0}
+        )
+        assert not ok.is_error, _text(ok)
+        assert ok.structured_content["px_per_mm"] == pytest.approx(4.0, rel=0.03)
+        for mm in (1e-320, 1e308):
+            r = await client.call_tool(
+                "calibrate_scale_from_marker", {**base, "marker_length_mm": mm}
+            )
+            assert r.is_error, (mm, _text(r))
+            assert "px_per_mm must be a positive finite number" in _text(r), _text(r)
+
+
+@pytest.mark.parametrize("mm", [float("nan"), float("inf"), 1e-320])
+def test_calibrate_scale_library_refuses_non_finite_marker_lengths(tmp_path, mm):
+    """#117 item 1: NaN fails every comparison, so `<= 0` let it through and
+    px_per_mm came back NaN; inf came back 0.0."""
+    from plantcv_mcp.imaging import load_image
+    from plantcv_mcp.scale import calibrate_scale
+
+    img = load_image(_marker(tmp_path))
+    assert calibrate_scale(img, 100, 100, 100, 100, 20.0).px_per_mm > 0
+    with pytest.raises(ValueError, match="positive finite"):
+        calibrate_scale(img, 100, 100, 100, 100, mm)
