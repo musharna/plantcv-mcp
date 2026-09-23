@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.16.0] — 2026-09-23
+
 Fixes from the MCP bug audit of 2026-09-22. Each one is reproduced through a
 real in-process MCP client in `tests/test_tool_boundary.py`, and each test was
 seen to fail on the old code.
