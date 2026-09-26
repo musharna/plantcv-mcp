@@ -21,11 +21,8 @@ release is **v1.7.0**. Please reproduce any issue on the latest release
 
 **Please do not open a public issue for a security vulnerability.**
 
-Report privately, either way:
-
-- Preferred: use GitHub's **"Report a vulnerability"** button under the repo's
-  **Security** tab (private security advisories), or
-- Email **mjarnold1998@gmail.com**.
+Report privately with GitHub's **"Report a vulnerability"** button under the
+repo's **Security** tab (private security advisories).
 
 Please include a description of the issue, the affected version, and a minimal
 reproduction. You can expect an initial acknowledgement within a few days. Once a
