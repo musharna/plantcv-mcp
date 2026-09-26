@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.16.1] — 2026-09-26
+
 ### Changed
 
 - README and guide corrected: batch mode (`measure_images`) returns numbers
@@ -14,6 +16,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `docs/superpowers/` (internal design and planning notes) removed from the
   tree; the files remain in git history. Paths to it in older entries below
   now point there.
+- SECURITY.md: reports go through GitHub private vulnerability reporting only; the personal email is removed.
 
 ## [1.16.0] — 2026-09-23
 
