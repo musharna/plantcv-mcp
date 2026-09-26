@@ -5,7 +5,7 @@ PlantCV's morphology pipeline reports almost everything through the process-glob
 `isolated_pcv_outputs()` — the same lock `measure()` and `measure_regions()` take.
 
 What this module adds to a pass-through, all measured on PlantCV 4.11.3 with a
-synthetic plant of known geometry (docs/superpowers/specs/2026-08-27-morphology-design.md):
+synthetic plant of known geometry (measured 2026-08-27 while designing this module):
 
 * A perfectly vertical stem makes `analyze_stem` return stem_angle = -14373
   degrees (its slope blows up). A number that is not an angle is not returned as

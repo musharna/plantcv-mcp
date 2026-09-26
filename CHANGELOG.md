@@ -6,6 +6,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- README and guide corrected: batch mode (`measure_images`) returns numbers
+  without an overlay, and the server also writes the Segment Anything
+  checkpoint cache and short-lived temporary copies of ENVI and FLIR inputs.
+- `docs/superpowers/` (internal design and planning notes) removed from the
+  tree; the files remain in git history. Paths to it in older entries below
+  now point there.
+
 ## [1.16.0] — 2026-09-23
 
 Fixes from the MCP bug audit of 2026-09-22. Each one is reproduced through a

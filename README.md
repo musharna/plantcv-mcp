@@ -37,10 +37,15 @@ the mask's edge pixels so it never touches anything unmasked (the tint alone was
 a photo of red beans).
 
 `segment()` returns the overlay and diagnostics but **no traits**. `measure()` requires the
-`session_id` that `segment()` mints. You cannot get a number without first being handed the
-image it came from.
+`session_id` that `segment()` mints, so a single-image measurement cannot be made without
+first being handed the image it came from. Batch mode is the exception: `measure_images()`
+applies one recipe to up to 200 images and returns no overlays. You are meant to settle that
+recipe on one image's overlay first, but the server does not check that you did. What it does
+check is that every image passes the same guards as `segment()`; an image that trips a
+blocking guard comes back with no traits.
 
-That is not a style preference. Measured on real images with PlantCV 4.11.3:
+That is not a style preference. Measured with PlantCV 4.11.3 on a synthetic render (the
+first row: `tests/fixtures/multi_specimen.png`) and on photographs:
 
 | failure                           | what you get without the overlay                            |
 | --------------------------------- | ----------------------------------------------------------- |
@@ -48,7 +53,7 @@ That is not a style preference. Measured on real images with PlantCV 4.11.3:
 | plant clipped by the frame        | size traits that are silently lower bounds                  |
 | empty mask                        | 17 traits of zeros, with PlantCV reporting `in_bounds=True` |
 
-All three produce correctly-united, entirely believable numbers.
+All three produce entirely believable numbers with correct units.
 
 ## Install
 
@@ -82,8 +87,8 @@ With a pip install, use `"command": "plantcv-mcp"` (and drop `uvx` from the `cla
 line); from a checkout, `"command": "uv", "args": ["run", "--directory",
 "/path/to/plantcv-mcp", "plantcv-mcp"]`. Verify with `list_methods()`.
 
-Flags: `--root DIR` (repeatable, or `PLANTCV_MCP_ROOTS`) confines every read, and the one
-write, to your imagery: `plantcv-mcp --root /data/phenotyping`. `--no-isolate` (or
+Flags: `--root DIR` (repeatable, or `PLANTCV_MCP_ROOTS`) confines every read, and every file
+the server keeps (see [Security](#security)), to your imagery: `plantcv-mcp --root /data/phenotyping`. `--no-isolate` (or
 `PLANTCV_MCP_ISOLATE=0`) runs analyses in-process instead of in the crash-containing worker.
 
 ## Tools
@@ -152,15 +157,18 @@ the overlay arriving beside it as an image:
 
 ## What it refuses, and why
 
-Every guard was calibrated against a real failure and names the next action. Blocking
-guards withhold numbers; advisories travel with them.
+Each guard below was added after a specific failure, and each names the next action.
+Several of those failures were first seen on photographs that are not distributed with this
+repository (the sorghum photo below is one); the tests reproduce them on synthetic images and
+the committed fixtures. Blocking guards withhold numbers; advisories travel with them.
 
 - **Inverted mask** (`implausible_coverage`) — the right-hand image above: 96% of the frame
   selected, seventeen believable traits, all describing the wall.
 - **Nothing selected, or `fill_size` deleted the specimen** (`empty_mask`,
   `fill_erased_mask`) — PlantCV returns seventeen zeros with `in_bounds=True`.
-- **Background texture** (`noisy_segmentation`) — a sorghum photo measured as one
-  650,000-px plant made of 118 chamber-wall specks.
+- **Background texture** (`noisy_segmentation`) — a sorghum photo (not distributed; the
+  tests use a synthetic stand-in) measured as one 650,000-px plant made of 118 chamber-wall
+  specks.
 - **Several plants in one mask** (`multi_specimen`) — the number describes the group; use
   `measure_regions()`, which measures each plant and numbers the overlay.
 - **Wrong scale, wrong kind, changed file** — a marker measured 4.35× wrong by PlantCV's own
@@ -190,10 +198,19 @@ Every warning code, every tool's parameters, and the measured facts behind each 
 ## Security
 
 This server reads image files the host user can read and returns them to the model as
-images; with no `--root` there is no allow-list. It writes exactly one thing: the corrected
-image from `correct_lens_distortion`, next to its input (replacing an earlier run's output
-of the same name) or at an `output_path` that must not exist yet — under the same roots,
-never through a symlink. Run it as a user whose read
+images; with no `--root` there is no allow-list. It writes:
+
+- the corrected image from `correct_lens_distortion`, next to its input (replacing an
+  earlier run's output of the same name) or at an `output_path` that must not exist yet —
+  under the same roots, never through a symlink;
+- the Segment Anything checkpoint (375 MB), only when `segment_leaves_sam` is called with
+  `download_checkpoint=true`, into `$XDG_CACHE_HOME/plantcv-mcp` (default
+  `~/.cache/plantcv-mcp`; `PLANTCV_MCP_SAM_CACHE` moves it), which must lie under a root
+  when roots are set;
+- short-lived private copies of hyperspectral (ENVI) and FLIR thermal inputs in the system
+  temporary directory, deleted once the file is decoded.
+
+Run it as a user whose read
 access you are comfortable exposing, set `--root`, and do not run it as root. PlantCV/OpenCV
 analyses run in a worker subprocess, so a native crash is a tool error, not a dead server.
 Details:
