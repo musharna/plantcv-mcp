@@ -1,6 +1,6 @@
 # Test fixtures
 
-`multi_specimen.png` — copied from `~/bio3d-arena/data/assets/renders/736_multi4.png` (our own render, no third-party rights).
+`multi_specimen.png` — an original render made by the author (no third-party rights).
 
 ## Why this fixture matters
 
@@ -19,7 +19,7 @@ Measured with the current pipeline (deterministic):
 
 ## Copyright
 
-Do **NOT** add images from `~/orchid-data/` — those carry third-party copyright watermarks and must not enter this repository, its tests, its examples, or its README.
+Do **NOT** add photographs that carry a third-party copyright or watermark — they must not enter this repository, its tests, its examples, or its README. Every image committed here is either the author's own (`multi_specimen.png`, `plant_with_marker.png`, `docs/assets/`, which are generated from `multi_specimen.png`) or third-party data under an open licence, credited in the README or NOTICE beside it (`aberystwyth/`, `plantcv/`).
 
 ## `plant_with_marker.png`
 

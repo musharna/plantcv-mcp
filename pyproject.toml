@@ -106,10 +106,9 @@ exclude = [
 ]
 
 [tool.ruff]
-# ruff formats Python code blocks embedded in Markdown. docs/ holds the design
-# spec and the implementation plan, which are a historical record — reformatting
-# their quoted snippets would make the record differ from what was actually
-# executed. Lint and format apply to source and tests only.
+# ruff formats Python code blocks embedded in Markdown. docs/ is prose whose
+# quoted snippets are kept as written. Lint and format apply to source and
+# tests only.
 extend-exclude = ["docs"]
 
 [dependency-groups]

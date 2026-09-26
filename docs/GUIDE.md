@@ -849,7 +849,9 @@ Practical consequences:
 The read-root allow-list is the whole of the sandboxing. A base install has no network
 access, executes nothing but PlantCV, and writes only `correct_lens_distortion`'s
 corrected image — next to its input, or at an explicit `output_path` that must not
-already exist and must not be a symlink. The optional `segment_leaves_sam()` adds one
+already exist and must not be a symlink. (It also writes short-lived private copies of
+hyperspectral ENVI and FLIR thermal inputs to the system temporary directory, deleted once
+the file is decoded.) The optional `segment_leaves_sam()` adds one
 exception to each: with `download_checkpoint=true` it fetches one fixed https URL and
 writes the file to its cache directory after checking its size and SHA-256, and it runs
 the Segment Anything model (loaded with `torch.load(weights_only=True)`, so the

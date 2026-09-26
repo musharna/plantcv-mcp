@@ -3,7 +3,7 @@
 Everything here is measured against a synthetic plant whose geometry is KNOWN:
 a vertical stem with leaves drawn at chosen angles and lengths. PlantCV 4.11.3
 has systematic behaviours that the tolerances below absorb deliberately (all
-measured 2026-08-27, see docs/superpowers/specs/2026-08-27-morphology-design.md):
+measured 2026-08-27 while designing morphology.py):
 
 * leaf path lengths come out ~10 px short (junction trimming), ordering kept;
 * insertion angles come out 5-9 degrees high, ordering kept;
