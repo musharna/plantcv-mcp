@@ -1,0 +1,11 @@
+subset	arm	questions	share_right	share_right_lo	share_right_hi	cost_median	cost_median_lo	cost_median_hi	seconds_median	seconds_median_lo	seconds_median_hi	calls_median	calls_median_lo	calls_median_hi
+all	baseline_constant	46	0.0435	0	0.1087	NA	NA	NA	NA	NA	NA	NA	NA	NA
+all	baseline_threshold	46	0.6087	0.4565	0.7391	NA	NA	NA	NA	NA	NA	NA	NA	NA
+all	bare	46	0	0	0	0.0102	0.0095	0.0108	4.8	4.5	5.1	0	0	0
+all	alt	46	0.9565	0.9058	0.9928	0.0385	0.0345	0.0432	12.9	11.85	14.7	3	3	3
+all	mcp	46	0.8623	0.7681	0.9493	0.0713	0.0601	0.0902	17.7	15.8	18.9	3	3	4
+colour_cut_wrong	baseline_constant	18	0	0	0	NA	NA	NA	NA	NA	NA	NA	NA	NA
+colour_cut_wrong	baseline_threshold	18	0	0	0	NA	NA	NA	NA	NA	NA	NA	NA	NA
+colour_cut_wrong	bare	18	0	0	0	0.009	0.0088	0.0103	4.7	4.1	5.1	0	0	0
+colour_cut_wrong	alt	18	0.8889	0.7593	0.9815	0.0386	0.0343	0.0477	12.85	11.6	15.1	3	3	3
+colour_cut_wrong	mcp	18	0.7222	0.537	0.8889	0.0462	0.0324	0.1296	17.4	11.35	29.3	2	1	6

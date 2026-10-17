@@ -301,7 +301,7 @@ p4 <- ggplot(cc, aes(x = share, y = arm_label, fill = shown)) +
   scale_x_continuous(labels = scales::percent, expand = c(0, 0)) +
   labs(
     x = "Share of answers (counts on the bars)", y = NULL,
-    title = "Right, wrong or declined, by kind of question",
+    title = "Right, wrong, declined or invalid, by kind of question",
     subtitle = setup_note
   ) +
   theme_pcvmcp(base_size = 12) +

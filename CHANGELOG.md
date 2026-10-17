@@ -13,8 +13,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   yellowed leaves, a tilted size marker) with exactly known answers (area, height/width, area in mm²
   from a size marker, trays, leaf counts, hue and yellow share), asked to
   Claude with no tools, with Bash + PlantCV/OpenCV + web, and with this
-  server. Harness, scorer (with tests seen to fail against wrong scorers),
-  figures and README; the full sweep has not been run yet.
+  server (plus Read). One validity rule for every setup, a leak scan of
+  every transcript, two no-model controls (median answer, one colour cut),
+  bootstrap intervals and a paired test. Result of the 414-run sweep: the
+  server was not more accurate than Claude's own OpenCV code (86.2% vs
+  95.7% of answers right, paired p = 0.18) and cost more ($0.071 vs $0.039
+  median per answer); a colour cut alone answers 28 of the 46 questions.
 - `benchmarks/perf/workcount.py`: a work-count ratchet. Each main tool runs
   one fixed workload through the tool layer, and the calls into this
   package, OpenCV and PlantCV, and the processes started, must equal
