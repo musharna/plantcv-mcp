@@ -13,7 +13,10 @@ is not edited. Counted:
 - ``package``: calls of every function under ``src/plantcv_mcp``, keyed
   ``relpath:qualname``. List/dict/set comprehensions are skipped: Python 3.12
   inlined them (PEP 709), so counting their frames on 3.11 would make the
-  counts differ by interpreter.
+  counts differ by interpreter. A generator (a generator expression included)
+  counts once, on its first entry, not on every resume: which resumes reach
+  the profiler differs between patch releases (3.12.3 reports no event for
+  closing a generator that ``any()`` left unfinished; 3.12.13 does).
 - ``cv2``: OpenCV C functions called from Python (anywhere, PlantCV included).
 - ``plantcv``: entries into PlantCV, i.e. calls of a PlantCV function from code
   that is not PlantCV, keyed ``plantcv/relpath:qualname``.
@@ -33,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dis
 import json
 import os
 import subprocess
@@ -53,6 +57,9 @@ FIXTURES = TESTS / "fixtures"
 INLINED_IN_312 = {"<listcomp>", "<dictcomp>", "<setcomp>"}
 SPAWN_NAMES = {"fork_exec", "fork", "posix_spawn", "posix_spawnp"}
 COUNTERS = ("package", "cv2", "plantcv", "spawns")
+GENERATOR_FLAGS = (
+    0x20 | 0x80 | 0x200
+)  # CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR
 
 
 # --- counting ---------------------------------------------------------------
@@ -77,6 +84,7 @@ class Count:
                 for attr, obj in list(vars(mod).items()):
                     if isinstance(obj, types.BuiltinFunctionType):
                         self.cv2_funcs[id(obj)] = f"{modname}.{attr}"
+        self.first_yield: dict[types.CodeType, int] = {}
         self.package: Counter[str] = Counter()
         self.cv2: Counter[str] = Counter()
         self.plantcv: Counter[str] = Counter()
@@ -95,11 +103,29 @@ class Count:
             self.kind[filename] = k
         return k
 
+    def _resumed(self, frame: types.FrameType) -> bool:
+        """A generator frame re-entered after a yield, not started."""
+        code = frame.f_code
+        if not code.co_flags & GENERATOR_FLAGS:
+            return False
+        first = self.first_yield.get(code)
+        if first is None:
+            first = min(
+                (
+                    i.offset
+                    for i in dis.get_instructions(code)
+                    if i.opname == "YIELD_VALUE"
+                ),
+                default=sys.maxsize,
+            )
+            self.first_yield[code] = first
+        return frame.f_lasti >= first
+
     def __call__(self, frame: types.FrameType, event: str, arg: Any) -> None:
         if event == "call":
             code = frame.f_code
             k = self._classify(code.co_filename)
-            if k is None:
+            if k is None or self._resumed(frame):
                 return
             if k[0] == "pkg":
                 if code.co_name not in INLINED_IN_312:
