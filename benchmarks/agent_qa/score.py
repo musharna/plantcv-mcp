@@ -91,6 +91,25 @@ def _hue_diff(a: float, b: float) -> float:
     return min(d, 360.0 - d)
 
 
+def truth_value(question: dict[str, Any]) -> float:
+    """The key's own answer to a question, in the unit the question asks for."""
+    t = question["truth"]
+    field = {
+        "area": "area_px",
+        "extent": "px",
+        "area_mm": "area_mm2",
+        "leaf_count": "count",
+    }.get(question["category"])
+    if field is None:  # tray and color: the field depends on the kind
+        field = {
+            "count": "count",
+            "area": "area_px",
+            "hue": "hue_deg",
+            "yellow_pct": "pct",
+        }[t["kind"]]
+    return t[field]
+
+
 def score(question: dict[str, Any], reply: str) -> dict[str, Any]:
     value = extract(reply)
     if value is None:

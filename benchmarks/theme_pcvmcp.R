@@ -28,7 +28,11 @@ pal_verdict <- c(
   right = "#2E7D5B",
   wrong = "#C0392B",
   declined = "#BDBDBD",
-  no_answer = "#E69F00"
+  no_answer = "#E69F00",
+  # A run that did not test its setup (run.py assess(): exit not 0, tools or
+  # server missing, no tool call, a leak marker). Shown, never counted as a
+  # verdict.
+  invalid = "#56B4E9"
 )
 
 # Per-run points (cost, seconds): a filled circle with a thin white outline,

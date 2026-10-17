@@ -30,6 +30,7 @@ second per read, so its time budget cannot branch on host speed.
     uv run python benchmarks/perf/workcount.py                    # check; exit 1 on any change
     uv run python benchmarks/perf/workcount.py --update           # record a drop (or a reshuffle)
     uv run python benchmarks/perf/workcount.py --update --allow-increase   # accept a rise
+    uv run python benchmarks/perf/workcount.py --update --allow-output-change   # a workload's input changed
 """
 
 from __future__ import annotations
@@ -517,6 +518,30 @@ def check(baseline: dict[str, Any], got: dict[str, Any]) -> list[str]:
     return lines
 
 
+def refusals(
+    baseline: dict[str, Any],
+    got: dict[str, Any],
+    allow_increase: bool = False,
+    allow_output_change: bool = False,
+) -> list[str]:
+    """Why ``--update`` must not write `got`: a rise in any total without
+    --allow-increase, or a workload whose output changed (it ran a different
+    input, so its counts are not comparable) without --allow-output-change.
+    A drop or a reshuffle at the same total is recorded."""
+    out = []
+    for n in sorted(set(baseline) & set(got)):
+        if not allow_increase:
+            want, have = totals(baseline[n]), totals(got[n])
+            out += [
+                f"{n}: {c} {want[c]} -> {have[c]}"
+                for c in COUNTERS
+                if have[c] > want[c]
+            ]
+        if not allow_output_change and baseline[n]["output"] != got[n]["output"]:
+            out.append(f"{n}: output {baseline[n]['output']} -> {got[n]['output']}")
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--child", help=argparse.SUPPRESS)
@@ -525,6 +550,11 @@ def main() -> None:
         "--allow-increase",
         action="store_true",
         help="with --update: accept a higher total",
+    )
+    ap.add_argument(
+        "--allow-output-change",
+        action="store_true",
+        help="with --update: accept a workload whose output changed",
     )
     ap.add_argument("--only", default="", help="comma-separated workloads")
     a = ap.parse_args()
@@ -550,16 +580,18 @@ def main() -> None:
             sys.exit(1)
         print("\nwork counts equal the baseline")
         return
-    rises = [
-        f"{n}: {c} {totals(baseline[n])[c]} -> {totals(got[n])[c]}"
-        for n in names
-        if n in baseline
-        for c in COUNTERS
-        if totals(got[n])[c] > totals(baseline[n])[c]
-    ]
-    if rises and not a.allow_increase:
+    refused = refusals(
+        {k: v for k, v in baseline.items() if k in names},
+        got,
+        a.allow_increase,
+        a.allow_output_change,
+    )
+    if refused:
         print(
-            "\nREFUSED: totals rose; pass --allow-increase to accept:", *rises, sep="\n"
+            "\nREFUSED (a rise needs --allow-increase, an output change"
+            " --allow-output-change):",
+            *refused,
+            sep="\n",
         )
         sys.exit(1)
     baseline.update(got)

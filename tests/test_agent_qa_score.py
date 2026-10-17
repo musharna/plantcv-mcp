@@ -14,7 +14,7 @@ sys.path.insert(
     0, str(Path(__file__).resolve().parent.parent / "benchmarks" / "agent_qa")
 )
 
-from score import extract, number, score
+from score import extract, number, score, truth_value
 
 KEY = (
     Path(__file__).resolve().parent.parent
@@ -168,16 +168,25 @@ def test_the_frozen_key_holds_the_premises_the_scorer_relies_on() -> None:
             assert abs(t["px"] - t["other_px"]) > 2, q["id"]  # other_axis apart
         if q["category"] == "area" or t.get("kind") == "area":
             assert 0 < t["contour_area"] < t["area_px"], q["id"]
-        # Every question's own right answer scores right under its own rule.
-        right = {
-            "area": "area_px",
-            "extent": "px",
-            "area_mm": "area_mm2",
-            "leaf_count": "count",
-        }.get(q["category"])
-        value = (
-            t[right]
-            if right
-            else t.get("count", t.get("area_px", t.get("hue_deg", t.get("pct"))))
-        )
-        assert score(q, f"ANSWER: {value}")["verdict"] == "right", q["id"]
+
+
+def test_oracle_the_key_scores_all_right_and_a_wrong_key_all_wrong() -> None:
+    """Positive and negative control over the whole frozen key: every key
+    answer written as a reply is right, UNKNOWN is declined, and a shifted
+    answer (count + 1, hue + 90 degrees, any other value x 1.25 + 3) is wrong."""
+    qs = json.loads(KEY.read_text())["questions"]
+    right = [score(q, f"ANSWER: {truth_value(q)}")["verdict"] for q in qs]
+    assert right == ["right"] * len(qs)
+    assert {score(q, "ANSWER: UNKNOWN")["verdict"] for q in qs} == {"declined"}
+    wrong = []
+    for q in qs:
+        v = truth_value(q)
+        kind = q["truth"].get("kind", q["category"])
+        if kind in ("count", "leaf_count"):
+            bad = v + 1
+        elif kind == "hue":
+            bad = (v + 90) % 360
+        else:
+            bad = v * 1.25 + 3
+        wrong.append(score(q, f"ANSWER: {bad}")["verdict"])
+    assert wrong == ["wrong"] * len(qs)

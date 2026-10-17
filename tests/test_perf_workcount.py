@@ -61,6 +61,23 @@ def test_a_different_output_fails_even_with_equal_counts() -> None:
     ]
 
 
+def test_update_records_a_drop_but_refuses_a_rise_without_allow_increase() -> None:
+    drop = {"w": _with("cv2", "cv2.findContours", 1)}
+    assert workcount.refusals({"w": ROW}, drop) == []
+    rise = {"w": _with("package", "diagnostics.py:mask_report", 4)}
+    assert workcount.refusals({"w": ROW}, rise) == ["w: package 4 -> 5"]
+    assert workcount.refusals({"w": ROW}, rise, allow_increase=True) == []
+
+
+def test_update_refuses_a_changed_output_even_when_a_rise_is_allowed() -> None:
+    other = {"w": dict(ROW, output={"count": 6})}
+    want = ["w: output {'count': 7} -> {'count': 6}"]
+    assert workcount.refusals({"w": ROW}, other) == want
+    assert workcount.refusals({"w": ROW}, other, allow_increase=True) == want
+    assert workcount.refusals({"w": ROW}, other, allow_output_change=True) == []
+    assert workcount.refusals({"w": ROW}, {"w": ROW}) == []  # unchanged: written
+
+
 def test_missing_and_new_workloads_are_named() -> None:
     assert workcount.check({"a": ROW}, {}) == ["a: in the baseline but not run"]
     assert workcount.check({}, {"b": ROW}) == ["b: not in the baseline (run --update)"]
