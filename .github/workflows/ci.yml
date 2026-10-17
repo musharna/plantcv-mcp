@@ -37,6 +37,13 @@ jobs:
       - name: Tests
         run: uv run --python ${{ matrix.python-version }} pytest -q
 
+      # Exact call counts per tool against benchmarks/perf/baseline.json; no
+      # headroom, so any added or removed work fails until the baseline is
+      # updated in the same PR. Run on every Python here because the counts
+      # must not depend on the interpreter (benchmarks/perf/workcount.py docstring).
+      - name: Work-count ratchet
+        run: uv run --python ${{ matrix.python-version }} python benchmarks/perf/workcount.py
+
   # The optional `sam` extra: torch (CPU wheels, from the index pinned in
   # pyproject.toml), torchvision, segment-anything, and the 375 MB ViT-B
   # checkpoint. Kept out of every other job on purpose; this one installs it,
