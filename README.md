@@ -4,7 +4,7 @@ plantcv-mcp is an MCP server that lets AI agents run [PlantCV](https://plantcv.o
 phenotyping. It returns trait numbers and the segmentation overlay they were measured from, and
 refuses to return numbers when the segmentation is degenerate.
 
-[![CI](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/musharna/plantcv-mcp/ci.yml?branch=master&label=CI)](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
 [![Python](https://img.shields.io/pypi/pyversions/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
 [![License](https://img.shields.io/pypi/l/plantcv-mcp)](https://github.com/musharna/plantcv-mcp/blob/master/LICENSE)
