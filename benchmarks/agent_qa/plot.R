@@ -183,10 +183,17 @@ paired <- do.call(rbind, lapply(c("all", "colour_cut_wrong"), function(subset) {
   only_mcp <- sum(m[both] & !a[both])
   only_alt <- sum(!m[both] & a[both])
   p <- if (only_mcp + only_alt > 0) binom.test(only_mcp, only_mcp + only_alt, 0.5)$p.value else 1
+  # Bootstrap over questions of the paired difference in the share right in
+  # every run (mcp minus alt). Drawn after every interval above, so adding it
+  # (2026-10-18) left those intervals' random draws unchanged.
+  d_q <- as.numeric(m[both]) - as.numeric(a[both])
+  diff_ci <- boot_ci(seq_along(d_q), function(s) mean(d_q[s]))
   data.frame(
     subset = subset, questions_paired = length(both),
     mcp_all_right = sum(m[both]), alt_all_right = sum(a[both]),
-    only_mcp = only_mcp, only_alt = only_alt, exact_mcnemar_p = signif(p, 3)
+    only_mcp = only_mcp, only_alt = only_alt, exact_mcnemar_p = signif(p, 3),
+    diff_share = round(diff_ci["est"], 4), diff_lo = round(diff_ci["lo"], 4),
+    diff_hi = round(diff_ci["hi"], 4)
   )
 }))
 write.table(stats, file.path(outdir, "stats.tsv"), sep = "\t", quote = FALSE, row.names = FALSE, na = "NA")
