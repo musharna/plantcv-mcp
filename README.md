@@ -1,15 +1,15 @@
 # plantcv-mcp
 
-An MCP server that runs [PlantCV](https://plantcv.org) plant phenotyping for an AI agent. It
-returns trait numbers **and the segmentation overlay they were measured from**, and refuses to
-return numbers when the segmentation is degenerate.
+plantcv-mcp is an MCP server that lets AI agents run [PlantCV](https://plantcv.org) plant
+phenotyping. It returns trait numbers and the segmentation overlay they were measured from, and
+refuses to return numbers when the segmentation is degenerate.
 
-[![ci](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml)
+[![CI](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
-[![python](https://img.shields.io/pypi/pyversions/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
-[![license](https://img.shields.io/pypi/l/plantcv-mcp)](https://github.com/musharna/plantcv-mcp/blob/master/LICENSE)
-[![Glama](https://glama.ai/mcp/servers/musharna/plantcv-mcp/badges/score.svg)](https://glama.ai/mcp/servers/musharna/plantcv-mcp)
+[![Python](https://img.shields.io/pypi/pyversions/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
+[![License](https://img.shields.io/pypi/l/plantcv-mcp)](https://github.com/musharna/plantcv-mcp/blob/master/LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21713516.svg)](https://doi.org/10.5281/zenodo.21713516)
+[![Glama](https://glama.ai/mcp/servers/musharna/plantcv-mcp/badges/score.svg)](https://glama.ai/mcp/servers/musharna/plantcv-mcp)
 
 <!-- mcp-name: io.github.musharna/plantcv-mcp -->
 
@@ -25,7 +25,7 @@ background, `area=1007829`.
 ## Why you get the overlay
 
 Both images come from the same file and the same threshold method; only the channel differs.
-Without the picture, both runs return seventeen traits with correct units and believable
+Without the picture, both runs return 17 traits with correct units and believable
 magnitudes. The one on the right is measuring the wall behind the plants. Red marks the
 measured pixels; a cyan line traces the mask's edge.
 
@@ -39,7 +39,7 @@ Measured with PlantCV 4.11.3 on a synthetic render (first row:
 `tests/fixtures/multi_specimen.png`) and on photographs, each of these returns believable
 numbers with correct units:
 
-| failure                           | what you get without the overlay                            |
+| Failure                           | What you get without the overlay                            |
 | --------------------------------- | ----------------------------------------------------------- |
 | four-view render, whole-image ROI | 17 plausible traits describing four merged plants           |
 | plant clipped by the frame        | size traits that are silently lower bounds                  |
@@ -51,7 +51,7 @@ Not on these test images: the server did not make Claude measurably more accurat
 its own code (mostly OpenCV), and its own code was cheaper and faster.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/musharna/plantcv-mcp/master/benchmarks/agent_qa/agent_qa.png" width="90%" alt="Stacked bar chart of right, wrong, declined and invalid answers, 46 questions times 3 runs per setup. Claude + plantcv-mcp + Read: 119 right, 19 wrong. Claude + Bash/PlantCV/OpenCV + web: 131 right, 6 wrong, 1 invalid. Claude alone: 135 declined, 3 invalid. No-model controls, one answer per question: one color cut 28 right, 10 wrong, 8 declined; median answer of its kind 2 right, 44 wrong.">
+  <img src="https://raw.githubusercontent.com/musharna/plantcv-mcp/master/benchmarks/agent_qa/agent_qa.png" width="780" alt="Stacked bar chart of right, wrong, declined and invalid answers, 46 questions times 3 runs per setup. Claude + plantcv-mcp + Read: 119 right, 19 wrong. Claude + Bash/PlantCV/OpenCV + web: 131 right, 6 wrong, 1 invalid. Claude alone: 135 declined, 3 invalid. No-model controls, one answer per question: one color cut 28 right, 10 wrong, 8 declined; median answer of its kind 2 right, 44 wrong.">
 </p>
 
 On 46 measurement questions about rendered plant images, three runs each, Claude Opus 5.5 was
@@ -98,7 +98,7 @@ the server keeps, to your imagery: `plantcv-mcp --root /data/phenotyping`. `--no
 
 ## Tools
 
-| tool                                          | returns                                                          |
+| Tool                                          | Returns                                                          |
 | --------------------------------------------- | ---------------------------------------------------------------- |
 | `suggest_segmentation`                        | contact sheets, and what each `object_type` would yield          |
 | `segment`                                     | overlay + diagnostics + warnings, **no traits**                  |
@@ -127,10 +127,10 @@ measured facts behind each tool:
 Each guard was added after a specific failure and names the next action. Blocking guards
 withhold numbers; advisories travel with them.
 
-- **Inverted mask** (`implausible_coverage`): the right-hand image above, seventeen believable
+- **Inverted mask** (`implausible_coverage`): the right-hand image above, 17 believable
   traits describing the wall.
 - **Nothing selected, or `fill_size` deleted the specimen** (`empty_mask`, `fill_erased_mask`):
-  PlantCV returns seventeen zeros with `in_bounds=True`.
+  PlantCV returns 17 zeros with `in_bounds=True`.
 - **Background texture** (`noisy_segmentation`): specks of chamber wall measured as one plant.
 - **Several plants in one mask** (`multi_specimen`): use `measure_regions()`.
 - **Wrong scale, wrong session kind, a file changed after segmentation**: refused, naming the
