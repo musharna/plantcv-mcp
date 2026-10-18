@@ -8,6 +8,27 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- `segment(rules=[...], combine="or"|"and")`: threshold several channels
+  at once, each rule an automatic threshold (`channel`, `method`,
+  `object_type`) or an explicit inclusive value range (`channel`, `min`,
+  `max`; `h` is OpenCV hue, 0-179), the masks joined pixel by pixel. For a
+  plant no one channel captures: a* finds the green leaves and b* the
+  yellowed ones. Malformed rules, and rules passed beside `channel`, are
+  refused by name before any pixel is read.
+- `count_leaves(seeds=[[x, y], ...])`: a seeded split for touching objects
+  the automatic watershed merges. One region per seed, by a compact
+  watershed on PlantCV's own landscape (the negated distance transform);
+  the count is the number of seeds and says so (`seeded_count`).
+- `zoom_image(image_path, x, y, w, h, scale)`: the box enlarged, so a model
+  with no Bash can look closely (in the 2026-10-17 benchmark, Claude with
+  Bash enlarged the plant before counting leaves in 21 of 24 runs).
+- `traits=[...]` on `measure` and `measure_regions`: only the named traits.
+  A 20-pot `measure_regions` returned ~12,000 tokens of trait tables per
+  call in that benchmark; an unknown name is refused with the available ones.
+- `benchmarks/agent_qa/run.py --server-spec git+https://...@<sha>` and
+  `--exclude-newer`: run the benchmark against an unreleased commit, recorded
+  in every row and in `versions.json`; `diagnose.py` breaks each arm's tokens
+  down by fixed context, tool output, turns and cache use.
 - `benchmarks/agent_qa/`: an agent benchmark. 46 questions about rendered
   plant scenes (textured soil, algae, moss, straw, pots, overlapping and
   yellowed leaves, a tilted size marker) with exactly known answers (area, height/width, area in mm²
