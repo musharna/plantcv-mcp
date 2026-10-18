@@ -6,6 +6,28 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- `benchmarks/agent_qa/`: an agent benchmark. 46 questions about rendered
+  plant scenes (textured soil, algae, moss, straw, pots, overlapping and
+  yellowed leaves, a tilted size marker) with exactly known answers (area, height/width, area in mm²
+  from a size marker, trays, leaf counts, hue and yellow share), asked to
+  Claude with no tools, with Bash + PlantCV/OpenCV + web, and with this
+  server (plus Read). One validity rule for every setup, a leak scan of
+  every transcript, two no-model controls (median answer, one colour cut),
+  bootstrap intervals and a paired test. Result of the 414-run sweep: the
+  server was not more accurate than Claude's own OpenCV code (86.2% vs
+  95.7% of answers right, paired p = 0.18) and cost more ($0.071 vs $0.039
+  median per answer); a colour cut alone answers 28 of the 46 questions.
+- `benchmarks/perf/workcount.py`: a work-count ratchet. Each main tool runs
+  one fixed workload through the tool layer, and the calls into this
+  package, OpenCV and PlantCV, and the processes started, must equal
+  `benchmarks/perf/baseline.json` exactly. It runs as a CI step on every
+  Python in the matrix. It found that `measure_regions` in `auto_grid` mode
+  starts two processes on its first call in a process (`lscpu` from loky
+  and `ldconfig -p` from threadpoolctl, through PlantCV's scikit-learn
+  KMeans).
+
 ## [1.16.1] — 2026-09-26
 
 ### Changed

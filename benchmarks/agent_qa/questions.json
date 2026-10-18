@@ -1,0 +1,626 @@
+{
+ "built": "2026-10-17",
+ "seed": 20261016,
+ "questions": [
+  {
+   "category": "area",
+   "image": "area_1.png",
+   "sha256": "7f80aab27b46c5a6677b9fe06a2aae16e0ced96be0d70a61d69bb55bd39e3f9c",
+   "question": "This is a top-down photo of a potted plant. What is the plant's projected area in pixels, i.e. how many pixels does the plant cover?",
+   "answer_format": "an integer number of pixels, e.g. 12345",
+   "truth": {
+    "area_px": 15795,
+    "contour_area": 15490.0
+   },
+   "how_built": "5 overlapping leaves; truth = plant pixels drawn",
+   "id": "q01"
+  },
+  {
+   "category": "area",
+   "image": "area_2.png",
+   "sha256": "ba6ca3e88cfcc5fc6aa2faedc1641313926fd1ecc20732f39c5d1dfa514792c6",
+   "question": "This is a top-down photo of a potted plant. What is the plant's projected area in pixels, i.e. how many pixels does the plant cover?",
+   "answer_format": "an integer number of pixels, e.g. 12345",
+   "truth": {
+    "area_px": 15565,
+    "contour_area": 15260.5
+   },
+   "how_built": "4 overlapping leaves; truth = plant pixels drawn",
+   "id": "q02"
+  },
+  {
+   "category": "area",
+   "image": "area_3.png",
+   "sha256": "8b781515260f0dd8db96b85937776f0d9ca895b12e0437bd5c0c76c9e43a5c48",
+   "question": "This is a top-down photo of a potted plant. What is the plant's projected area in pixels, i.e. how many pixels does the plant cover?",
+   "answer_format": "an integer number of pixels, e.g. 12345",
+   "truth": {
+    "area_px": 11768,
+    "contour_area": 11500.0
+   },
+   "how_built": "4 overlapping leaves; truth = plant pixels drawn",
+   "id": "q03"
+  },
+  {
+   "category": "area",
+   "image": "area_4.png",
+   "sha256": "cc399b13389d6d8792d46821d1c9c56c95df41f450df527a2b2cabc841edf9c5",
+   "question": "This is a top-down photo of a potted plant. What is the plant's projected area in pixels, i.e. how many pixels does the plant cover?",
+   "answer_format": "an integer number of pixels, e.g. 12345",
+   "truth": {
+    "area_px": 21409,
+    "contour_area": 21061.5
+   },
+   "how_built": "6 overlapping leaves; truth = plant pixels drawn",
+   "id": "q04"
+  },
+  {
+   "category": "area",
+   "image": "area_5.png",
+   "sha256": "78544546fce76becd806f5cc2f6ae2912cb910658800b820e8e9c3469887b81d",
+   "question": "This is a top-down photo of a potted plant. What is the plant's projected area in pixels, i.e. how many pixels does the plant cover?",
+   "answer_format": "an integer number of pixels, e.g. 12345",
+   "truth": {
+    "area_px": 20354,
+    "contour_area": 19986.0
+   },
+   "how_built": "6 overlapping leaves, 2 of them yellowed, straw on the soil; truth = plant pixels drawn",
+   "id": "q05"
+  },
+  {
+   "category": "area",
+   "image": "area_6.png",
+   "sha256": "6ab9b806ccee79a0f545580e1bcb1f91d775e2c2acfe71e4ac4f897f2ae35efb",
+   "question": "This is a top-down photo of a potted plant. What is the plant's projected area in pixels, i.e. how many pixels does the plant cover?",
+   "answer_format": "an integer number of pixels, e.g. 12345",
+   "truth": {
+    "area_px": 17592,
+    "contour_area": 17299.0
+   },
+   "how_built": "7 overlapping leaves, 2 of them yellowed, straw on the soil; truth = plant pixels drawn",
+   "id": "q06"
+  },
+  {
+   "category": "area",
+   "image": "area_7.png",
+   "sha256": "e49fcd56f216c923290bc379099d395c5f4626953a3b300f9a3872a78db9bb44",
+   "question": "This is a top-down photo of a potted plant. What is the plant's projected area in pixels, i.e. how many pixels does the plant cover?",
+   "answer_format": "an integer number of pixels, e.g. 12345",
+   "truth": {
+    "area_px": 19638,
+    "contour_area": 19297.5
+   },
+   "how_built": "6 overlapping leaves, 2 of them yellowed, straw on the soil; truth = plant pixels drawn",
+   "id": "q07"
+  },
+  {
+   "category": "area",
+   "image": "area_8.png",
+   "sha256": "be751cc3d1ba0c80bbcd3ecda1afe345e4f699cfa0a94f53cb1398597f683e09",
+   "question": "This is a top-down photo of a potted plant. What is the plant's projected area in pixels, i.e. how many pixels does the plant cover?",
+   "answer_format": "an integer number of pixels, e.g. 12345",
+   "truth": {
+    "area_px": 24332,
+    "contour_area": 23932.0
+   },
+   "how_built": "5 overlapping leaves, 2 of them yellowed, straw on the soil; truth = plant pixels drawn",
+   "id": "q08"
+  },
+  {
+   "category": "extent",
+   "image": "extent_1.png",
+   "sha256": "f74c346279d7b066a5817a74add10dc27fd638631d74b50d0783f22575fb3f2b",
+   "question": "This is a side-view photo of a potted plant against a wall. What is the plant's height in pixels, from its lowest point to its highest point?",
+   "answer_format": "an integer number of pixels, e.g. 321",
+   "truth": {
+    "axis": "height",
+    "px": 358,
+    "other_px": 180
+   },
+   "how_built": "stem from the pot rim, leaves may hang in front of the pot; truth = bounding box of the plant pixels drawn",
+   "id": "q09"
+  },
+  {
+   "category": "extent",
+   "image": "extent_2.png",
+   "sha256": "47947bd61154c10a6766028a0b2c022b6db929754c3f33c4fa6103b558b9bde2",
+   "question": "This is a side-view photo of a potted plant against a wall. What is the plant's width in pixels, from its leftmost to its rightmost point?",
+   "answer_format": "an integer number of pixels, e.g. 321",
+   "truth": {
+    "axis": "width",
+    "px": 229,
+    "other_px": 187
+   },
+   "how_built": "stem from the pot rim, leaves may hang in front of the pot; truth = bounding box of the plant pixels drawn",
+   "id": "q10"
+  },
+  {
+   "category": "extent",
+   "image": "extent_3.png",
+   "sha256": "cc15f4fa2559e80324bd4e5c553445292d565fe5e86046720e7d58cb5c628fba",
+   "question": "This is a side-view photo of a potted plant against a wall. What is the plant's height in pixels, from its lowest point to its highest point?",
+   "answer_format": "an integer number of pixels, e.g. 321",
+   "truth": {
+    "axis": "height",
+    "px": 314,
+    "other_px": 191
+   },
+   "how_built": "stem from the pot rim, leaves may hang in front of the pot; truth = bounding box of the plant pixels drawn",
+   "id": "q11"
+  },
+  {
+   "category": "extent",
+   "image": "extent_4.png",
+   "sha256": "96b4be9e0ab3fd5865a16b88d769f71a24f6dd7278256e27b94870b03d89612a",
+   "question": "This is a side-view photo of a potted plant against a wall. What is the plant's width in pixels, from its leftmost to its rightmost point?",
+   "answer_format": "an integer number of pixels, e.g. 321",
+   "truth": {
+    "axis": "width",
+    "px": 196,
+    "other_px": 202
+   },
+   "how_built": "stem from the pot rim, leaves may hang in front of the pot; truth = bounding box of the plant pixels drawn",
+   "id": "q12"
+  },
+  {
+   "category": "extent",
+   "image": "extent_5.png",
+   "sha256": "a12731013fd582c10b32d875622339cfc4389e14562bb45f0da77be59bcd199e",
+   "question": "This is a side-view photo of a potted plant against a wall. What is the plant's height in pixels, from its lowest point to its highest point?",
+   "answer_format": "an integer number of pixels, e.g. 321",
+   "truth": {
+    "axis": "height",
+    "px": 196,
+    "other_px": 180
+   },
+   "how_built": "stem from the pot rim, leaves may hang in front of the pot; truth = bounding box of the plant pixels drawn",
+   "id": "q13"
+  },
+  {
+   "category": "extent",
+   "image": "extent_6.png",
+   "sha256": "5009407ccb7e190856a97fc0ec93295318e8b750ac8a52b8b2d05bff0563b8b1",
+   "question": "This is a side-view photo of a potted plant against a wall. What is the plant's width in pixels, from its leftmost to its rightmost point?",
+   "answer_format": "an integer number of pixels, e.g. 321",
+   "truth": {
+    "axis": "width",
+    "px": 208,
+    "other_px": 172
+   },
+   "how_built": "stem from the pot rim, leaves may hang in front of the pot; truth = bounding box of the plant pixels drawn",
+   "id": "q14"
+  },
+  {
+   "category": "extent",
+   "image": "extent_7.png",
+   "sha256": "4aa7dc6d8ad87343dcfc5b60fcf66c3502e1f8463d0268ccb41f7196ff004524",
+   "question": "This is a side-view photo of a potted plant against a wall. What is the plant's height in pixels, from its lowest point to its highest point?",
+   "answer_format": "an integer number of pixels, e.g. 321",
+   "truth": {
+    "axis": "height",
+    "px": 283,
+    "other_px": 208
+   },
+   "how_built": "stem from the pot rim, leaves may hang in front of the pot; truth = bounding box of the plant pixels drawn",
+   "id": "q15"
+  },
+  {
+   "category": "extent",
+   "image": "extent_8.png",
+   "sha256": "2a66939903f5d6cbf00384f6d12b04ec327437dce1c9ae98c80e1cbe152c7df5",
+   "question": "This is a side-view photo of a potted plant against a wall. What is the plant's width in pixels, from its leftmost to its rightmost point?",
+   "answer_format": "an integer number of pixels, e.g. 321",
+   "truth": {
+    "axis": "width",
+    "px": 210,
+    "other_px": 181
+   },
+   "how_built": "stem from the pot rim, leaves may hang in front of the pot; truth = bounding box of the plant pixels drawn",
+   "id": "q16"
+  },
+  {
+   "category": "area_mm",
+   "image": "area_mm_1.png",
+   "sha256": "8122927c4505e864127c27ba1ec8b6a2b33bfa9c5080484001bcfed2ab1b3752",
+   "question": "This is a top-down photo of a potted plant. The black square printed on the white card in the top-left corner is a size reference, exactly 20 mm x 20 mm. What is the plant's projected area in square millimetres?",
+   "answer_format": "a number in mm\u00b2, e.g. 1234.5",
+   "truth": {
+    "area_mm2": 467.44444444444446,
+    "area_px": 16828,
+    "px_per_mm": 6.0
+   },
+   "how_built": "marker 120 px = 20 mm, turned 14 deg; truth = plant pixels drawn / px_per_mm\u00b2",
+   "id": "q17"
+  },
+  {
+   "category": "area_mm",
+   "image": "area_mm_2.png",
+   "sha256": "6dc937e12ac8da4517b43ede23918f90981bae5c198291f3021a4d6f43942e2f",
+   "question": "This is a top-down photo of a potted plant. The black square printed on the white card in the top-left corner is a size reference, exactly 25 mm x 25 mm. What is the plant's projected area in square millimetres?",
+   "answer_format": "a number in mm\u00b2, e.g. 1234.5",
+   "truth": {
+    "area_mm2": 648.5243055555555,
+    "area_px": 14942,
+    "px_per_mm": 4.8
+   },
+   "how_built": "marker 120 px = 25 mm, turned 19 deg; truth = plant pixels drawn / px_per_mm\u00b2",
+   "id": "q18"
+  },
+  {
+   "category": "area_mm",
+   "image": "area_mm_3.png",
+   "sha256": "43e9d51c282556839373e7489de8941f74e10fe3621fd61521096a5c75972084",
+   "question": "This is a top-down photo of a potted plant. The black square printed on the white card in the top-left corner is a size reference, exactly 20 mm x 20 mm. What is the plant's projected area in square millimetres?",
+   "answer_format": "a number in mm\u00b2, e.g. 1234.5",
+   "truth": {
+    "area_mm2": 395.19444444444446,
+    "area_px": 14227,
+    "px_per_mm": 6.0
+   },
+   "how_built": "marker 120 px = 20 mm, turned 23 deg; truth = plant pixels drawn / px_per_mm\u00b2",
+   "id": "q19"
+  },
+  {
+   "category": "area_mm",
+   "image": "area_mm_4.png",
+   "sha256": "3a0060cca424853f398abd8095bb7045587c1200bfd5f2b4051fa1c26286fec4",
+   "question": "This is a top-down photo of a potted plant. The black square printed on the white card in the top-left corner is a size reference, exactly 20 mm x 20 mm. What is the plant's projected area in square millimetres?",
+   "answer_format": "a number in mm\u00b2, e.g. 1234.5",
+   "truth": {
+    "area_mm2": 487.84,
+    "area_px": 12196,
+    "px_per_mm": 5.0
+   },
+   "how_built": "marker 100 px = 20 mm, turned 31 deg; truth = plant pixels drawn / px_per_mm\u00b2",
+   "id": "q20"
+  },
+  {
+   "category": "area_mm",
+   "image": "area_mm_5.png",
+   "sha256": "a86f66622320dc42ee425d29a03cc35c9f0fe59a97c472cfaf3d6c2c90082f7d",
+   "question": "This is a top-down photo of a potted plant. The black square printed on the white card in the top-left corner is a size reference, exactly 15 mm x 15 mm. What is the plant's projected area in square millimetres?",
+   "answer_format": "a number in mm\u00b2, e.g. 1234.5",
+   "truth": {
+    "area_mm2": 607.8993055555555,
+    "area_px": 14006,
+    "px_per_mm": 4.8
+   },
+   "how_built": "marker 72 px = 15 mm, turned 15 deg; truth = plant pixels drawn / px_per_mm\u00b2",
+   "id": "q21"
+  },
+  {
+   "category": "area_mm",
+   "image": "area_mm_6.png",
+   "sha256": "e7d67739193bf96753976f60637c5c7409c636fa56a420ca5b3e23f2e0d4021e",
+   "question": "This is a top-down photo of a potted plant. The black square printed on the white card in the top-left corner is a size reference, exactly 15 mm x 15 mm. What is the plant's projected area in square millimetres?",
+   "answer_format": "a number in mm\u00b2, e.g. 1234.5",
+   "truth": {
+    "area_mm2": 201.734375,
+    "area_px": 12911,
+    "px_per_mm": 8.0
+   },
+   "how_built": "marker 120 px = 15 mm, turned 34 deg; truth = plant pixels drawn / px_per_mm\u00b2",
+   "id": "q22"
+  },
+  {
+   "category": "tray",
+   "image": "tray_1.png",
+   "sha256": "b234ae2c8a4458d9cd75460f5ab065672652d18a96c1cfe4fb7df45e5c909a57",
+   "question": "This is a top-down photo of a seedling tray: 2 rows x 3 columns of pots, at most one seedling per pot. How many of the 6 pots hold a seedling?",
+   "answer_format": "an integer, e.g. 7",
+   "truth": {
+    "kind": "count",
+    "count": 5
+   },
+   "how_built": "2x3, 1 empty; truth = seedlings drawn (moss specks are not)",
+   "id": "q23"
+  },
+  {
+   "category": "tray",
+   "image": "tray_2.png",
+   "sha256": "d9ec80ff772c8aecc08eefb4421cd41c8bad35ef9ece75698516be49da923866",
+   "question": "This is a top-down photo of a seedling tray: 4 rows x 6 columns of pots, at most one seedling per pot. What is the projected area, in pixels, of the seedling in row 4, column 2 (row 1 is the top row, column 1 the leftmost)?",
+   "answer_format": "an integer number of pixels, e.g. 12345",
+   "truth": {
+    "kind": "area",
+    "area_px": 1063,
+    "contour_area": 988.5
+   },
+   "how_built": "4x6, 1 empty; truth = pixels drawn for that seedling",
+   "id": "q24"
+  },
+  {
+   "category": "tray",
+   "image": "tray_3.png",
+   "sha256": "b0ee2336efd2432f4c97f8080e15efc22a97561fafb44a3239d8f69280ac0d1f",
+   "question": "This is a top-down photo of a seedling tray: 4 rows x 6 columns of pots, at most one seedling per pot. How many of the 24 pots hold a seedling?",
+   "answer_format": "an integer, e.g. 7",
+   "truth": {
+    "kind": "count",
+    "count": 22
+   },
+   "how_built": "4x6, 2 empty; truth = seedlings drawn (moss specks are not)",
+   "id": "q25"
+  },
+  {
+   "category": "tray",
+   "image": "tray_4.png",
+   "sha256": "88b84121082f55a47a76f064daa5cc0c50fa3a615947194b2be3fe903a6f59e2",
+   "question": "This is a top-down photo of a seedling tray: 4 rows x 5 columns of pots, at most one seedling per pot. What is the projected area, in pixels, of the seedling in row 1, column 5 (row 1 is the top row, column 1 the leftmost)?",
+   "answer_format": "an integer number of pixels, e.g. 12345",
+   "truth": {
+    "kind": "area",
+    "area_px": 1599,
+    "contour_area": 1498.0
+   },
+   "how_built": "4x5, 1 empty; truth = pixels drawn for that seedling",
+   "id": "q26"
+  },
+  {
+   "category": "tray",
+   "image": "tray_5.png",
+   "sha256": "5f1dbebecba3b9284fba175bd4da4da2cee7ccd19435d1e582573d5fed7f44f6",
+   "question": "This is a top-down photo of a seedling tray: 4 rows x 5 columns of pots, at most one seedling per pot. How many of the 20 pots hold a seedling?",
+   "answer_format": "an integer, e.g. 7",
+   "truth": {
+    "kind": "count",
+    "count": 18
+   },
+   "how_built": "4x5, 2 empty; truth = seedlings drawn (moss specks are not)",
+   "id": "q27"
+  },
+  {
+   "category": "tray",
+   "image": "tray_6.png",
+   "sha256": "2ee6328a12cd9be1d1eef8b2e69d6400ac6090cf24de55c8fdec0b254d21c3f3",
+   "question": "This is a top-down photo of a seedling tray: 4 rows x 6 columns of pots, at most one seedling per pot. What is the projected area, in pixels, of the seedling in row 1, column 6 (row 1 is the top row, column 1 the leftmost)?",
+   "answer_format": "an integer number of pixels, e.g. 12345",
+   "truth": {
+    "kind": "area",
+    "area_px": 1618,
+    "contour_area": 1522.0
+   },
+   "how_built": "4x6, 5 empty; truth = pixels drawn for that seedling",
+   "id": "q28"
+  },
+  {
+   "category": "tray",
+   "image": "tray_7.png",
+   "sha256": "139a7de53b34699c5c4823a7467b261c35e625ca80409e1375370bfb1048fddd",
+   "question": "This is a top-down photo of a seedling tray: 4 rows x 6 columns of pots, at most one seedling per pot. How many of the 24 pots hold a seedling?",
+   "answer_format": "an integer, e.g. 7",
+   "truth": {
+    "kind": "count",
+    "count": 21
+   },
+   "how_built": "4x6, 3 empty; truth = seedlings drawn (moss specks are not)",
+   "id": "q29"
+  },
+  {
+   "category": "tray",
+   "image": "tray_8.png",
+   "sha256": "258646ecbbd3a729919aab8721cf2449cf4426ed9229a47c91c482e7f7f175ec",
+   "question": "This is a top-down photo of a seedling tray: 4 rows x 5 columns of pots, at most one seedling per pot. What is the projected area, in pixels, of the seedling in row 4, column 1 (row 1 is the top row, column 1 the leftmost)?",
+   "answer_format": "an integer number of pixels, e.g. 12345",
+   "truth": {
+    "kind": "area",
+    "area_px": 431,
+    "contour_area": 381.0
+   },
+   "how_built": "4x5, 5 empty; truth = pixels drawn for that seedling",
+   "id": "q30"
+  },
+  {
+   "category": "leaf_count",
+   "image": "leaves_1.png",
+   "sha256": "c50242fcd2055a7ea0f61cb0e7cf306051eb46c2241cef3c409c4736108e9824",
+   "question": "This is a top-down photo of a potted rosette plant. How many leaves does it have?",
+   "answer_format": "an integer, e.g. 6",
+   "truth": {
+    "count": 12
+   },
+   "how_built": "12 overlapping leaves of one shade around a centre; truth = leaves drawn",
+   "id": "q31"
+  },
+  {
+   "category": "leaf_count",
+   "image": "leaves_2.png",
+   "sha256": "3d5ddce35950f0160cf036a2f9e9a0dc507fb8c84b33c05c1f7b291dda3a3f68",
+   "question": "This is a top-down photo of a potted rosette plant. How many leaves does it have?",
+   "answer_format": "an integer, e.g. 6",
+   "truth": {
+    "count": 5
+   },
+   "how_built": "5 overlapping leaves of one shade around a centre; truth = leaves drawn",
+   "id": "q32"
+  },
+  {
+   "category": "leaf_count",
+   "image": "leaves_3.png",
+   "sha256": "2e6d803bf5e8afab2b9a6f93dab2050f1904e6da32931feb05525d426f8a3dc9",
+   "question": "This is a top-down photo of a potted rosette plant. How many leaves does it have?",
+   "answer_format": "an integer, e.g. 6",
+   "truth": {
+    "count": 11
+   },
+   "how_built": "11 overlapping leaves of one shade around a centre; truth = leaves drawn",
+   "id": "q33"
+  },
+  {
+   "category": "leaf_count",
+   "image": "leaves_4.png",
+   "sha256": "daca303bc9ae8d151ba0e08dac505b3a3c34881b21d719441f23587d542bc18d",
+   "question": "This is a top-down photo of a potted rosette plant. How many leaves does it have?",
+   "answer_format": "an integer, e.g. 6",
+   "truth": {
+    "count": 13
+   },
+   "how_built": "13 overlapping leaves of one shade around a centre; truth = leaves drawn",
+   "id": "q34"
+  },
+  {
+   "category": "leaf_count",
+   "image": "leaves_5.png",
+   "sha256": "d43de1b455107ae17004d593e1ce03dffe83f50ce762f3da0276374c78765ea8",
+   "question": "This is a top-down photo of a potted rosette plant. How many leaves does it have?",
+   "answer_format": "an integer, e.g. 6",
+   "truth": {
+    "count": 7
+   },
+   "how_built": "7 overlapping leaves of one shade around a centre; truth = leaves drawn",
+   "id": "q35"
+  },
+  {
+   "category": "leaf_count",
+   "image": "leaves_6.png",
+   "sha256": "b426159e24ef4c2146c1c1634a9f6fb2d5a6e061f914b2d781914bea7a946662",
+   "question": "This is a top-down photo of a potted rosette plant. How many leaves does it have?",
+   "answer_format": "an integer, e.g. 6",
+   "truth": {
+    "count": 14
+   },
+   "how_built": "14 overlapping leaves of one shade around a centre; truth = leaves drawn",
+   "id": "q36"
+  },
+  {
+   "category": "leaf_count",
+   "image": "leaves_7.png",
+   "sha256": "c870fa4fc54f099315f6afa032cdf823500771b08532ac258c50890939097234",
+   "question": "This is a top-down photo of a potted rosette plant. How many leaves does it have?",
+   "answer_format": "an integer, e.g. 6",
+   "truth": {
+    "count": 9
+   },
+   "how_built": "9 overlapping leaves of one shade around a centre; truth = leaves drawn",
+   "id": "q37"
+  },
+  {
+   "category": "leaf_count",
+   "image": "leaves_8.png",
+   "sha256": "d78ec79c09e4f453858876cf97cf42756b994acba99a93bdb62dfa1291333daf",
+   "question": "This is a top-down photo of a potted rosette plant. How many leaves does it have?",
+   "answer_format": "an integer, e.g. 6",
+   "truth": {
+    "count": 8
+   },
+   "how_built": "8 overlapping leaves of one shade around a centre; truth = leaves drawn",
+   "id": "q38"
+  },
+  {
+   "category": "color",
+   "image": "color_1.png",
+   "sha256": "a729ea5dd493a5b8a15087a426a9ef927d811113cb2d486db5a68756f234b413",
+   "question": "This is a top-down photo of a potted plant. What is the mean hue of the plant's pixels, in degrees on the 0-360 colour wheel (HSV hue)?",
+   "answer_format": "a number of degrees, e.g. 104.5",
+   "truth": {
+    "kind": "hue",
+    "hue_deg": 136.91190868526522,
+    "arithmetic_mean_deg": 136.91090326192932
+   },
+   "how_built": "leaves of varied green shades; truth = circular mean HSV hue of plant pixels",
+   "id": "q39"
+  },
+  {
+   "category": "color",
+   "image": "color_2.png",
+   "sha256": "773d964c633b49110861e5cb4826e545b5653527b772b7da06be49a8f4bd68d2",
+   "question": "This is a top-down photo of a potted plant. Some of its leaves are yellow (chlorotic), the rest green. What percentage of the plant's area is yellow?",
+   "answer_format": "a percentage, e.g. 23.4",
+   "truth": {
+    "kind": "yellow_pct",
+    "pct": 13.809652197357778,
+    "yellow_px": 2561,
+    "plant_px": 18545
+   },
+   "how_built": "whole leaves yellow; truth = visible yellow-leaf pixels / plant pixels",
+   "id": "q40"
+  },
+  {
+   "category": "color",
+   "image": "color_3.png",
+   "sha256": "1cca5268dd38c0ae7880f6765912272ee58b9e6d0e0d466024b3033d107bbf28",
+   "question": "This is a top-down photo of a potted plant. What is the mean hue of the plant's pixels, in degrees on the 0-360 colour wheel (HSV hue)?",
+   "answer_format": "a number of degrees, e.g. 104.5",
+   "truth": {
+    "kind": "hue",
+    "hue_deg": 99.7876751935531,
+    "arithmetic_mean_deg": 99.78883740441455
+   },
+   "how_built": "leaves of varied green shades; truth = circular mean HSV hue of plant pixels",
+   "id": "q41"
+  },
+  {
+   "category": "color",
+   "image": "color_4.png",
+   "sha256": "e45e5c51631217af1333cbdffb5e21039bba1788376b018d483d1ca8d5ec3521",
+   "question": "This is a top-down photo of a potted plant. Some of its leaves are yellow (chlorotic), the rest green. What percentage of the plant's area is yellow?",
+   "answer_format": "a percentage, e.g. 23.4",
+   "truth": {
+    "kind": "yellow_pct",
+    "pct": 38.479904496617586,
+    "yellow_px": 11604,
+    "plant_px": 30156
+   },
+   "how_built": "whole leaves yellow; truth = visible yellow-leaf pixels / plant pixels",
+   "id": "q42"
+  },
+  {
+   "category": "color",
+   "image": "color_5.png",
+   "sha256": "b3f6033008ce0e328adcb4d31731e705080e7f7e55bcdd881613badeb9b03421",
+   "question": "This is a top-down photo of a potted plant. What is the mean hue of the plant's pixels, in degrees on the 0-360 colour wheel (HSV hue)?",
+   "answer_format": "a number of degrees, e.g. 104.5",
+   "truth": {
+    "kind": "hue",
+    "hue_deg": 114.12554398410063,
+    "arithmetic_mean_deg": 114.12756474309153
+   },
+   "how_built": "leaves of varied green shades; truth = circular mean HSV hue of plant pixels",
+   "id": "q43"
+  },
+  {
+   "category": "color",
+   "image": "color_6.png",
+   "sha256": "55fb5f8a93e0d9d0dcfb8b3679e4be80341eb2a8ea0b233965f5f5b3ae2b922f",
+   "question": "This is a top-down photo of a potted plant. Some of its leaves are yellow (chlorotic), the rest green. What percentage of the plant's area is yellow?",
+   "answer_format": "a percentage, e.g. 23.4",
+   "truth": {
+    "kind": "yellow_pct",
+    "pct": 14.004001143183768,
+    "yellow_px": 1470,
+    "plant_px": 10497
+   },
+   "how_built": "whole leaves yellow; truth = visible yellow-leaf pixels / plant pixels",
+   "id": "q44"
+  },
+  {
+   "category": "color",
+   "image": "color_7.png",
+   "sha256": "38c56d9a137eff54d555f6ae11d3a6c50b84c6e13aca8e83f2137db52ac870f5",
+   "question": "This is a top-down photo of a potted plant. What is the mean hue of the plant's pixels, in degrees on the 0-360 colour wheel (HSV hue)?",
+   "answer_format": "a number of degrees, e.g. 104.5",
+   "truth": {
+    "kind": "hue",
+    "hue_deg": 122.00124184783861,
+    "arithmetic_mean_deg": 122.003292641568
+   },
+   "how_built": "leaves of varied green shades; truth = circular mean HSV hue of plant pixels",
+   "id": "q45"
+  },
+  {
+   "category": "color",
+   "image": "color_8.png",
+   "sha256": "de4656272ee0b4a782c33dad27a734f6c3c01d987e52d82162aea50d7004a884",
+   "question": "This is a top-down photo of a potted plant. Some of its leaves are yellow (chlorotic), the rest green. What percentage of the plant's area is yellow?",
+   "answer_format": "a percentage, e.g. 23.4",
+   "truth": {
+    "kind": "yellow_pct",
+    "pct": 17.19873454127121,
+    "yellow_px": 2990,
+    "plant_px": 17385
+   },
+   "how_built": "whole leaves yellow; truth = visible yellow-leaf pixels / plant pixels",
+   "id": "q46"
+  }
+ ]
+}

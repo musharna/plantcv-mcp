@@ -1,0 +1,4 @@
+runs/
+.alt-venv/
+# Rendered by build_questions.py; questions.json holds their sha256.
+images/
