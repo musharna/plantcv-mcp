@@ -467,7 +467,9 @@ def main() -> None:
     ap.add_argument("--only", default="", help="comma-separated question ids")
     ap.add_argument("--results", default=str(HERE / "results.jsonl"))
     ap.add_argument(
-        "--make-alt-venv", action="store_true", help="build .alt-venv, run nothing"
+        "--make-alt-venv",
+        action="store_true",
+        help="build the alt arm's venv at $AGENTQA_ALT_VENV, run nothing",
     )
     ap.add_argument(
         "--audit",

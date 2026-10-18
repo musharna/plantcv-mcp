@@ -8,7 +8,7 @@
 #                 no-model controls included), and per setup x kind of question
 #   stats.tsv     bootstrap 95% intervals over questions, and the paired
 #                 mcp-vs-alt test, on all questions and on the questions the
-#                 colour-cut control gets wrong
+#                 color-cut control gets wrong
 #   agent_qa.png                right / wrong / declined / invalid per setup
 #   agent_qa_accuracy_ci.png    share right with its 95% interval per setup
 #   agent_qa_cost_time.png      cost and seconds per answer, every run
@@ -40,7 +40,7 @@ b$shown <- b$verdict
 
 arm_labels <- c(
   baseline_constant = "No model: median answer of its kind",
-  baseline_threshold = "No model: one colour cut",
+  baseline_threshold = "No model: one color cut",
   bare = "Claude alone",
   alt = "Claude + Bash/PlantCV/OpenCV + web",
   mcp = "Claude + plantcv-mcp + Read"
@@ -55,14 +55,14 @@ cat_labels <- c(
   area_mm = "Plant area (mm², from a size marker)",
   tray = "Tray: plants present, or one plant's area",
   leaf_count = "Leaf count",
-  color = "Colour: mean hue, or yellow share"
+  color = "Color: mean hue, or yellow share"
 )
 stopifnot(all(r$category %in% names(cat_labels)))
 
 n_q <- length(unique(b$qid))
 n_rep <- max(r$rep)
 stopifnot(all(table(r$arm, r$qid) == n_rep)) # every setup ran every question n_rep times
-# Questions a one-colour cut does not answer: the subset where image analysis
+# Questions a one-color cut does not answer: the subset where image analysis
 # is needed. Fixed by the no-model control, not by any model's results.
 hard <- b$qid[b$arm == "baseline_threshold" & b$verdict != "right"]
 
@@ -225,10 +225,10 @@ p1 <- ggplot(counts, aes(x = share, y = arm_label, fill = shown)) +
 ggsave(file.path(outdir, "agent_qa.png"), p1, width = 11.5, height = 4.8, dpi = 200, bg = "white")
 
 # Figure 2: share right with its bootstrap interval, all questions and the
-# questions the colour cut gets wrong.
+# questions the color cut gets wrong.
 sub_labels <- c(
   all = sprintf("All %d questions", n_q),
-  colour_cut_wrong = sprintf("The %d questions a colour cut gets wrong", length(hard))
+  colour_cut_wrong = sprintf("The %d questions a color cut gets wrong", length(hard))
 )
 s2 <- stats
 s2$arm_label <- factor(arm_labels[s2$arm], levels = rev(arm_labels[all_arms]))
