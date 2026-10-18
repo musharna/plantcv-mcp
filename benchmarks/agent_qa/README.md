@@ -60,6 +60,9 @@ from 7-2 to 3-1 against the server.
 - `zoom_image`: 15 runs, 14 right. Another 23 runs called it by its bare name
   (`zoom_image`, not `mcp__plantcv__zoom_image`), which Claude Code refuses;
   4 of those retried under the full name. This count was not pre-registered.
+  Found after the confirmatory sweep: the name was copied from the server's
+  instructions, which named tools bare. Fixed in 374653a. The fix is untested
+  by any sweep, and its effect is unknown.
 - `measure` with traits: 29 runs, all right. `measure_regions` with traits:
   12 runs, 10 right (the 2 misses are q26).
 - `count_leaves`: 1 run, and seeds in none. **The seeded split was not
