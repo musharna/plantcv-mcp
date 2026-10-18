@@ -1,93 +1,82 @@
 # plantcv-mcp
 
-**Plant phenotyping over MCP — traits, plus the segmentation overlay they were measured from.**
+plantcv-mcp is an MCP server that lets AI agents run [PlantCV](https://plantcv.org) plant
+phenotyping. It returns trait numbers and the segmentation overlay they were measured from, and
+refuses to return numbers when the segmentation is degenerate.
 
-[![ci](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/musharna/plantcv-mcp/ci.yml?branch=master&label=CI)](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
-[![python](https://img.shields.io/pypi/pyversions/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
-[![license](https://img.shields.io/pypi/l/plantcv-mcp)](https://github.com/musharna/plantcv-mcp/blob/master/LICENSE)
-[![Glama](https://glama.ai/mcp/servers/musharna/plantcv-mcp/badges/score.svg)](https://glama.ai/mcp/servers/musharna/plantcv-mcp)
+[![Python](https://img.shields.io/pypi/pyversions/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
+[![License](https://img.shields.io/pypi/l/plantcv-mcp)](https://github.com/musharna/plantcv-mcp/blob/master/LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21713516.svg)](https://doi.org/10.5281/zenodo.21713516)
+[![Glama](https://glama.ai/mcp/servers/musharna/plantcv-mcp/badges/score.svg)](https://glama.ai/mcp/servers/musharna/plantcv-mcp)
 
 <!-- mcp-name: io.github.musharna/plantcv-mcp -->
 
-[PlantCV](https://plantcv.org) as an MCP **measurement instrument**: it returns plant trait
-numbers **and the picture they were computed from**, and refuses to return numbers when the
-segmentation is degenerate.
+<p align="center">
+  <img src="https://raw.githubusercontent.com/musharna/plantcv-mcp/master/docs/assets/overlay-correct.png" width="45%" alt="Correct segmentation: four views of a rendered plant, stems and leaves tinted red and outlined in cyan, the gray background untouched">
+  <img src="https://raw.githubusercontent.com/musharna/plantcv-mcp/master/docs/assets/overlay-inverted.png" width="45%" alt="Inverted segmentation: the whole gray background tinted red, the four plant views left out">
+</p>
 
-> Unofficial. Not affiliated with, endorsed by, or sponsored by the Donald
-> Danforth Plant Science Center or the PlantCV maintainers. See [NOTICE](https://github.com/musharna/plantcv-mcp/blob/master/NOTICE).
+**Left**, `channel="a", object_type="dark"`: the mask covers 3.1% of the frame, 9 components,
+`area=32427`. **Right**, `channel="s", object_type="dark"`: the mask covers 96.1%; it is the
+background, `area=1007829`.
 
-## Why you are handed the overlay
+## Why you get the overlay
 
-Both images below come from the same file and the same threshold method — the only difference
-is one parameter.
+Both images come from the same file and the same threshold method; only the channel differs.
+Without the picture, both runs return 17 traits with correct units and believable
+magnitudes. The one on the right is measuring the wall behind the plants. Red marks the
+measured pixels; a cyan line traces the mask's edge.
 
-| ✅ `channel="a", object_type="dark"`                                                                                   | ❌ `channel="s", object_type="dark"`                                                                                     |
-| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| ![correct segmentation](https://raw.githubusercontent.com/musharna/plantcv-mcp/master/docs/assets/overlay-correct.png) | ![inverted segmentation](https://raw.githubusercontent.com/musharna/plantcv-mcp/master/docs/assets/overlay-inverted.png) |
-| Mask covers **3.1%** of the frame, 9 components. `area=32427`                                                          | Mask covers **96.1%** — it is the **background**. `area=1007829`                                                         |
+So `segment()` returns the overlay and diagnostics but **no traits**, and `measure()` needs the
+`session_id` that `segment()` mints: no single image is measured before you are shown it. The
+exception is `measure_images()`, which applies one recipe to up to 200 images without overlays.
+Settle the recipe on one image's overlay first (the server does not check); every image still
+passes the `segment()` guards, and one that trips a blocking guard gets no traits.
 
-The failure on the right is what this server exists to prevent. Without the picture, both
-runs return seventeen traits with correct units and entirely believable magnitudes. The one
-on the right is measuring the wall behind the plants.
+Measured with PlantCV 4.11.3 on a synthetic render (first row:
+`tests/fixtures/multi_specimen.png`) and on photographs, each of these returns believable
+numbers with correct units:
 
-Red marks the pixels that were measured; a cyan line traces the mask's own boundary, drawn on
-the mask's edge pixels so it never touches anything unmasked (the tint alone was invisible on
-a photo of red beans).
-
-`segment()` returns the overlay and diagnostics but **no traits**. `measure()` requires the
-`session_id` that `segment()` mints, so a single-image measurement cannot be made without
-first being handed the image it came from. Batch mode is the exception: `measure_images()`
-applies one recipe to up to 200 images and returns no overlays. You are meant to settle that
-recipe on one image's overlay first, but the server does not check that you did. What it does
-check is that every image passes the same guards as `segment()`; an image that trips a
-blocking guard comes back with no traits.
-
-That is not a style preference. Measured with PlantCV 4.11.3 on a synthetic render (the
-first row: `tests/fixtures/multi_specimen.png`) and on photographs:
-
-| failure                           | what you get without the overlay                            |
+| Failure                           | What you get without the overlay                            |
 | --------------------------------- | ----------------------------------------------------------- |
 | four-view render, whole-image ROI | 17 plausible traits describing four merged plants           |
 | plant clipped by the frame        | size traits that are silently lower bounds                  |
 | empty mask                        | 17 traits of zeros, with PlantCV reporting `in_bounds=True` |
 
-All three produce entirely believable numbers with correct units.
-
 ## Does it help?
 
-We asked Claude Opus 5.5 46 measurement questions about rendered plant images, three
-times each, with this server and with Bash and its own Python (PlantCV and OpenCV
-installed). Averaged over questions, Claude's own code, mostly OpenCV, was right on
-95.7% of answers and the server on 86.2%; the two are not separated on accuracy (exact
-McNemar p = 0.18). Claude's own code was cheaper ($0.039 against $0.071 per answer,
-median) and faster (12.9 s against 17.7 s), and those intervals do not overlap. The
-images have crisp edges, so a single color cut with no model answers 28 of the 46.
+Not on these test images: the server did not make Claude measurably more accurate than writing
+its own code (mostly OpenCV), and its own code was cheaper.
 
-A pre-registered re-run on 2026-10-18 tested an unreleased commit (051aff0) that adds
-several-channel segmentation rules, `zoom_image` and trait selection. It was a tie:
-the server was right on 95.7% of answers and Claude's own code on 97.1% (questions
-right in every run, 42 against 44, p = 0.63). Claude's own code was still cheaper
-($0.038 against $0.066, median), but no longer clearly faster.
-Method, controls and caveats:
-[`benchmarks/agent_qa/`](https://github.com/musharna/plantcv-mcp/blob/master/benchmarks/agent_qa/README.md).
+<p align="center">
+  <img src="https://raw.githubusercontent.com/musharna/plantcv-mcp/master/benchmarks/agent_qa/rerun_2026-10-18/agent_qa.png" width="780" alt="Stacked bar chart of right and wrong answers in the 2026-10-18 re-run, 46 questions times 3 runs per setup. Claude + plantcv-mcp + Read: 132 right, 6 wrong. Claude + Bash/PlantCV/OpenCV + web: 134 right, 4 wrong. No-model controls, one answer per question: one color cut 28 right, 10 wrong, 8 declined; median answer of its kind 2 right, 44 wrong.">
+</p>
+
+In a pre-registered re-run on 2026-10-18, against an unreleased commit (051aff0) that adds
+several-channel segmentation rules and `zoom_image`, Claude Opus 5.5 was right on 97.1% of 46
+measurement questions about rendered plant images with its own code and 95.7% with the server
+(three runs each; 44 against 42 questions right in every run, exact McNemar p = 0.63, a tie).
+Its own code cost $0.038 against $0.066 per answer (medians; the intervals do not overlap). On
+release 1.16.1 the server was right on 86.2% against 95.7% (p = 0.18). The images have crisp
+edges, so a single color cut with no model answers 28 of the 46. Method, controls and
+limitations:
+[benchmarks/agent_qa](https://github.com/musharna/plantcv-mcp/blob/master/benchmarks/agent_qa/README.md).
 
 ## Install
 
-No install is needed if the host has [uv](https://docs.astral.sh/uv/): `uvx plantcv-mcp`
-fetches the current release into its own environment and runs it. Otherwise:
+With [uv](https://docs.astral.sh/uv/) nothing needs installing: `uvx plantcv-mcp` fetches and
+runs the current release. Otherwise:
 
 ```bash
 pip install plantcv-mcp
 ```
 
-`segment_leaves_sam()` is the one optional tool: `pip install "plantcv-mcp[sam]"` adds torch,
-torchvision and segment-anything. Without the extra every other tool works and that one
-refuses with that command.
-
-Requires Python 3.11+. Installing pulls PlantCV and its scientific stack, so the first
-install (or first `uvx` run) is not fast. From a checkout: `uv add /path/to/plantcv-mcp`.
+Requires Python 3.11+. PlantCV and its scientific stack make the first install (or first `uvx`
+run) slow. From a checkout: `uv add /path/to/plantcv-mcp`. The one optional tool,
+`segment_leaves_sam()`, needs `pip install "plantcv-mcp[sam]"` (torch, torchvision,
+segment-anything); without it, that tool refuses with that command and every other tool works.
 
 ## Configure your MCP client
 
@@ -101,157 +90,77 @@ Claude Desktop and other stdio hosts:
 { "mcpServers": { "plantcv": { "command": "uvx", "args": ["plantcv-mcp"] } } }
 ```
 
-With a pip install, use `"command": "plantcv-mcp"` (and drop `uvx` from the `claude mcp add`
-line); from a checkout, `"command": "uv", "args": ["run", "--directory",
-"/path/to/plantcv-mcp", "plantcv-mcp"]`. Verify with `list_methods()`.
+With a pip install the command is `plantcv-mcp` ([checkout config](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#client-configuration)).
+Verify with `list_methods()`.
 
 Flags: `--root DIR` (repeatable, or `PLANTCV_MCP_ROOTS`) confines every read, and every file
-the server keeps (see [Security](#security)), to your imagery: `plantcv-mcp --root /data/phenotyping`. `--no-isolate` (or
+the server keeps, to your imagery: `plantcv-mcp --root /data/phenotyping`. `--no-isolate` (or
 `PLANTCV_MCP_ISOLATE=0`) runs analyses in-process instead of in the crash-containing worker.
 
 ## Tools
 
-| tool                                                                    | returns                                                                                                            |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `suggest_segmentation(image_path, channel, method)`                     | contact sheets, and what each `object_type` would yield                                                            |
-| `segment(image_path, channel, method, ...)`                             | overlay + diagnostics + warnings — **no traits**; `rules` + `combine` threshold several channels (or value ranges) at once |
-| `refine(session_id, ops)`                                               | a NEW session with a cleaned-up mask, plus its overlay                                                             |
-| `measure(session_id, analyses, px_per_mm, ...)`                         | traits, or a raised error on a degenerate mask                                                                     |
-| `calibrate_scale_from_marker(image_path, x, y, w, h, marker_length_mm)` | `px_per_mm` from a marker of known real size                                                                       |
-| `correct_lens_distortion(image_path, checkerboard_dir, ...)`            | a fisheye/wide-angle image undistorted via checkerboard calibration, written next to the input or to `output_path` |
-| `measure_regions(session_id, nrows, ncols, ...)`                        | one row per plant in a tray (RGB traits, thermal temperatures or HSI index stats), plus the numbered overlay       |
-| `measure_morphology(session_id, prune_size, tangent_size, ...)`         | leaf/stem skeleton traits + the numbered-segment overlay                                                           |
-| `count_leaves(session_id, min_distance, px_per_mm, seeds)`              | leaf instances by watershed: an estimated count, per-instance area/centroid/bbox + the numbered overlay; `seeds` splits touching objects one region per seed |
-| `segment_leaves_sam(session_id, checkpoint_path, device, ...)`          | the same count from Segment Anything. Optional: needs the `sam` extra and a 375 MB checkpoint; CPU by default      |
-| `measure_images(image_paths, channel, method, ...)`                     | one recipe across many images (per plant with a grid); traits only where valid; time-budgeted                      |
-| `segment_hyperspectral(envi_path, index, threshold, ...)`               | an HSI session from a spectral-index threshold + pseudo-RGB overlay                                                |
-| `measure_spectral(session_id, indices, ...)`                            | index statistics (and, opt-in, per-band reflectance)                                                               |
-| `segment_thermal(path, min_c, max_c, ...)`                              | a thermal session from a °C band + grey-frame overlay                                                              |
-| `measure_thermal(session_id, ...)`                                      | max/min/mean/median °C under the mask                                                                              |
-| `zoom_image(image_path, x, y, w, h, scale)`                             | part of an image, enlarged, to look closely (not a measurement)                                                    |
-| `list_methods()`                                                        | channels, methods, object types, pinned PlantCV version                                                            |
+| Tool                                          | Returns                                                          |
+| --------------------------------------------- | ---------------------------------------------------------------- |
+| `suggest_segmentation`                        | contact sheets, and what each `object_type` would yield          |
+| `segment`                                     | overlay + diagnostics + warnings, **no traits**                  |
+| `refine`                                      | a new session with a cleaned-up mask, plus its overlay           |
+| `measure`                                     | traits, or a raised error on a degenerate mask                   |
+| `measure_images`                              | one recipe across many images; traits only where valid           |
+| `measure_regions`                             | one row per plant in a tray, plus the numbered overlay           |
+| `measure_morphology`                          | leaf/stem skeleton traits + the numbered-segment overlay         |
+| `count_leaves`                                | an estimated leaf count by watershed + the numbered overlay      |
+| `segment_leaves_sam`                          | the same count from Segment Anything (optional `sam` extra)      |
+| `calibrate_scale_from_marker`                 | `px_per_mm` from a marker of known real size                     |
+| `correct_lens_distortion`                     | a fisheye or wide-angle image undistorted from checkerboards     |
+| `segment_hyperspectral`, `measure_spectral`   | an HSI session from an index threshold; index statistics         |
+| `segment_thermal`, `measure_thermal`          | a thermal session from a °C band; °C statistics under the mask   |
+| `zoom_image`                                  | part of an image, enlarged to look closely (not a measurement)   |
+| `list_methods`                                | channels, methods, object types, pinned PlantCV version          |
 
 Typical loop: `suggest_segmentation` → `segment` → **look at the overlay** → `segment` again
-with a different channel, method or polarity if it is wrong (or `refine` if it is nearly
-right) → `measure`. Pass `color_correct=true` to `segment` when a ColorChecker is in the
-frame: colours are corrected to the reference before segmenting and measuring, and the card
-itself is excluded from the mask (`exclude_color_card=true` does only the exclusion).
+with another channel, method or polarity if it is wrong (or `refine` if it is nearly right) →
+`measure`. With a ColorChecker in the frame, `color_correct=true` corrects colors before
+segmenting and excludes the card from the mask. Parameters, an example response and the
+measured facts behind each tool:
+[docs/GUIDE.md](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md).
 
-The call that produced the left-hand image above:
+## What it refuses
 
-```json
-{
-  "image_path": "multi_specimen.png",
-  "channel": "a",
-  "method": "otsu",
-  "object_type": "dark"
-}
-```
+Each guard was added after a specific failure and names the next action. Blocking guards
+withhold numbers; advisories travel with them.
 
-Its response — verbatim, apart from a shortened `session_id` and an elided message — with
-the overlay arriving beside it as an image:
+- **Inverted mask** (`implausible_coverage`): the right-hand image above, 17 believable
+  traits describing the wall.
+- **Nothing selected, or `fill_size` deleted the specimen** (`empty_mask`, `fill_erased_mask`):
+  PlantCV returns 17 zeros with `in_bounds=True`.
+- **Background texture** (`noisy_segmentation`): specks of chamber wall measured as one plant.
+- **Several plants in one mask** (`multi_specimen`): use `measure_regions()`.
+- **Wrong scale, wrong session kind, a file changed after segmentation**: refused, naming the
+  right tool.
+- **A lens calibration the boards do not determine, or no color card when one was asked for**:
+  refused.
 
-```json
-{
-  "session_id": "9d2384c8-…",
-  "channel": "a",
-  "method": "otsu",
-  "object_type": "dark",
-  "fill_size": 200,
-  "color_correct": false,
-  "mask_fraction": 0.031,
-  "component_count": 9,
-  "major_object_count": 4,
-  "largest_area": 8628,
-  "overlay_scale": 1.0,
-  "overlay_png_bytes": 748233,
-  "warnings": [
-    {
-      "code": "multi_specimen",
-      "message": "4 comparably-sized objects detected (areas: [8628, 7981, 7106, 6748]). …"
-    }
-  ]
-}
-```
-
-## What it refuses, and why
-
-Each guard below was added after a specific failure, and each names the next action.
-Several of those failures were first seen on photographs that are not distributed with this
-repository (the sorghum photo below is one); the tests reproduce them on synthetic images and
-the committed fixtures. Blocking guards withhold numbers; advisories travel with them.
-
-- **Inverted mask** (`implausible_coverage`) — the right-hand image above: 96% of the frame
-  selected, seventeen believable traits, all describing the wall.
-- **Nothing selected, or `fill_size` deleted the specimen** (`empty_mask`,
-  `fill_erased_mask`) — PlantCV returns seventeen zeros with `in_bounds=True`.
-- **Background texture** (`noisy_segmentation`) — a sorghum photo (not distributed; the
-  tests use a synthetic stand-in) measured as one 650,000-px plant made of 118 chamber-wall
-  specks.
-- **Several plants in one mask** (`multi_specimen`) — the number describes the group; use
-  `measure_regions()`, which measures each plant and numbers the overlay.
-- **Wrong scale, wrong kind, changed file** — a marker measured 4.35× wrong by PlantCV's own
-  ROI method; a thermal session handed to an RGB measurer; an image edited after
-  segmentation. Each is refused naming the right tool.
-- **A lens calibration the boards do not determine** — a set whose focal length the fit
-  leaves undetermined is refused naming the number, and one that determines it only loosely
-  is accepted with the looseness said. That judgement is made per view, because the fit's
-  uncertainty falls as frames are added whether or not the geometry improves: re-saving the
-  same photographs, or shooting more of the same angle, buys nothing. A frame that fits far
-  worse than the rest, or that moves the answer far more than the others allow, is dropped
-  by name and the camera refitted.
-- **No colour card when one was asked for** — `color_correct=true` raises rather than
-  returning colour traits that look corrected and are not.
-
-Every warning code, every tool's parameters, and the measured facts behind each guard:
-**[docs/GUIDE.md](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md)** — [segmenting](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#segmenting) · [traits and units](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#what-it-measures) ·
-[real-world units](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#real-world-units) · [lens correction](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#correcting-lens-distortion) ·
-[polarity](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#getting-the-polarity-right) · [refining](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#refining-a-mask) ·
-[colour correction](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#colour-correction) ·
-[trays](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#measuring-a-tray) · [morphology](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#morphology-leaves-stem-branch-points) ·
-[leaf instances](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#leaf-instances-a-watershed-count) ·
-[leaf instances with Segment Anything](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#leaf-instances-with-segment-anything-optional) ·
-[batches](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#measuring-many-images) · [hyperspectral and thermal](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#hyperspectral-and-thermal) ·
-[warning reference](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#warnings-and-refusals).
+Why each guard exists, and every warning code:
+[docs/GUIDE.md#warnings-and-refusals](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#warnings-and-refusals).
 
 ## Security
 
-This server reads image files the host user can read and returns them to the model as
-images; with no `--root` there is no allow-list. It writes:
+With no `--root`, the server reads any image file the host user can read and returns it to the
+model. It writes only the lens-corrected image, the Segment Anything checkpoint when asked to
+download it, and short-lived temporary copies of hyperspectral and thermal inputs. Run it as a
+non-root user with `--root` set. Analyses run in a worker subprocess, so a native crash is a
+tool error, not a dead server. Details:
+[docs/GUIDE.md#security-and-trust-boundary](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#security-and-trust-boundary).
 
-- the corrected image from `correct_lens_distortion`, next to its input (replacing an
-  earlier run's output of the same name) or at an `output_path` that must not exist yet —
-  under the same roots, never through a symlink;
-- the Segment Anything checkpoint (375 MB), only when `segment_leaves_sam` is called with
-  `download_checkpoint=true`, into `$XDG_CACHE_HOME/plantcv-mcp` (default
-  `~/.cache/plantcv-mcp`; `PLANTCV_MCP_SAM_CACHE` moves it), which must lie under a root
-  when roots are set;
-- short-lived private copies of hyperspectral (ENVI) and FLIR thermal inputs in the system
-  temporary directory, deleted once the file is decoded.
+## Attribution and license
 
-Run it as a user whose read
-access you are comfortable exposing, set `--root`, and do not run it as root. PlantCV/OpenCV
-analyses run in a worker subprocess, so a native crash is a tool error, not a dead server.
-Details:
-[security](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#security-and-trust-boundary) · [read roots](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#restricting-what-the-server-may-read) ·
-[crash containment](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#crash-containment-the-analysis-worker) · [limitations](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#limitations).
+MIT licensed. It depends on [PlantCV](https://github.com/danforthcenter/plantcv), which is
+licensed under the **Mozilla Public License 2.0**. No PlantCV source is vendored or
+redistributed here; it is an ordinary runtime dependency, so the MIT license applies to this
+project's own files. Unofficial: not affiliated with, endorsed by, or sponsored by the Donald
+Danforth Plant Science Center or the PlantCV maintainers. See
+[NOTICE](https://github.com/musharna/plantcv-mcp/blob/master/NOTICE).
 
-## Attribution and licensing
-
-This project is MIT licensed. It depends on
-[PlantCV](https://github.com/danforthcenter/plantcv), which is licensed under the
-**Mozilla Public License 2.0**. No PlantCV source is vendored or redistributed
-here — it is an ordinary runtime dependency — so the MIT license applies to this
-project's own files. See [NOTICE](https://github.com/musharna/plantcv-mcp/blob/master/NOTICE) for the full statement.
-
-## More
-
-- [docs/GUIDE.md](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md) — the full guide
-- [CHANGELOG.md](https://github.com/musharna/plantcv-mcp/blob/master/CHANGELOG.md) — what changed, and why
-- [docs/MUTATION-CHECKS.md](https://github.com/musharna/plantcv-mcp/blob/master/docs/MUTATION-CHECKS.md) — every guard disabled on purpose, and
-  the test that went red for it
-- Citing it: [CITATION.cff](https://github.com/musharna/plantcv-mcp/blob/master/CITATION.cff)
-  (archived at [doi:10.5281/zenodo.21713516](https://doi.org/10.5281/zenodo.21713516))
-
-Images on this page are rendered from `tests/fixtures/multi_specimen.png`, an original render
-by the author, and regenerate from committed code.
+Cite it with [CITATION.cff](https://github.com/musharna/plantcv-mcp/blob/master/CITATION.cff)
+(archived at [doi:10.5281/zenodo.21713516](https://doi.org/10.5281/zenodo.21713516)). Changes:
+[CHANGELOG.md](https://github.com/musharna/plantcv-mcp/blob/master/CHANGELOG.md).

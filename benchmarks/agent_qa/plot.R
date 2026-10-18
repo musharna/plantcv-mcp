@@ -227,9 +227,14 @@ p1 <- ggplot(counts, aes(x = share, y = arm_label, fill = shown)) +
     title = "Plant image measurements: right, wrong, declined or invalid",
     subtitle = setup_note
   ) +
-  theme_pcvmcp(base_size = 13) +
-  theme(panel.grid.major.y = element_blank(), plot.margin = margin(8, 24, 8, 8))
-ggsave(file.path(outdir, "agent_qa.png"), p1, width = 11.5, height = 4.8, dpi = 200, bg = "white")
+  theme_pcvmcp(base_size = 15) +
+  theme(
+    panel.grid.major.y = element_blank(), plot.margin = margin(8, 24, 8, 8),
+    plot.subtitle = element_text(size = rel(0.8))
+  )
+# The READMEs show this figure 780 px wide; at 9.6 in the 12 pt axis and
+# legend text land at about 13 px there (it was about 10 px at 11.5 in, base 13).
+ggsave(file.path(outdir, "agent_qa.png"), p1, width = 9.6, height = 4.6, dpi = 200, bg = "white")
 
 # Figure 2: share right with its bootstrap interval, all questions and the
 # questions the color cut gets wrong.
