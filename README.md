@@ -47,8 +47,8 @@ numbers with correct units:
 
 ## Does it help?
 
-Not on these test images: Claude writing its own code, mostly OpenCV, was as accurate as with
-the server, and cheaper and faster.
+Not on these test images: the server did not make Claude measurably more accurate than writing
+its own code (mostly OpenCV), and its own code was cheaper and faster.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/musharna/plantcv-mcp/master/benchmarks/agent_qa/agent_qa.png" width="90%" alt="Stacked bar chart of right, wrong, declined and invalid answers, 46 questions times 3 runs per setup. Claude + plantcv-mcp + Read: 119 right, 19 wrong. Claude + Bash/PlantCV/OpenCV + web: 131 right, 6 wrong, 1 invalid. Claude alone: 135 declined, 3 invalid. No-model controls, one answer per question: one color cut 28 right, 10 wrong, 8 declined; median answer of its kind 2 right, 44 wrong.">
@@ -56,7 +56,7 @@ the server, and cheaper and faster.
 
 On 46 measurement questions about rendered plant images, three runs each, Claude Opus 5.5 was
 right on 95.7% of answers with its own code and 86.2% with the server (averaged over questions;
-not a significant difference, exact McNemar p = 0.18). Its own code cost $0.039 against $0.071
+not separated, exact McNemar p = 0.18). Its own code cost $0.039 against $0.071
 per answer and took 12.9 s against 17.7 s (medians; the intervals do not overlap). The images
 have crisp edges, so a single color cut with no model answers 28 of the 46. Method, controls
 and limitations:
