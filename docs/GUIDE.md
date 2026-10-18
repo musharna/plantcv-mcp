@@ -2,6 +2,8 @@
 
 Everything the [README](https://github.com/musharna/plantcv-mcp#readme) does not say: each tool's parameters and guards, the measured facts behind them, and the full warning-code reference. Sections are in workflow order.
 
+- [Client configuration](#client-configuration)
+- [Tools](#tools)
 - [Segmenting](#segmenting)
 - [What it measures](#what-it-measures)
   - [Real-world units](#real-world-units)
@@ -15,10 +17,39 @@ Everything the [README](https://github.com/musharna/plantcv-mcp#readme) does not
 - [Measuring many images](#measuring-many-images)
 - [Hyperspectral and thermal](#hyperspectral-and-thermal)
 - [Warnings and refusals](#warnings-and-refusals)
+  - [Why each guard exists](#why-each-guard-exists)
 - [Crash containment: the analysis worker](#crash-containment-the-analysis-worker)
 - [Restricting what the server may read](#restricting-what-the-server-may-read)
 - [Security and trust boundary](#security-and-trust-boundary)
 - [Limitations](#limitations)
+
+## Client configuration
+
+The README's config runs the release through `uvx`. With a pip install, use
+`"command": "plantcv-mcp"` (and drop `uvx` from the `claude mcp add` line); from a checkout,
+`"command": "uv", "args": ["run", "--directory", "/path/to/plantcv-mcp", "plantcv-mcp"]`.
+Verify with `list_methods()`.
+
+## Tools
+
+| tool                                                                    | returns                                                                                                            |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `suggest_segmentation(image_path, channel, method)`                     | contact sheets, and what each `object_type` would yield                                                            |
+| `segment(image_path, channel, method, ...)`                             | overlay + diagnostics + warnings — **no traits**                                                                   |
+| `refine(session_id, ops)`                                               | a NEW session with a cleaned-up mask, plus its overlay                                                             |
+| `measure(session_id, analyses, px_per_mm, ...)`                         | traits, or a raised error on a degenerate mask                                                                     |
+| `calibrate_scale_from_marker(image_path, x, y, w, h, marker_length_mm)` | `px_per_mm` from a marker of known real size                                                                       |
+| `correct_lens_distortion(image_path, checkerboard_dir, ...)`            | a fisheye/wide-angle image undistorted via checkerboard calibration, written next to the input or to `output_path` |
+| `measure_regions(session_id, nrows, ncols, ...)`                        | one row per plant in a tray (RGB traits, thermal temperatures or HSI index stats), plus the numbered overlay       |
+| `measure_morphology(session_id, prune_size, tangent_size, ...)`         | leaf/stem skeleton traits + the numbered-segment overlay                                                           |
+| `count_leaves(session_id, min_distance, px_per_mm)`                     | leaf instances by watershed: an estimated count, per-instance area/centroid/bbox + the numbered overlay            |
+| `segment_leaves_sam(session_id, checkpoint_path, device, ...)`          | the same count from Segment Anything. Optional: needs the `sam` extra and a 375 MB checkpoint; CPU by default      |
+| `measure_images(image_paths, channel, method, ...)`                     | one recipe across many images (per plant with a grid); traits only where valid; time-budgeted                      |
+| `segment_hyperspectral(envi_path, index, threshold, ...)`               | an HSI session from a spectral-index threshold + pseudo-RGB overlay                                                |
+| `measure_spectral(session_id, indices, ...)`                            | index statistics (and, opt-in, per-band reflectance)                                                               |
+| `segment_thermal(path, min_c, max_c, ...)`                              | a thermal session from a °C band + grey-frame overlay                                                              |
+| `measure_thermal(session_id, ...)`                                      | max/min/mean/median °C under the mask                                                                              |
+| `list_methods()`                                                        | channels, methods, object types, pinned PlantCV version                                                            |
 
 ## Segmenting
 
@@ -33,8 +64,19 @@ Everything the [README](https://github.com/musharna/plantcv-mcp#readme) does not
 | `offset`        | `2`      | constant subtracted from the local mean, `mean`/`gaussian` only                           |
 | `color_correct` | `false`  | correct to a ColorChecker in the frame first. See [colour correction](#colour-correction) |
 
-The `segment()` response for the README's example image — verbatim, apart from a
-shortened `session_id` and an elided warning message:
+The call that produced the README's left-hand (correct) image:
+
+```json
+{
+  "image_path": "multi_specimen.png",
+  "channel": "a",
+  "method": "otsu",
+  "object_type": "dark"
+}
+```
+
+Its `segment()` response — verbatim, apart from a shortened `session_id` and an elided
+warning message:
 
 ```json
 {
@@ -43,6 +85,7 @@ shortened `session_id` and an elided warning message:
   "method": "otsu",
   "object_type": "dark",
   "fill_size": 200,
+  "color_correct": false,
   "mask_fraction": 0.031,
   "component_count": 9,
   "major_object_count": 4,
@@ -58,7 +101,10 @@ shortened `session_id` and an elided warning message:
 }
 ```
 
-The overlay arrives alongside this as a second content block, as an image. Grayscale
+The overlay arrives alongside this as a second content block, as an image. Red marks the
+pixels that were measured; a cyan line traces the mask's own boundary, drawn on the mask's
+edge pixels so it never touches anything unmasked (the tint alone was invisible on a photo of
+red beans). Grayscale
 files (a dataset's mask PNGs, say) are refused by name at the load boundary rather than
 failing three different ways downstream; a thermal frame goes to `segment_thermal()`.
 
@@ -718,6 +764,37 @@ attached to the numbers it qualifies. A **refusal** is an error with a named cla
 same kind of guidance (`WrongSessionKindError: … Use measure_thermal() for it`), raised
 instead of a result.
 
+### Why each guard exists
+
+Each guard below was added after a specific failure, and each names the next action.
+Several of those failures were first seen on photographs that are not distributed with this
+repository (the sorghum photo in the list is one); the tests reproduce them on synthetic images and
+the committed fixtures. Blocking guards withhold numbers; advisories travel with them.
+
+- **Inverted mask** (`implausible_coverage`) — the README's right-hand image: 96% of the frame
+  selected, seventeen believable traits, all describing the wall.
+- **Nothing selected, or `fill_size` deleted the specimen** (`empty_mask`,
+  `fill_erased_mask`) — PlantCV returns seventeen zeros with `in_bounds=True`.
+- **Background texture** (`noisy_segmentation`) — a sorghum photo (not distributed; the
+  tests use a synthetic stand-in) measured as one 650,000-px plant made of 118 chamber-wall
+  specks.
+- **Several plants in one mask** (`multi_specimen`) — the number describes the group; use
+  `measure_regions()`, which measures each plant and numbers the overlay.
+- **Wrong scale, wrong kind, changed file** — a marker measured 4.35× wrong by PlantCV's own
+  ROI method; a thermal session handed to an RGB measurer; an image edited after
+  segmentation. Each is refused naming the right tool.
+- **A lens calibration the boards do not determine** — a set whose focal length the fit
+  leaves undetermined is refused naming the number, and one that determines it only loosely
+  is accepted with the looseness said. That judgement is made per view, because the fit's
+  uncertainty falls as frames are added whether or not the geometry improves: re-saving the
+  same photographs, or shooting more of the same angle, buys nothing. A frame that fits far
+  worse than the rest, or that moves the answer far more than the others allow, is dropped
+  by name and the camera refitted.
+- **No colour card when one was asked for** — `color_correct=true` raises rather than
+  returning colour traits that look corrected and are not.
+
+### Warning codes
+
 | code                                                                | raised by                                              | meaning                                                                                                                                                                                  | batch    |
 | ------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
 | `implausible_coverage`                                              | any segmenter, `measure`                               | mask covers > 50% of the frame — probably the background                                                                                                                                 | blocking |
@@ -775,6 +852,9 @@ meaningless fit, or boards that leave the focal length undetermined (`LensCalibr
 with the per-frame accounting), an image whose
 resolution differs from its lens calibration (`CalibrationResolutionMismatchError`), and
 unknown channel / method / index / analysis names, each listing the valid ones.
+
+Every guard disabled on purpose, and the test that went red for it:
+[MUTATION-CHECKS.md](MUTATION-CHECKS.md).
 
 ## Crash containment: the analysis worker
 
@@ -848,8 +928,9 @@ Practical consequences:
 
 The read-root allow-list is the whole of the sandboxing. A base install has no network
 access, executes nothing but PlantCV, and writes only `correct_lens_distortion`'s
-corrected image — next to its input, or at an explicit `output_path` that must not
-already exist and must not be a symlink. (It also writes short-lived private copies of
+corrected image — next to its input (replacing an earlier run's output of the same name),
+or at an explicit `output_path` that must not already exist and must not be a symlink, under
+the read roots when they are set. (It also writes short-lived private copies of
 hyperspectral ENVI and FLIR thermal inputs to the system temporary directory, deleted once
 the file is decoded.) The optional `segment_leaves_sam()` adds one
 exception to each: with `download_checkpoint=true` it fetches one fixed https URL and
