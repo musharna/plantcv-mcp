@@ -55,6 +55,18 @@ first row: `tests/fixtures/multi_specimen.png`) and on photographs:
 
 All three produce entirely believable numbers with correct units.
 
+## Does it help?
+
+We asked Claude Opus 5.5 46 measurement questions about rendered plant images, three
+times each, with this server and with Bash and its own Python (PlantCV and OpenCV
+installed). Averaged over questions, Claude's own code, mostly OpenCV, was right on
+95.7% of answers and the server on 86.2%; the two are not separated on accuracy (exact
+McNemar p = 0.18). Claude's own code was cheaper ($0.039 against $0.071 per answer,
+median) and faster (12.9 s against 17.7 s), and those intervals do not overlap. The
+images have crisp edges, so a single color cut with no model answers 28 of the 46.
+Method, controls and caveats:
+[`benchmarks/agent_qa/`](https://github.com/musharna/plantcv-mcp/blob/master/benchmarks/agent_qa/README.md).
+
 ## Install
 
 No install is needed if the host has [uv](https://docs.astral.sh/uv/): `uvx plantcv-mcp`
