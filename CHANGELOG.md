@@ -29,6 +29,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `--exclude-newer`: run the benchmark against an unreleased commit, recorded
   in every row and in `versions.json`; `diagnose.py` breaks each arm's tokens
   down by fixed context, tool output, turns and cache use.
+- `benchmarks/agent_qa/rerun_2026-10-18/`: a pre-registered re-run of the
+  Bash and server setups against commit 051aff0. Tie under the pre-registered
+  rule: 42 against 44 questions right in every run, p = 0.63 (10-17: 37 against
+  41, server answers right 119 → 132 of 138).
 - `benchmarks/agent_qa/`: an agent benchmark. 46 questions about rendered
   plant scenes (textured soil, algae, moss, straw, pots, overlapping and
   yellowed leaves, a tilted size marker) with exactly known answers (area, height/width, area in mm²

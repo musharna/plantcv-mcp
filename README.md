@@ -64,6 +64,12 @@ installed). Averaged over questions, Claude's own code, mostly OpenCV, was right
 McNemar p = 0.18). Claude's own code was cheaper ($0.039 against $0.071 per answer,
 median) and faster (12.9 s against 17.7 s), and those intervals do not overlap. The
 images have crisp edges, so a single color cut with no model answers 28 of the 46.
+
+A pre-registered re-run on 2026-10-18 tested an unreleased commit (051aff0) that adds
+several-channel segmentation rules, `zoom_image` and trait selection. It was a tie:
+the server was right on 95.7% of answers and Claude's own code on 97.1% (questions
+right in every run, 42 against 44, p = 0.63). Claude's own code was still cheaper
+($0.038 against $0.066, median), but no longer clearly faster.
 Method, controls and caveats:
 [`benchmarks/agent_qa/`](https://github.com/musharna/plantcv-mcp/blob/master/benchmarks/agent_qa/README.md).
 
