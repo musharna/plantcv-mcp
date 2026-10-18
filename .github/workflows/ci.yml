@@ -167,6 +167,7 @@ jobs:
                   "segment_leaves_sam",
                   "segment_thermal",
                   "suggest_segmentation",
+                  "zoom_image",
               ]
               assert info.name == "plantcv-mcp", info
               assert info.version == expected_version, (info.version, expected_version)
