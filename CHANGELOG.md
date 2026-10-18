@@ -53,6 +53,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   and `ldconfig -p` from threadpoolctl, through PlantCV's scikit-learn
   KMeans).
 
+### Fixed
+
+- The server instructions now say, before naming any tool, that a client lists
+  each tool under its own prefix (`mcp__plantcv__zoom_image` in Claude Code).
+  In the 2026-10-18 benchmark, 23 runs copied the bare name `zoom_image` from
+  the instructions, and each call was refused as an unknown tool.
+
 ## [1.16.1] — 2026-09-26
 
 ### Changed

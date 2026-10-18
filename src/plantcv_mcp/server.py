@@ -114,8 +114,18 @@ _store = SessionStore()
 # Shown to clients at connection time. The product is a discipline, not just a set
 # of functions, and the discipline has to be stated somewhere the model will read
 # it before it starts calling things.
+#
+# The tool names in this text are bare, but a client lists them under its own
+# prefix. In the 2026-10-18 benchmark, 23 runs copied `zoom_image` straight from
+# this text, before any listed tool was called and with string arguments, and
+# Claude Code refused each call as unknown. Hence the naming note, which comes
+# before the first tool name.
 INSTRUCTIONS = """\
 PlantCV as a measurement instrument for plant images.
+
+Tool names here are this server's own. Your client lists each one under its
+own prefix (in Claude Code, zoom_image is mcp__plantcv__zoom_image): call the
+name in your tool list, not the bare name written here.
 
 Work in this order: suggest_segmentation -> segment -> LOOK AT THE OVERLAY -> measure.
 

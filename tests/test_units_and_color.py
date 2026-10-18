@@ -8,6 +8,7 @@ silently wrong, which is the failure mode this whole server exists to catch.
 
 import asyncio
 import json
+import re
 
 import pytest
 
@@ -151,6 +152,32 @@ def test_server_publishes_instructions_that_state_the_discipline():
     text = server.instructions.lower()
     assert "overlay" in text, "instructions must tell the model to look at the overlay"
     assert "implausible_coverage" in text, "instructions must name the warnings"
+
+
+def test_instructions_say_tool_names_are_client_prefixed_before_naming_one():
+    """In the 2026-10-18 benchmark, 23 runs called `zoom_image` by the bare
+    name written in these instructions. Claude Code lists it as
+    mcp__plantcv__zoom_image, so each call was refused as unknown. The note
+    must come before the first tool name and show the prefixed form of a real
+    tool, so a model reading from the top meets it before any name it could
+    copy."""
+    server = build_server()
+    text = server.instructions
+    names = sorted((t.name for t in asyncio.run(server.list_tools())), key=len)
+    bare = re.compile(r"(?<![\w])(" + "|".join(names[::-1]) + r")(?![\w])")
+    first_bare = bare.search(text)
+    # Positive control: the instructions do name tools bare. Without one, the
+    # ordering below would hold trivially.
+    assert first_bare is not None, "instructions name no tool; the check is vacuous"
+
+    prefixed = re.search(r"mcp__plantcv__(\w+)", text)
+    assert prefixed is not None, "instructions never show the client-prefixed form"
+    assert prefixed.group(1) in names, f"{prefixed.group(0)} is not a real tool"
+    note = text.rfind("\n\n", 0, prefixed.start())
+    assert note < first_bare.start(), (
+        "the naming note must come before the first bare tool name "
+        f"({first_bare.group(0)!r} at {first_bare.start()})"
+    )
 
 
 def test_every_tool_publishes_annotations_and_a_title():
