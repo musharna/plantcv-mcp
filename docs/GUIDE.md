@@ -2,6 +2,7 @@
 
 Everything the [README](https://github.com/musharna/plantcv-mcp#readme) does not say: each tool's parameters and guards, the measured facts behind them, and the full warning-code reference. Sections are in workflow order.
 
+- [Client configuration](#client-configuration)
 - [Tools](#tools)
 - [Segmenting](#segmenting)
 - [What it measures](#what-it-measures)
@@ -21,6 +22,13 @@ Everything the [README](https://github.com/musharna/plantcv-mcp#readme) does not
 - [Restricting what the server may read](#restricting-what-the-server-may-read)
 - [Security and trust boundary](#security-and-trust-boundary)
 - [Limitations](#limitations)
+
+## Client configuration
+
+The README's config runs the release through `uvx`. With a pip install, use
+`"command": "plantcv-mcp"` (and drop `uvx` from the `claude mcp add` line); from a checkout,
+`"command": "uv", "args": ["run", "--directory", "/path/to/plantcv-mcp", "plantcv-mcp"]`.
+Verify with `list_methods()`.
 
 ## Tools
 
@@ -844,6 +852,9 @@ meaningless fit, or boards that leave the focal length undetermined (`LensCalibr
 with the per-frame accounting), an image whose
 resolution differs from its lens calibration (`CalibrationResolutionMismatchError`), and
 unknown channel / method / index / analysis names, each listing the valid ones.
+
+Every guard disabled on purpose, and the test that went red for it:
+[MUTATION-CHECKS.md](MUTATION-CHECKS.md).
 
 ## Crash containment: the analysis worker
 

@@ -60,7 +60,7 @@ not separated, exact McNemar p = 0.18). Its own code cost $0.039 against $0.071
 per answer and took 12.9 s against 17.7 s (medians; the intervals do not overlap). The images
 have crisp edges, so a single color cut with no model answers 28 of the 46. Method, controls
 and limitations:
-[`benchmarks/agent_qa/`](https://github.com/musharna/plantcv-mcp/blob/master/benchmarks/agent_qa/README.md).
+[benchmarks/agent_qa](https://github.com/musharna/plantcv-mcp/blob/master/benchmarks/agent_qa/README.md).
 
 ## Install
 
@@ -88,9 +88,8 @@ Claude Desktop and other stdio hosts:
 { "mcpServers": { "plantcv": { "command": "uvx", "args": ["plantcv-mcp"] } } }
 ```
 
-With a pip install, use `"command": "plantcv-mcp"` (and drop `uvx` from the `claude mcp add`
-line); from a checkout, `"command": "uv", "args": ["run", "--directory",
-"/path/to/plantcv-mcp", "plantcv-mcp"]`. Verify with `list_methods()`.
+With a pip install the command is `plantcv-mcp` ([checkout config](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#client-configuration)).
+Verify with `list_methods()`.
 
 Flags: `--root DIR` (repeatable, or `PLANTCV_MCP_ROOTS`) confines every read, and every file
 the server keeps, to your imagery: `plantcv-mcp --root /data/phenotyping`. `--no-isolate` (or
@@ -161,9 +160,4 @@ Danforth Plant Science Center or the PlantCV maintainers. See
 
 Cite it with [CITATION.cff](https://github.com/musharna/plantcv-mcp/blob/master/CITATION.cff)
 (archived at [doi:10.5281/zenodo.21713516](https://doi.org/10.5281/zenodo.21713516)). Changes:
-[CHANGELOG.md](https://github.com/musharna/plantcv-mcp/blob/master/CHANGELOG.md). Every guard
-disabled on purpose, and the test that went red for it:
-[docs/MUTATION-CHECKS.md](https://github.com/musharna/plantcv-mcp/blob/master/docs/MUTATION-CHECKS.md).
-
-The overlay images are rendered from `tests/fixtures/multi_specimen.png`, an original render by
-the author, and regenerate from committed code.
+[CHANGELOG.md](https://github.com/musharna/plantcv-mcp/blob/master/CHANGELOG.md).
