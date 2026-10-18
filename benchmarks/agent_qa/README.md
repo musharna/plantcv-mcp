@@ -1,8 +1,133 @@
 # Agent benchmark: measuring plant images with and without the server
 
-Does Claude measure plant images better with plantcv-mcp than without it?
-46 questions about rendered plant images, each with an exactly known answer,
-were asked 3 times to Claude Opus 5.5 in Claude Code under three setups:
+We asked Claude Opus 5.5 46 measurement questions about rendered plant images,
+each with an exactly known answer, three times each: with no tools, with Bash
+and its own Python (PlantCV and OpenCV installed), and with plantcv-mcp plus
+Read. Averaged over questions, Claude's own code was right on 95.7% of answers
+and the server on 86.2%, and the two are not separated on accuracy (exact McNemar p = 0.18 over
+questions: 7 questions were right in every run with Bash only, 2 with the
+server only). What separates them is cost and time, both in Bash's favor: the
+median answer cost $0.0385 [0.0345, 0.0432] with Bash against $0.0713
+[0.0601, 0.0902] with the server, and took 12.9 s [11.9, 14.7] against 17.7 s [15.8,
+18.9]. The main limitation is that the images are rendered with crisp edges,
+so a single color cut with no model already answers 28 of the 46 questions.
+
+![Right, wrong, declined or invalid per setup](agent_qa.png)
+
+## Results
+
+Each setup gave 138 answers (46 questions × 3 runs); each no-model control
+answered once per question. Shares are the mean over questions of the share
+of valid runs right, with 95% bootstrap intervals over questions (4,000
+resamples).
+
+| Setup | Right | Wrong | Declined | Invalid | Questions right in all runs | Share right, all 46 | Share right, the 18 a color cut misses | Cost / answer, median | Seconds / answer, median | Tool calls, median |
+|---|---|---|---|---|---|---|---|---|---|---|
+| No model: median answer of its kind | 2 | 44 | 0 | 0 | 2 of 46 (1 run) | 4.3% [0, 10.9] | 0% | - | - | - |
+| No model: one color cut | 28 | 10 | 8 | 0 | 28 of 46 (1 run) | 60.9% [45.7, 73.9] | 0% | - | - | - |
+| Claude alone | 0 | 0 | 135 | 3 | 0 of 46 | 0% | 0% | $0.0102 [0.0095, 0.0108] | 4.8 [4.5, 5.1] | 0 |
+| Claude + Bash/PlantCV/OpenCV + web | 131 | 6 | 0 | 1 | 41 of 46 | 95.7% [90.6, 99.3] | 88.9% [75.9, 98.2] | $0.0385 [0.0345, 0.0432] | 12.9 [11.9, 14.7] | 3 [3, 3] |
+| Claude + plantcv-mcp + Read | 119 | 19 | 0 | 0 | 37 of 46 | 86.2% [76.8, 94.9] | 72.2% [53.7, 88.9] | $0.0713 [0.0601, 0.0902] | 17.7 [15.8, 18.9] | 3 [3, 4] |
+
+[`summary.tsv`](summary.tsv), [`stats.tsv`](stats.tsv) and
+[`stats_paired.tsv`](stats_paired.tsv), written by `plot.R` from
+[`results.jsonl`](results.jsonl) and [`baselines.jsonl`](baselines.jsonl), hold
+every number here. Per answer, Claude with Bash was right on 131 of 137 valid
+answers and the server on 119 of 138. Invalid runs are left out of every
+share, interval and test, which slightly favors the Bash setup: its one
+invalid run (q25, rep 2) timed out, and the paired test counts q25 as right in
+its two valid runs, so it has Bash right in every run on 42 questions, against
+41 in the table. The paired test is exact McNemar on the discordant questions:
+7 against 2 (p = 0.18) on all 46, and 5 against 2 (p = 0.45) on the 18 a color
+cut misses. The server's mean cost and time ($0.091, 23.3 s) sit above its
+medians because of a few long runs.
+
+![Share right with 95% interval](agent_qa_accuracy_ci.png)
+
+**Where each setup missed.**
+
+- Server, areas with yellowed leaves (6 wrong, q05, q06, q08): `segment`
+  thresholds one channel and `refine` cannot join two masks, so the model
+  added partial masks by hand. Claude with Bash got all 12 right.
+- Server, leaf counts (7 wrong, q31 × 3, q33, q36 × 3): `count_leaves`'
+  watershed cannot split leaves that overlap without gaps, so the model
+  counted by eye. It said 13 for the 14-leaf rosette (q36) in all 3 runs;
+  Claude with Bash said 14.
+- Server, q26 tray seedling: 1,571 px for 1,599 in all 3 runs, cause not
+  investigated. q21 mm² area: 591.9 for 607.9 once, just outside the 2.5%
+  tolerance. q46 yellow share: 52.2 for 17.2 in 2 of 3 runs.
+- Claude with Bash, q31 leaf count: 11 for 12 in all 3 runs (the server also
+  missed it every time). Yellow shares: one run each of q42, q44 and q46; the
+  server got all runs of q42 and q44.
+
+![Cost and time per answer, every run](agent_qa_cost_time.png)
+
+![Right, wrong or declined by kind of question](agent_qa_by_category.png)
+
+## Controls
+
+- **Oracle.** Before any run, every key answer written as a reply must score
+  right and `UNKNOWN` must score declined. In CI,
+  `tests/test_agent_qa_score.py` also checks that a shifted answer scores
+  wrong for every question.
+- **Baselines.** Two answers that need no model were scored the same way:
+  the median answer of each kind of question, taken from the key, and one
+  color cut (a pixel is plant if its green beats red and blue by 10, and the
+  largest blob is the plant; `baselines.py`). The color cut answers every
+  height/width and mm² question and 6 of the 8 tray questions. Only 18
+  questions need more: 4 areas with yellowed leaves, 2 tray counts, 8 leaf
+  counts and 4 yellow shares.
+- **Validity.** One rule applies to every setup (`run.py` `assess()`). A run
+  is invalid if it did not exit 0 (a timeout included); if its start-up event
+  lacks the setup's tools (for the server setup, Read plus the connected
+  server's tools; for Claude alone, none); if a tool setup made no tool call,
+  since the image cannot be measured unopened; or if any tool input or output
+  contains a leak marker. Invalid runs are recorded and shown, never retried or
+  overwritten. There were 4: three Claude alone runs exited 1 after trying to
+  call a tool they do not have ("tool call could not be parsed"), and one
+  Claude with Bash run hit the 900 s timeout.
+- **Leak scan.** The leak markers are the key's file names, the benchmark
+  directory (local, on github.com or on raw.githubusercontent.com), the
+  development checkout's directory name and the transcript directory. All 414
+  transcripts were re-scanned after the sweep (`run.py --audit`), tool inputs
+  and outputs both, with 0 hits. No tool input named the key or the server's
+  code (`touched_key`: 0).
+- **Tests.** `tests/test_agent_qa_score.py` rejects six wrong scorers (among
+  them a 5% area tolerance, hue compared without wrapping and the first ANSWER
+  line read instead of the last), and `tests/test_agent_qa_harness.py` rejects
+  four wrong validity rules (among them tool outputs not scanned for leaks and
+  the exit code ignored). Each was seen to fail under its planted mutation.
+
+## Limitations
+
+- **The images are rendered, not photographed.** They have textured soil,
+  algae, pebbles, moss, straw, shadows, pot rims, overlapping leaves of
+  different shades and a printed marker card. But the plant's edge is crisp,
+  and a color rule (LAB a* or b*) always separates the plant from what
+  touches it, which keeps every answer exact. Real photos have soft edges,
+  glare and leaves that blend into the soil. The server's real-photo figures
+  are in [`docs/EVAL.md`](../../docs/EVAL.md).
+- **Most questions cannot show a win.** On the 28 questions a color cut
+  answers, a setup can only show that it did not lose. On the other 18 the
+  setups split the same way as overall, and the difference is not separated
+  (p = 0.45).
+- **Claude with Bash used OpenCV, not PlantCV.** Its Bash calls imported
+  `cv2` in 123 of 138 runs and PlantCV in none, although the prompt named
+  PlantCV. So the result compares the server with Claude's own OpenCV and
+  numpy code. We counted this from the raw transcripts, which are not in the
+  repository (`results.jsonl` stores only tool names).
+- **Both model setups can see the image.** Some answers, such as a leaf count
+  or a count of plants, can come from looking rather than from code, in
+  either setup.
+- **The server ran without the `[sam]` extra** (torch). Its
+  `segment_leaves_sam` tool fails with `SamNotInstalledError`; the model
+  called it twice, both in one run.
+- **One model, one date, one server version, 46 questions.** A difference of a
+  few questions is within the noise.
+
+## Method
+
+**Setups.** Claude Opus 5.5 in Claude Code, 3 runs per question per setup:
 
 - **Claude alone**: no tools. It cannot open the image, so the right reply is
   "unknown". This is the control for guessing.
@@ -10,226 +135,40 @@ were asked 3 times to Claude Opus 5.5 in Claude Code under three setups:
   server: Bash, Read (which shows Claude the image), WebSearch and WebFetch.
   The prompt says that the python3 on PATH has PlantCV 4.11.3 and OpenCV 4.11
   installed; plantcv-mcp is not installed. Claude writes its own code.
-- **Claude + plantcv-mcp + Read**: this server (1.16.1 from PyPI, via `uvx`)
-  plus Read, so it can look at the image just as the other setup can.
+- **Claude + plantcv-mcp + Read**: this server plus Read, so it can look at
+  the image just as the other setup can.
 
-Two answers that need no model were scored the same way, as negative
-controls:
-
-- the median answer of each kind of question, taken from the key;
-- one colour cut: a pixel is plant if its green beats red and blue by 10, and
-  the largest blob is the plant (`baselines.py`).
-
-Run on 2026-10-16/17 with Claude Code 2.1.302.
-
-**Result: the server did not beat Claude's own code, on accuracy or on cost.**
-Claude with Bash was right on 95.7% of answers and Claude with the server on
-86.2%, and their 95% intervals overlap. Question by question, 7 questions were
-right in every run with Bash only and 2 with the server only. That paired
-difference is not significant (exact McNemar p = 0.18), so the two are not
-separated on accuracy. Cost and time do separate them, in Bash's favour. The
-median answer cost $0.039 with Bash against $0.071 with the server, and took
-12.9 s against 17.7 s, and these intervals do not overlap. A single colour cut
-with no model answers 28 of the 46 questions. On the 18 questions it gets
-wrong, the setups split the same way: 88.9% right with Bash against 72.2% with
-the server (p = 0.45).
-
-![Right, wrong, declined or invalid per setup](agent_qa.png)
-
-| Setup | Right | Wrong | Declined | Invalid | Questions right in all 3 runs | Cost / answer, median (mean) | Seconds / answer, median (mean) | Slowest |
-|---|---|---|---|---|---|---|---|---|
-| No model: median answer of its kind | 2 | 44 | 0 | 0 | 2 of 46 (1 run) | 0 | 0 | |
-| No model: one colour cut | 28 | 10 | 8 | 0 | 28 of 46 (1 run) | 0 | 0 | |
-| Claude alone | 0 | 0 | 135 | 3 | 0 of 46 | $0.010 ($0.011) | 4.8 (5.2) | 12 s |
-| Claude + Bash/PlantCV/OpenCV + web | 131 | 6 | 0 | 1 | 41 of 46 | $0.039 ($0.039) | 12.9 (13.1) | 29 s |
-| Claude + plantcv-mcp + Read | 119 | 19 | 0 | 0 | 37 of 46 | $0.071 ($0.091) | 17.7 (23.3) | 449 s |
-
-Each setup gave 138 answers, and each control gave 46. The three runs of a
-question are not independent, so the questions column is the fairer count.
-All numbers come from [`summary.tsv`](summary.tsv), [`stats.tsv`](stats.tsv)
-and [`stats_paired.tsv`](stats_paired.tsv), which `plot.R` writes from
-[`results.jsonl`](results.jsonl) and [`baselines.jsonl`](baselines.jsonl).
-
-![Share right with 95% interval](agent_qa_accuracy_ci.png)
-
-| Over questions (95% bootstrap interval, 4,000 resamples of questions) | Bash/PlantCV/OpenCV | plantcv-mcp + Read |
-|---|---|---|
-| Share right, all 46 questions | 95.7% (90.6-99.3) | 86.2% (76.8-94.9) |
-| Share right, the 18 a colour cut gets wrong | 88.9% (75.9-98.2) | 72.2% (53.7-88.9) |
-| Median cost per answer | $0.0385 (0.0345-0.0432) | $0.0713 (0.0601-0.0902) |
-| Median seconds per answer | 12.9 (11.9-14.7) | 17.7 (15.8-18.9) |
-| Median tool calls per answer | 3 (3-3) | 3 (3-4) |
-| Questions right in every run, only this setup (paired) | 7 | 2 |
-
-The paired test uses exact McNemar, a sign test on those discordant
-questions: p = 0.18 on all 46 questions and p = 0.45 on the 18.
-
-## What it shows
-
-- **Claude alone never guessed.** It declined all 135 of its valid answers.
-- **A colour cut is a strong baseline on rendered images.** It answers every
-  height/width and every mm² question, and 6 of the 8 tray questions.
-  Questions like these can only show that a setup did not lose; they cannot
-  show that it won. Only the other 18 questions need more than a colour cut:
-  the 4 areas with yellowed leaves, 2 tray counts, the 8 leaf counts and the
-  4 yellow shares.
-- **Where the server lost:**
-  - **Areas with yellowed leaves (6 wrong answers on q05, q06, q08).** `segment`
-    thresholds one channel, and `refine` has no operation that joins two
-    masks. A plant that is part green and part yellow therefore has no
-    one-mask path, so the model added up partial masks by hand. Claude with
-    Bash was right on all 12 answers to these questions.
-  - **Leaf counts (7 wrong).** `count_leaves`' watershed cannot split leaves
-    that overlap without gaps, so the model counted by eye from the
-    overlays. It answered 13 for the 14-leaf rosette in all 3 runs; Claude
-    with Bash got 14 in all 3.
-  - **One tray seedling, q26.** The server gave 1,571 px for 1,599 in all 3
-    runs. The cause was not investigated.
-- **Where it won:** two yellow shares (q42, q44). The server was right in
-  all 3 runs of each, against 2 of 3 with Bash. On the third yellow share
-  (q46) it answered 52.2 for 17.2 in 2 of 3 runs.
-- **Claude with Bash used OpenCV, not PlantCV.** Its Bash calls imported
-  `cv2` in 123 of 138 runs and PlantCV in none. That held even after the
-  prompt named PlantCV, so the result compares the server with Claude's own
-  OpenCV and numpy code.
-
-![Cost and time per answer, every run](agent_qa_cost_time.png)
-
-![Right, wrong or declined by kind of question](agent_qa_by_category.png)
-
-## Validity and leakage
-
-One rule decides validity for every setup (`run.py` `assess()`). A run is
-invalid if:
-
-- it did not exit 0, a timeout included;
-- the start-up event lacks the setup's tools: for the server setup, Read plus
-  the connected server's tools; for Claude alone, no tools at all;
-- Claude with Bash or with the server made no tool call, since the image
-  cannot be measured unopened;
-- any tool input or tool output contains a leak marker.
-
-The leak markers are the key's file names, the benchmark directory (local, on
-github.com or raw.githubusercontent.com), the worktree and the artifacts
-directory. Invalid runs are recorded and shown, never retried or overwritten,
-and are left out of every share, interval and test.
-
-- **Invalid runs: 4.** Three were Claude alone, which exited 1 after trying to
-  call a tool that it does not have ("tool call could not be parsed"). One was
-  Claude with Bash, which hit the 900 s timeout on q25 rep 2.
-- **Leak scan:** all 414 transcripts were re-scanned after the sweep
-  (`run.py --audit`), tool inputs and outputs both, with **0 hits**. The
-  stopped first sweep had 1 hit: a Python traceback in a Bash run printed
-  the path of the alt setup's venv, which then sat inside the benchmark
-  directory. The venv and all transcripts now live outside the worktree.
-- **`touched_key`** (a tool input naming the key or the server's code): 0.
-- **Oracle:** before any run, every key answer written as a reply must score
-  right and `UNKNOWN` must score declined. In CI,
-  `tests/test_agent_qa_score.py` also checks that a shifted answer scores
-  wrong for every question.
-
-## Versions
+**Isolation.** Each run is a separate `claude -p` with `--setting-sources ""`,
+an empty working directory holding only the image (as `image.png`, so the
+file name says nothing about the answer), and `--strict-mcp-config`, so no
+other MCP servers load. Every setup gets the same short system prompt and
+question prompt, plus the one sentence naming PlantCV and OpenCV for the Bash
+setup. Claude Code connects MCP servers in the background by default, so
+`run.py` sets `MCP_CONNECTION_NONBLOCKING=false`. Transcripts and the Bash
+setup's Python live outside the repository, so a Bash call that searches the
+disk does not find them beside the key.
 
 | | Claude + Bash/PlantCV/OpenCV | Claude + plantcv-mcp |
 |---|---|---|
-| Python | 3.12 venv outside the worktree (`--make-alt-venv`) | `uvx --python 3.12 --with opencv-python==4.11.0.86 plantcv-mcp==1.16.1` |
+| Python | 3.12 venv outside the repository (`--make-alt-venv`) | `uvx --python 3.12 --with opencv-python==4.11.0.86 plantcv-mcp==1.16.1` |
 | PlantCV | 4.11.3 | 4.11.3 |
 | opencv-python | 4.11.0.86 (pinned) | 4.11.0.86 (pinned) |
 | NumPy / scikit-image | 2.4.6 / 0.26.0 | 2.4.6 / 0.26.0 |
 
-`run.py` checks these versions in both environments before a sweep, and stops
+`run.py` checks these versions in both environments before a sweep. It stops
 if a pin or the server version differs, or if NumPy or scikit-image differ
-between the two. A deliberately wrong pin was seen to stop it. The model is
-`claude-opus-5-5` and Claude Code is 2.1.302 in every row.
+between the two. The model is `claude-opus-5-5` and Claude Code is 2.1.302 in
+every row.
 
-The server is the default install, without the `[sam]` extra (torch). Its
-`segment_leaves_sam` tool fails with `SamNotInstalledError`, and the model
-called it 2 times in 138 runs. The answer key does not depend on any of these
-libraries. It comes from `build_questions.py`, which never imports PlantCV or
-plantcv-mcp. Every image is checked against the sha256 in `questions.json`
-before it is used.
-
-## What it does not show
-
-- **The images are rendered, not photographed.** They have textured soil,
-  algae, pebbles, moss, straw, shadows, pot rims, overlapping leaves of
-  different shades and a printed marker card. But the plant's edge is crisp,
-  and a colour rule (LAB a* or b*) always separates the plant from what
-  touches it, which keeps every answer exact. Real photos have soft edges,
-  glare and leaves that blend into the soil. The server's real-photo figures
-  are in [`docs/EVAL.md`](../../docs/EVAL.md).
-- **Both model setups can see the image.** Some answers (a leaf count, a
-  count of plants) can come from looking rather than from code, in either
-  setup.
-- **One model, one date, one server version, 46 questions.** With 46
-  questions, a difference of a few questions is within the noise (see the
-  intervals).
-
-## History
-
-Every change to the set, the harness or the scorer, and what the earlier
-versions showed. Transcripts are kept outside the repository, in
-`~/plantcv-mcp-artifacts/agent_qa/runs/`.
-
-The hardening rule: a pilot question that every model setup answers right is
-too easy and is hardened, not kept. Each pilot asked 2 questions per setup
-once, except pilot 4, which asked 1. Claude alone declined every pilot
-question.
-
-| Version | Pilot questions | Claude + Bash | Claude + server (no Read) | Change that followed |
-|---|---|---|---|---|
-| 1. Flat colours on flat soil | q17 mm², q34 4-leaf count | right, right | right, right | Textured soil, pot and moss. Also a harness fix: one server run had started before the server connected, saw no tools and declined. `run.py` now waits for the connection and checks it. |
-| 2. Textured soil, pot | q01 area, q38 10-leaf count | right (15,796 vs 15,795, 2 calls), right | right, right | Algae, dull leaves, near-uniform 5-14-leaf rosettes, tilted marker, drooping side-view leaves |
-| 3. Hardened round 2 | q01 area, q36 14-leaf count | right, wrong (15) | right, wrong (13) | Yellowed leaves and straw in 4 area questions |
-| 4. Final set | q05 yellowed area | wrong (20,039) | wrong (20,630) | A scorer fix: a `contour_area` slip had been named for 20,039, though no contour was computed. A slip is now named only when its window cannot overlap the right answer's. No verdict changed. |
-
-**Sweep 1, stopped at 188 rows.** This sweep ran the final set with the
-server setup lacking Read, and with Claude with Bash not told that PlantCV was
-installed. It covered rep 1 of all 46 questions and rep 2 of the first 17.
-Results:
-
-- Claude with Bash: 59 right, 4 wrong of 63.
-- Claude with the server: 55 right, 7 wrong of 62.
-- Claude alone: 61 declined, 2 exit 1.
-
-An independent audit found the server setup handicapped, so the coordinator
-stopped the sweep. Claude with Bash could see the image and the server setup
-could not, and Claude with Bash had never been told about PlantCV (it used
-it in 0 of 63 runs). The rows are kept in
-[`results_sweep1_stopped.jsonl`](results_sweep1_stopped.jsonl). For sweep 2:
-
-- the server setup got Read;
-- the Bash setup's prompt names PlantCV and OpenCV;
-- the validity rule above replaced a retry that applied to the server only;
-- OpenCV was pinned and versions are asserted;
-- the leak scan was added;
-- the alt venv and the transcripts moved outside the worktree;
-- the Bash and server rows were deleted and run again.
-
-The 63 rows from Claude alone were kept, because its prompt and setup did not
-change. They were re-assessed under the new rule, and 2 of them are invalid.
-
-## Questions
-
-[`questions.json`](questions.json) holds the 46 questions, their answers and
-each image's sha256. `build_questions.py` renders the images into `images/`
-(about 21 MB, gitignored) from seeded generators (seed 20261016), and a
-rebuild is byte-identical. Shapes, sizes, colours, textures and positions are
-random draws, not picks. Each run sees only its image, copied into an empty
-directory as `image.png`, so the file name says nothing about the answer.
-
-- the soil is mottled and grainy, with green-brown algae, pebbles, olive moss
-  clumps (which are not the plant) and the plant's shadow;
-- top views have a dark pot rim, trays are black with square pots (some
-  empty, some with moss or algae), and side views have a wall and a
-  terracotta pot, with leaves that can hang down in front of the pot;
-- leaves run from bright to dull olive, close to the algae, and each has its
-  own shade, a lighter midrib and a darker edge; leaves overlap;
-- in half the area questions 1-2 old leaves have yellowed and straw lies on
-  the soil;
-- rosettes have 5-14 leaves of nearly one shade, overlapping well beyond the
-  centre;
-- the mm² marker is a black square on a white card turned 10-35°.
+**Questions.** [`questions.json`](questions.json) holds the 46 questions, their
+answers and each image's sha256, which is checked before every use.
+`build_questions.py` renders the images into `images/` (about 21 MB,
+gitignored) from seeded generators (seed 20261016), and a rebuild is
+byte-identical. Shapes, sizes, colors, textures and positions are random
+draws, not picks: mottled soil with algae, pebbles and moss, overlapping
+leaves from bright to dull olive, yellowed leaves and straw in half the area
+questions, trays of square pots, side views with a terracotta pot, and an mm²
+marker card turned 10-35°.
 
 | Kind | Count | What is asked | Answer key |
 |---|---|---|---|
@@ -242,80 +181,80 @@ directory as `image.png`, so the file name says nothing about the answer.
 
 `build_questions.py` never imports plantcv-mcp or PlantCV, so a bug in the
 server cannot also be in the key. Every answer is the generator's own mask,
-counted with numpy. Texture is painted after the mask is fixed. For every
+counted with numpy, and texture is painted after the mask is fixed. For every
 plant, the builder asserts that a LAB rule separates the plant from
-everything within 4 px of it: a* below the lowest a* there, or b* above the
-highest b* there.
+everything within 4 px of it.
 
-## Scoring
+**Scoring.** Each reply ends with `ANSWER: <value>` or `ANSWER: UNKNOWN`, and
+`score.py` decides the verdict from that line alone: right within the
+tolerance, wrong outside it, declined for `UNKNOWN`, and no answer if the line
+is absent. Tolerances:
 
-Each reply ends with `ANSWER: <value>` or `ANSWER: UNKNOWN`. `score.py`
-decides the verdict from that line alone:
+- pixel areas, 1%. Segmenting these images is exact. `cv2.contourArea` traces
+  through pixel centers and comes out 2-8% smaller, a different quantity that
+  scores wrong;
+- height and width, 1 pixel, so both max − min and max − min + 1 count;
+- mm² areas, 2.5%. A 1-pixel misreading of the marker's side costs 1% or less
+  on the 100-120 px markers and 2.8% (once squared) on the smallest, 72 px;
+  2.5% accepts the usual misreading and refuses a wrong scale. cm² is
+  converted;
+- counts, exact; hue, 3 degrees around the circle (OpenCV stores hue in
+  2-degree steps); yellow share, 1 percentage point, with a bare value of at
+  most 1 read as a fraction (every true share is 10-60%).
 
-- **right**: the value is within the tolerance below.
-- **wrong**: it is not.
-- **declined**: `UNKNOWN`.
-- **no answer**: there is no `ANSWER:` line.
+A wrong answer equal to a named other quantity, such as `contour_area` or
+`opencv_half_degrees`, gets a `slip` label, named only when its tolerance
+window cannot overlap the right answer's.
 
-Tolerances, by kind:
+## History
 
-- **Pixel areas: 1%.** Segmenting these images is exact, so the only
-  legitimate spread is rounding. Measuring with `cv2.contourArea`, which
-  traces through pixel centres, comes out smaller by about half the perimeter
-  (2-8% here). That is a different quantity, and it is scored wrong.
-- **Height and width: 1 pixel**, so that both max − min and max − min + 1
-  count.
-- **Areas in mm²: 2.5%.** The square's side in pixels can be read 1 pixel
-  off either way. On the smallest square in the set (72 px) that is 1.4%,
-  which is 2.8% once squared; on the 100-120 px squares it is 1% or less.
-  2.5% accepts the usual ±1 px reading and refuses a wrong scale. An answer
-  in cm² is converted.
-- **Counts: exact.**
-- **Hue: 3 degrees**, measured around the circle. OpenCV stores 8-bit hue in
-  2-degree steps.
-- **Yellow share: 1 percentage point.** A bare value of at most 1 is read as
-  a fraction. Every true share is between 10% and 60%, so a fraction cannot
-  be confused with a real percentage.
+Each pilot asked 1-2 questions per setup once, with the server setup lacking
+Read. A pilot question every tool setup got right was too easy, so the set was
+hardened. Claude alone declined every pilot question.
 
-A wrong answer that equals a specific other quantity gets a `slip`. The slip
-is checked against that quantity's number, never guessed from the wording:
-`contour_area`, `pixels` or `linear_scale` (mm² answers), `other_axis`,
-`opencv_half_degrees`, `green_share`. A slip is named only when its tolerance
-window and the right answer's window do not overlap.
+1. **Flat colors on flat soil.** Both tool setups were right on both
+   questions, so we added textured soil, a pot and moss. The harness now waits
+   for the server to connect, after one server run started without its tools.
+2. **Textured soil, pot.** Both were right again (Bash 15,796 against
+   15,795), so we added algae, dull leaves, 5-14-leaf rosettes, a tilted
+   marker and drooping side-view leaves.
+3. **Hardened round 2.** Both missed the 14-leaf count (15 and 13), so we
+   added yellowed leaves and straw to 4 area questions.
+4. **Final set.** Both missed q05. A scorer fix followed: a slip is named only
+   when its window cannot overlap the right answer's. No verdict changed.
+5. **Sweep 1, stopped at 188 rows** (rep 1 of all 46 questions, rep 2 of the
+   first 17). The server setup lacked Read, and the
+   Bash setup had not been told PlantCV was installed (it used it in 0 of 63
+   runs). Bash got 59 of 63 right, the server 55 of 62, and Claude alone
+   declined 61 and exited 1 twice. We stopped it when a review found the
+   server setup handicapped; the rows are in
+   [`results_sweep1_stopped.jsonl`](results_sweep1_stopped.jsonl).
+6. **Sweep 2 (this one).** The server setup got Read, the Bash prompt names
+   PlantCV and OpenCV, one validity rule replaced a server-only retry, OpenCV
+   is pinned and versions are asserted, and the leak scan was added. The Bash
+   setup's Python and the transcripts moved outside the repository, because in
+   sweep 1 a traceback printed the venv's path inside the benchmark directory
+   (the one leak hit). The Bash and server rows were run again. Claude alone's
+   63 rows were kept, since its prompt and setup did not change; under the new
+   rule 2 of them are invalid.
 
-Tests, all seen to fail (`mutate-run`):
-
-- `tests/test_agent_qa_score.py`, against six wrong scorers: a 5% area
-  tolerance, hue compared without wrapping, `UNKNOWN` scored wrong, the first
-  ANSWER line read instead of the last, cm² not converted, and a contour slip
-  named without the overlap check.
-- `tests/test_agent_qa_harness.py`, against four wrong validity rules: server
-  status not checked, tool outputs not scanned for leaks, the no-tool-call
-  rule skipped for the server setup, and the exit code ignored.
+Transcripts from the pilots and both sweeps are kept by the maintainer, not
+published.
 
 ## Reproduce
 
 ```bash
 uv sync --python 3.12
-uv run python benchmarks/agent_qa/build_questions.py     # renders images/ (gitignored); questions.json is byte-identical
-uv run python benchmarks/agent_qa/baselines.py           # the two no-model controls -> baselines.jsonl
-uv run python benchmarks/agent_qa/run.py --make-alt-venv  # the alt setup's Python, outside the worktree
+uv run python benchmarks/agent_qa/build_questions.py      # renders images/ (gitignored); questions.json is byte-identical
+uv run python benchmarks/agent_qa/baselines.py            # the two no-model controls -> baselines.jsonl
+uv run python benchmarks/agent_qa/run.py --make-alt-venv  # the Bash setup's Python, at $AGENTQA_ALT_VENV
 uv run python benchmarks/agent_qa/run.py --reps 3 --workers 1   # 414 claude -p runs; resumable
 uv run python benchmarks/agent_qa/run.py --audit          # re-assess validity and re-scan every transcript for leaks
 uv run python benchmarks/agent_qa/run.py --rescore        # re-score stored replies after a key or scorer fix
 Rscript benchmarks/agent_qa/plot.R                        # summary.tsv, stats*.tsv + figures
 ```
 
-Each run is an isolated `claude -p`:
-
-- `--setting-sources ""` and an empty working directory holding only the
-  image;
-- `--strict-mcp-config`, so no other MCP servers;
-- the same short system prompt and question prompt in every setup, plus the
-  one sentence naming PlantCV/OpenCV for the Bash setup.
-
-Claude Code connects MCP servers in the background by default, so `run.py`
-sets `MCP_CONNECTION_NONBLOCKING=false`. Transcripts go to
-`$AGENTQA_ARTIFACTS/runs/` (default `~/plantcv-mcp-artifacts/agent_qa/`) and the
-alt venv to `$AGENTQA_ALT_VENV`. Both stay outside the repository, so a Bash
-call that searches the disk does not find them beside the key.
+Transcripts go to `$AGENTQA_ARTIFACTS/runs/` (default
+`~/plantcv-mcp-artifacts/agent_qa/`) and the Bash setup's Python to
+`$AGENTQA_ALT_VENV` (default `~/.local/share/agentqa-plantcv-alt-venv`), both
+outside the repository.
