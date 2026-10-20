@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.17.1] — 2026-10-20
+
 ### Fixed
 
 - Install on Python 3.14: PlantCV 4.11.3 needs SciPy below 1.16, which has no
