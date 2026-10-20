@@ -23,7 +23,7 @@ from .hyperspectral import (
     prepare_cube,
     segment_hyperspectral,
 )
-from .leaves import LeafInstancesResult, count_leaves
+from .leaves import LeafInstancesResult, count_leaves, split_by_seeds
 from .measurement import measure_traits
 from .morphology import MorphologyResult, measure_morphology
 from .refine import DroppedObject, apply_refinements_traced
@@ -123,6 +123,15 @@ def leaves(
     px_per_mm: float | None,
 ) -> LeafInstancesResult:
     return count_leaves(img, mask, min_distance=min_distance, px_per_mm=px_per_mm)
+
+
+def leaves_seeded(
+    img: np.ndarray,
+    mask: np.ndarray,
+    seeds: list,
+    px_per_mm: float | None,
+) -> LeafInstancesResult:
+    return split_by_seeds(img, mask, seeds, px_per_mm=px_per_mm)
 
 
 def leaves_sam(
@@ -251,6 +260,7 @@ REGISTRY: dict[str, Any] = {
     "morphology": morphology,
     "leaves": leaves,
     "leaves_sam": leaves_sam,
+    "leaves_seeded": leaves_seeded,
     "batch": batch,
     "refine": refine,
 }

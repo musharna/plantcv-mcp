@@ -99,3 +99,40 @@ def test_a_leak_marker_in_a_tool_input_or_output_makes_the_run_invalid() -> None
     assert not assess("mcp", _transcript(**by_output), 0)["valid"]
     clean = dict(MCP_OK, results=["area 15795 px, image /tmp/agentqa-x/work/image.png"])
     assert assess("mcp", _transcript(**clean), 0)["leaks"] == []
+
+
+def test_server_spec_is_a_pinned_commit_and_reaches_the_uvx_command() -> None:
+    """--server-spec runs an unreleased commit: only a full SHA on this repo's
+    git URL is accepted (a branch name or short SHA can move under a sweep),
+    and the accepted spec, with --exclude-newer, is what uvx starts."""
+    import pytest
+    import run
+
+    sha = "0123456789abcdef0123456789abcdef01234567"
+    try:
+        for bad in (
+            f"{run.SPEC_PREFIX}master",
+            f"{run.SPEC_PREFIX}{sha[:12]}",
+            f"git+https://github.com/someone/plantcv-mcp@{sha}",
+        ):
+            with pytest.raises(SystemExit, match="full 40-hex sha"):
+                run.set_server_spec(bad, None)
+        run.set_server_spec(f"{run.SPEC_PREFIX}{sha}", "2026-10-17")
+        argv = run.server_uvx()
+        assert argv[:2] == ["--exclude-newer", "2026-10-17"]
+        assert argv[-3:] == ["--from", f"{run.SPEC_PREFIX}{sha}", "plantcv-mcp"]
+        assert run.SERVER not in argv
+        run.set_server_spec(None, None)
+        assert run.server_uvx() == run.SERVER_UVX  # the 10-17 command, unchanged
+    finally:
+        run.set_server_spec(None, None)
+
+
+def test_tool_argument_names_are_recorded_without_their_values() -> None:
+    """The mechanism readout counts runs that used a new parameter, so the
+    argument names must be in the row; the values (image paths) must not."""
+    call = ("mcp__plantcv__segment", {"image_path": "/x/image.png", "rules": []})
+    row = assess("mcp", _transcript(**dict(MCP_OK, calls=[call])), 0)
+    assert row["valid"]
+    assert row["tool_arg_names"] == [["image_path", "rules"]]
+    assert "/x/image.png" not in json.dumps(row["tool_arg_names"])

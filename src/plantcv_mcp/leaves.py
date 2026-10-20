@@ -302,3 +302,168 @@ def count_leaves(
         overlay=overlay,
         labels=labels,
     )
+
+
+# --- seeded split: one marker per object, placed by the caller -----------------
+#
+# The distance-transform watershed above finds its own markers, one per
+# distance peak, so leaves that overlap with no notch between them share a
+# peak and stay merged (agent benchmark 2026-10-17: the model gave up on
+# count_leaves and counted by eye). A seeded watershed takes the markers from
+# the caller instead, one [x, y] per object, and floods the same landscape
+# PlantCV's watershed uses (the negated distance transform) with skimage's
+# compact watershed, so a mask is split between the seeds, preferring the
+# narrowest neck. The count is then the number of seeds by construction; what
+# the split adds is a region per seed, its area, and an overlay that shows
+# whether each region is one object.
+#
+# Why compact, and why not the image's colour gradient (both measured on a
+# 5-leaf rendered rosette, 2026-10-18): a plain watershed floods from each
+# marker's OWN landscape value, so a seed placed on a slope or on a leaf vein
+# starts after every other basin has filled and keeps 1-5 px (regions
+# [1, 1, 7227, 2895, 5782] from the gradient, [3, 5, 55, 105, 15738] from the
+# distance). Compactness charges each flood for its distance from its seed,
+# which removes the trap: at 1.0 the five regions were 2,389-3,844 px. The
+# gradient trapped seeds at every compactness up to 10, because a vein is a
+# ridge as high as a leaf's edge.
+
+MAX_SEEDS = 500
+SEED_COMPACTNESS = 1.0
+# A region under this share of the median region is named: two seeds on one
+# object split it into a full region and a sliver.
+SMALL_REGION_FRACTION = 0.15
+
+
+class SeedSpecError(ValueError):
+    """Seeds that are malformed, off the frame or off the mask."""
+
+
+def validate_seeds(seeds: Any, mask: np.ndarray) -> list[tuple[int, int]]:
+    """[[x, y], ...] in full-frame pixels, each on the mask, none repeated."""
+    if isinstance(seeds, (str, bytes)) or not isinstance(seeds, (list, tuple)):
+        raise SeedSpecError(f"seeds must be a list of [x, y] pairs, got {seeds!r}.")
+    if not seeds:
+        raise SeedSpecError("seeds is empty; give one [x, y] per object.")
+    if len(seeds) > MAX_SEEDS:
+        raise SeedSpecError(f"at most {MAX_SEEDS} seeds, got {len(seeds)}.")
+    h, w = mask.shape[:2]
+    out: list[tuple[int, int]] = []
+    for i, s in enumerate(seeds):
+        if (
+            not isinstance(s, (list, tuple))
+            or len(s) != 2
+            or any(isinstance(v, bool) or not isinstance(v, int) for v in s)
+        ):
+            raise SeedSpecError(f"seed {i}: must be [x, y] integers, got {s!r}.")
+        x, y = s
+        if not (0 <= x < w and 0 <= y < h):
+            raise SeedSpecError(f"seed {i}: [{x}, {y}] is outside the {w}x{h} frame.")
+        if not mask[y, x]:
+            raise SeedSpecError(
+                f"seed {i}: [{x}, {y}] is not on the mask; place every seed on "
+                "the object it stands for (the segment() overlay shows the mask)."
+            )
+        if (x, y) in out:
+            raise SeedSpecError(
+                f"seed {i}: [{x}, {y}] repeats seed {out.index((x, y))}."
+            )
+        out.append((x, y))
+    return out
+
+
+def split_by_seeds(
+    img: np.ndarray,
+    mask: np.ndarray,
+    seeds: Any,
+    px_per_mm: float | None = None,
+) -> LeafInstancesResult:
+    """Split a mask into one region per seed by a compact marker-controlled
+    watershed on the negated distance transform. Mask pixels that no seed's
+    flood reaches (a component with no seed on it) are left out and reported."""
+    from skimage.segmentation import watershed
+
+    if px_per_mm is not None and (px_per_mm <= 0 or not math.isfinite(px_per_mm)):
+        raise ValueError(f"px_per_mm must be a positive finite number, got {px_per_mm}")
+    diag = analyze_mask(mask)
+    assert_not_degenerate(diag)
+    coverage = implausible_coverage_warning(diag)
+    if coverage:
+        raise LeafCountRefusedError(
+            f"implausible_coverage: {coverage.message} Splitting the background "
+            "splits nothing of the plant; fix the segmentation first."
+        )
+    points = validate_seeds(seeds, mask > 0)
+
+    mask255 = np.where(mask > 0, 255, 0).astype(np.uint8)
+    ys, xs = np.nonzero(mask255)
+    pad = 2
+    y0 = max(int(ys.min()) - pad, 0)
+    x0 = max(int(xs.min()) - pad, 0)
+    y1 = min(int(ys.max()) + 1 + pad, mask.shape[0])
+    x1 = min(int(xs.max()) + 1 + pad, mask.shape[1])
+    inside = mask255[y0:y1, x0:x1] > 0
+    landscape = -cv2.distanceTransform(inside.astype(np.uint8), cv2.DIST_L2, 5)
+    markers = np.zeros(inside.shape, np.int32)
+    for i, (x, y) in enumerate(points, start=1):
+        markers[y - y0, x - x0] = i
+    labels_c = watershed(
+        landscape, markers, mask=inside, compactness=SEED_COMPACTNESS
+    ).astype(np.int32)
+
+    instances, overlay = describe_instances(img, mask255, labels_c, y0, x0, px_per_mm)
+    warnings: list[Advisory] = [
+        Advisory(
+            code="seeded_count",
+            message=(
+                f"The count is the number of seeds given ({len(points)}), not a "
+                "measurement: the split only assigns pixels to them. Look at the "
+                "overlay: each numbered region should be one whole object."
+            ),
+        )
+    ]
+    unassigned = int((inside & (labels_c == 0)).sum())
+    if unassigned:
+        warnings.append(
+            Advisory(
+                code="unseeded_mask",
+                message=(
+                    f"{unassigned} mask px ({unassigned / inside.sum():.1%}) lie in "
+                    "components with no seed and belong to no region."
+                ),
+            )
+        )
+    areas = sorted(int(inst["area_px"]) for inst in instances)
+    median = areas[len(areas) // 2]
+    small = [
+        inst["id"]
+        for inst in instances
+        if inst["area_px"] < SMALL_REGION_FRACTION * median
+    ]
+    if small:
+        warnings.append(
+            Advisory(
+                code="small_seeded_region",
+                message=(
+                    f"Region(s) {small} are under {SMALL_REGION_FRACTION:.0%} of the "
+                    f"median region ({median} px): two seeds on one object, or a "
+                    "seed on a sliver. Check them on the overlay."
+                ),
+            )
+        )
+    labels = np.zeros(mask255.shape, np.int32)
+    labels[y0:y1, x0:x1] = labels_c
+    return LeafInstancesResult(
+        leaf_count=len(points),
+        instances=instances,
+        min_distance=0,
+        sensitivity={},
+        units={
+            "area": "pixels" if px_per_mm is None else "mm2",
+            "area_px": "pixels",
+            "centroid": "pixels",
+            "bbox": "pixels",
+        },
+        warnings=warnings,
+        overlay=overlay,
+        labels=labels,
+    )

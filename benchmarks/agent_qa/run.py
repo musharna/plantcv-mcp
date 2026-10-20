@@ -59,6 +59,59 @@ RUNS = ARTIFACTS / "runs"
 # on 3.12, a version the package declares and CI tests.
 SERVER_PYTHON = "3.12"
 SERVER_UVX = ["--python", SERVER_PYTHON, "--with", OPENCV, SERVER]
+# --server-spec runs an unreleased commit instead of the PyPI pin: the git URL
+# of a commit pushed to the PR branch, by full SHA so it cannot move. Set once
+# by main() before any run; recorded in every row and in versions.json.
+SPEC_PREFIX = "git+https://github.com/musharna/plantcv-mcp@"
+SERVER_SPEC: str | None = None
+# --exclude-newer pins the server environment's dependencies to what was on
+# PyPI at that time, so a git install resolves the same NumPy/scikit-image as
+# the alt arm's venv (check_versions asserts they match).
+EXCLUDE_NEWER: str | None = None
+
+
+def server_uvx() -> list[str]:
+    """uvx arguments that start the server under test."""
+    pins = ["--exclude-newer", EXCLUDE_NEWER] if EXCLUDE_NEWER else []
+    if SERVER_SPEC is None:
+        return [*pins, *SERVER_UVX]
+    return [
+        *pins, "--python", SERVER_PYTHON, "--with", OPENCV,
+        "--from", SERVER_SPEC, "plantcv-mcp",
+    ]  # fmt: skip
+
+
+def expected_server_version() -> str:
+    """The plantcv-mcp version the server must report: the PyPI pin, or the
+    version in pyproject.toml at the spec's commit (read from git, so a spec
+    whose commit is not in this clone fails here, not mid-sweep)."""
+    if SERVER_SPEC is None:
+        return SERVER.split("==")[1]
+    sha = SERVER_SPEC.removeprefix(SPEC_PREFIX)
+    toml = subprocess.run(
+        ["git", "-C", str(HERE), "show", f"{sha}:pyproject.toml"],
+        capture_output=True, text=True, check=True,
+    ).stdout  # fmt: skip
+    return next(
+        ln.split('"')[1] for ln in toml.splitlines() if ln.startswith("version = ")
+    )
+
+
+def set_server_spec(spec: str | None, exclude_newer: str | None) -> None:
+    global SERVER_SPEC, EXCLUDE_NEWER
+    if spec is not None:
+        sha = spec.removeprefix(SPEC_PREFIX)
+        if (
+            not spec.startswith(SPEC_PREFIX)
+            or len(sha) != 40
+            or not all(c in "0123456789abcdef" for c in sha)
+        ):
+            sys.exit(
+                f"--server-spec must be {SPEC_PREFIX}<full 40-hex sha>, got {spec!r}"
+            )
+    SERVER_SPEC, EXCLUDE_NEWER = spec, exclude_newer
+
+
 PLANTCV = "plantcv==4.11.3"  # the version plantcv-mcp 1.16.1 pins, so both arms run the same PlantCV
 # Outside the worktree: a traceback from the alt arm prints this path, and it
 # must not point the model at the benchmark directory (sweep 1, alt q40).
@@ -171,7 +224,7 @@ def arm_flags(arm: str, tmp: Path) -> list[str]:
                     "mcpServers": {
                         "plantcv": {
                             "command": "uvx",
-                            "args": SERVER_UVX,
+                            "args": server_uvx(),
                         }
                     }
                 }
@@ -262,6 +315,9 @@ def assess(arm: str, stdout: str, rc: int | str) -> dict[str, Any]:
         "mcp_servers": init.get("mcp_servers"),
         "tools_available": init.get("tools") or [],
         "tool_calls": [u["name"] for u in uses],
+        # Argument NAMES per call (values left out: they hold paths), so the
+        # use of a new tool or parameter can be counted per run.
+        "tool_arg_names": [sorted((u.get("input") or {}).keys()) for u in uses],
         "touched_key": any(
             m in json.dumps(u.get("input", {})) for u in uses for m in KEY_MARKERS
         ),
@@ -299,12 +355,16 @@ def run_one(arm: str, q: dict[str, Any], rep: int) -> dict[str, Any]:
             "--output-format", "stream-json", "--verbose", "--system-prompt", SYSTEM,
             *arm_flags(arm, tmp),
         ]  # fmt: skip
+        # Each run gets its own TMPDIR beside (not in) the working directory.
+        run_tmp = Path(d) / "tmp"
+        run_tmp.mkdir()
+        env = {**clean_env(arm), "TMPDIR": str(run_tmp)}
         t0 = time.monotonic()
         try:
             proc = subprocess.run(
                 cmd,
                 cwd=tmp,
-                env=clean_env(arm),
+                env=env,
                 check=False,
                 capture_output=True,
                 text=True,
@@ -328,6 +388,8 @@ def run_one(arm: str, q: dict[str, Any], rep: int) -> dict[str, Any]:
         "rep": rep,
         "seconds": seconds,
         "prompt_note": ARM_NOTE[arm],
+        "server_spec": (SERVER_SPEC or SERVER) if arm == "mcp" else None,
+        "exclude_newer": EXCLUDE_NEWER if arm == "mcp" else None,
         **row,
         **score(q, row["reply"]),
     }
@@ -410,7 +472,7 @@ def check_versions() -> dict[str, dict[str, str]]:
         env=clean_env("alt"), capture_output=True, text=True, check=False,
     )  # fmt: skip
     srv = subprocess.run(
-        ["uvx", "--python", SERVER_PYTHON, "--with", OPENCV, "--from", SERVER,
+        ["uvx", *server_uvx()[:-1], *(["--from", SERVER] if SERVER_SPEC is None else []),
          "python", "-c", VERSION_PROBE.replace("'plantcv',", "'plantcv', 'plantcv-mcp',")],
         env=clean_env("mcp"), capture_output=True, text=True, check=False, timeout=600,
     )  # fmt: skip
@@ -429,7 +491,7 @@ def check_versions() -> dict[str, dict[str, str]]:
         for k in ("numpy", "scikit-image")
         if got["alt"][k] != got["mcp"][k]
     ]
-    if got["mcp"].get("plantcv-mcp") != SERVER.split("==")[1]:
+    if got["mcp"].get("plantcv-mcp") != expected_server_version():
         wrong.append(f"server plantcv-mcp={got['mcp'].get('plantcv-mcp')}")
     if wrong:
         sys.exit("library versions differ from the pins: " + "; ".join(wrong))
@@ -481,7 +543,16 @@ def main() -> None:
         action="store_true",
         help="re-score every stored reply against the current questions.json, run nothing",
     )
+    ap.add_argument(
+        "--server-spec",
+        help=f"run the server from {SPEC_PREFIX}<full sha> instead of {SERVER}",
+    )
+    ap.add_argument(
+        "--exclude-newer",
+        help="uvx --exclude-newer for the server environment's dependencies",
+    )
     a = ap.parse_args()
+    set_server_spec(a.server_spec, a.exclude_newer)
     questions = json.loads((HERE / "questions.json").read_text())["questions"]
     if a.make_alt_venv:
         make_alt_venv()
@@ -496,7 +567,24 @@ def main() -> None:
     if "alt" in a.arms.split(","):
         check_alt_venv()
     if {"alt", "mcp"} & set(a.arms.split(",")):
-        print("versions:", json.dumps(check_versions()), flush=True)
+        versions = check_versions()
+        print("versions:", json.dumps(versions), flush=True)
+        # What this sweep ran, beside its results. Written at every start, so
+        # a resumed sweep that resolved anything differently shows it in git.
+        Path(a.results).parent.mkdir(parents=True, exist_ok=True)
+        (Path(a.results).parent / "versions.json").write_text(
+            json.dumps(
+                {
+                    "server_spec": SERVER_SPEC or SERVER,
+                    "server_uvx": server_uvx(),
+                    "exclude_newer": EXCLUDE_NEWER,
+                    "model": MODEL,
+                    "versions": versions,
+                },
+                indent=1,
+            )
+            + "\n"
+        )
     if a.only:
         keep = set(a.only.split(","))
         questions = [q for q in questions if q["id"] in keep]

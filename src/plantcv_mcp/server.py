@@ -23,6 +23,7 @@ import threading
 from collections import OrderedDict
 from typing import Any, NotRequired
 
+import cv2
 import numpy as np
 
 # mcp 2.x renamed FastMCP to MCPServer and removed mcp.server.fastmcp. Same
@@ -62,7 +63,7 @@ from .imaging import (
     render_region_overlay,
     write_image,
 )
-from .leaves import DEFAULT_MIN_DISTANCE
+from .leaves import DEFAULT_MIN_DISTANCE, SeedSpecError
 from .lens import (
     FOCAL_UNCERTAINTY_ADVISORY,
     LensCalibration,
@@ -70,7 +71,12 @@ from .lens import (
     rms_fraction,
     undistort_image,
 )
-from .limits import require_fill_size, require_threshold_params
+from .limits import (
+    ParameterRangeError,
+    require_fill_size,
+    require_int,
+    require_threshold_params,
+)
 from .measurement import ANALYSES, TraitValue, validate_analyses
 from .paths import check_readable, configured_roots, set_roots
 from .refine import (
@@ -88,7 +94,16 @@ from .sam_leaves import (
     resolve_checkpoint,
 )
 from .scale import calibrate_scale
-from .segmentation import CHANNELS, METHODS, OBJECT_TYPES, threshold_mask
+from .segmentation import (
+    CHANNELS,
+    METHODS,
+    OBJECT_TYPES,
+    SegmentRuleError,
+    describe_rules,
+    rules_mask,
+    threshold_mask,
+    validate_rules,
+)
 from .session import SessionStore
 from .suggest import colorspace_sheet, polarity_report, threshold_sheet
 from .thermal import grey_frame, load_thermal
@@ -99,8 +114,18 @@ _store = SessionStore()
 # Shown to clients at connection time. The product is a discipline, not just a set
 # of functions, and the discipline has to be stated somewhere the model will read
 # it before it starts calling things.
+#
+# The tool names in this text are bare, but a client lists them under its own
+# prefix. In the 2026-10-18 benchmark, 23 runs copied `zoom_image` straight from
+# this text, before any listed tool was called and with string arguments, and
+# Claude Code refused each call as unknown. Hence the naming note, which comes
+# before the first tool name.
 INSTRUCTIONS = """\
 PlantCV as a measurement instrument for plant images.
+
+Tool names here are this server's own. Your client lists each one under its
+own prefix (in Claude Code, zoom_image is mcp__plantcv__zoom_image): call the
+name in your tool list, not the bare name written here.
 
 Work in this order: suggest_segmentation -> segment -> LOOK AT THE OVERLAY -> measure.
 
@@ -122,6 +147,12 @@ polarities actually yield on the image in front of you. Its `noisy_segmentation`
 warning means the recommended polarity is specks, not a plant: pick another
 channel from the colourspace sheet. `ambiguous` is a polarity comparison, not a
 quality verdict.
+
+If no single channel captures the whole plant (yellowed beside green leaves),
+segment() with `rules` joined by `combine` instead of adding masks by hand:
+several channels' thresholds, or explicit value ranges, OR-ed or AND-ed.
+zoom_image() enlarges part of the image when the whole frame is too small to
+read, e.g. to count overlapping leaves.
 
 If the overlay is nearly right — a hole in the leaf, specks on the background, a
 second object that is not the plant — use refine() instead of hunting for a
@@ -286,18 +317,52 @@ def list_methods_impl() -> MethodsInfo:
 
 def _segment_impl(
     image_path: str,
-    channel: str,
-    method: str,
-    object_type: str = "dark",
+    channel: str | None = None,
+    method: str | None = None,
+    object_type: str | None = None,
     fill_size: int = 200,
     ksize: int = 11,
     offset: int = 2,
     color_correct: bool = False,
     exclude_color_card: bool = False,
+    rules: list[dict] | None = None,
+    combine: str | None = None,
 ) -> dict:
     # Every argument that needs no pixels is checked before any are read.
     require_fill_size(fill_size)
-    require_threshold_params(method, ksize, offset)
+    if rules is not None:
+        # One channel OR several: a channel passed beside rules would be
+        # silently ignored, and the caller would believe it had been applied.
+        given = [
+            name
+            for name, value in (
+                ("channel", channel),
+                ("method", method),
+                ("object_type", object_type),
+            )
+            if value is not None
+        ] + [
+            name
+            for name, value, default in (("ksize", ksize, 11), ("offset", offset, 2))
+            if value != default
+        ]
+        if given:
+            raise SegmentRuleError(
+                f"{given} cannot be combined with rules: each rule carries its own "
+                "channel and threshold. Give either channel + method (one "
+                "channel) or rules (several), not both."
+            )
+        rules = validate_rules(rules, combine)
+    else:
+        if combine is not None:
+            raise SegmentRuleError("combine applies to rules only.")
+        if channel is None or method is None:
+            raise SegmentRuleError(
+                "Give channel and method (one channel), or rules (several "
+                "channels or explicit value ranges, joined by combine)."
+            )
+        object_type = "dark" if object_type is None else object_type
+        require_threshold_params(method, ksize, offset)
     # The digest is of the SAME bytes the mask is about to be drawn on. Hashing
     # the path afterwards left a window in which a same-shape replacement was
     # recorded as this mask's identity.
@@ -315,9 +380,13 @@ def _segment_impl(
 
     # Threshold and fill run separately so a mask erased by fill_size can be
     # named as such instead of looking like a bad channel/method choice.
-    pre_fill = threshold_mask(
-        img, channel, method, object_type=object_type, ksize=ksize, offset=offset
-    )
+    rule_coverage = None
+    if rules is not None:
+        pre_fill, rule_coverage = rules_mask(img, rules, combine)
+    else:
+        pre_fill = threshold_mask(
+            img, channel, method, object_type=object_type, ksize=ksize, offset=offset
+        )
     card_note = None
     removed = 0
     if card is not None:
@@ -343,18 +412,26 @@ def _segment_impl(
     session = _store.create(
         image_path,
         mask,
-        channel,
-        method,
+        describe_rules(rules, combine) if rules is not None else channel,
+        "rules" if rules is not None else method,
         digest=digest,
         color_correct=color_correct,
         card_region=card,
         card_excluded_px=removed,
     )
+    recipe: dict[str, Any] = (
+        {
+            "rules": rules,
+            "combine": combine,
+            # Each rule's own share of the frame, before combining and fill.
+            "rule_coverage": rule_coverage,
+        }
+        if rules is not None
+        else {"channel": channel, "method": method, "object_type": object_type}
+    )
     return {
         "session_id": session.session_id,
-        "channel": channel,
-        "method": method,
-        "object_type": object_type,
+        **recipe,
         "fill_size": fill_size,
         "color_correct": color_correct,
         "mask_fraction": diag.mask_fraction,
@@ -405,22 +482,62 @@ def _load_session_image(session) -> np.ndarray:
     return img
 
 
+class UnknownTraitError(ValueError):
+    """A `traits` selection naming a trait the requested analyses do not produce."""
+
+
+def _require_trait_names(traits: list[str] | None) -> None:
+    """Shape check of a `traits` selection, before anything is measured."""
+    if traits is None:
+        return
+    if (
+        isinstance(traits, (str, bytes))
+        or not isinstance(traits, list)
+        or not traits
+        or not all(isinstance(t, str) for t in traits)
+    ):
+        raise UnknownTraitError(
+            f"traits must be a non-empty list of trait names, got {traits!r}."
+        )
+
+
+def _select_traits(table: dict, traits: list[str] | None) -> dict:
+    """Only the named traits, in the order asked. The full table of one plant
+    is ~17 traits and, per tray cell, ~1,100 characters: on a 20-pot tray that
+    was 12,000 tokens per call in the 2026-10-17 benchmark, to read one area.
+    A name the analyses did not produce is refused with the names they did,
+    never dropped: an absent trait would read as a trait that is not there."""
+    if traits is None:
+        return table
+    missing = [t for t in traits if t not in table]
+    if missing:
+        raise UnknownTraitError(
+            f"traits {missing} are not produced by these analyses; available: "
+            f"{sorted(table)}. Add 'color' to analyses for hue/saturation/value."
+        )
+    return {t: table[t] for t in traits}
+
+
 def _measure_impl(
     session_id: str,
     analyses: list[str] | None = None,
     px_per_mm: float | None = None,
     include_histograms: bool = False,
+    traits: list[str] | None = None,
 ) -> MeasureResult:
     requested = tuple(analyses) if analyses is not None else ("size",)
+    _require_trait_names(traits)
     session = _session_of(session_id, "rgb")
     img = _load_session_image(session)
-    traits = dispatch(
+    table = dispatch(
         "measure", img, session.mask, requested, px_per_mm, include_histograms
     )
     warnings = mask_warnings(session.mask, analyze_mask(session.mask))
-    lp_warning = implausible_longest_path_warning(traits)
+    # Judged on the full table, before any selection drops longest_path.
+    lp_warning = implausible_longest_path_warning(table)
     if lp_warning:
         warnings.append(lp_warning)
+    traits = _select_traits(table, traits)
     if session.card_region is not None:
         # The mask cannot say a card was cut out of it; the session can.
         card_note = color_card_excluded_advisory(
@@ -544,10 +661,21 @@ def _count_leaves_impl(
     session_id: str,
     min_distance: int = DEFAULT_MIN_DISTANCE,
     px_per_mm: float | None = None,
+    seeds: list[list[int]] | None = None,
 ) -> dict:
     session = _session_of(session_id, "rgb")
+    if seeds is not None and min_distance != DEFAULT_MIN_DISTANCE:
+        # The seeds ARE the markers; a min_distance beside them would be
+        # silently ignored.
+        raise SeedSpecError(
+            "min_distance applies to the automatic split only; with seeds the "
+            "markers are the seeds."
+        )
     img = _load_session_image(session)
-    res = dispatch("leaves", img, session.mask, min_distance, px_per_mm)
+    if seeds is not None:
+        res = dispatch("leaves_seeded", img, session.mask, seeds, px_per_mm)
+    else:
+        res = dispatch("leaves", img, session.mask, min_distance, px_per_mm)
     # The mask-level caveats measure() carries, minus multi_specimen: its text
     # is about size traits and measure_regions(); count_leaves() says what
     # several objects mean for a COUNT (multi_object_mask).
@@ -561,11 +689,15 @@ def _count_leaves_impl(
     return {
         "session_id": session_id,
         "lineage": [dict(op) for op in session.lineage],
-        "method": "distance_transform_watershed",
-        "min_distance": res.min_distance,
+        "method": (
+            "seeded_distance_watershed"
+            if seeds is not None
+            else "distance_transform_watershed"
+        ),
+        "min_distance": None if seeds is not None else res.min_distance,
         "px_per_mm": px_per_mm,
         "leaf_count": res.leaf_count,
-        "count_at_other_min_distance": res.sensitivity,
+        "count_at_other_min_distance": None if seeds is not None else res.sensitivity,
         "instances": res.instances,
         "units": res.units,
         "warnings": [
@@ -574,6 +706,53 @@ def _count_leaves_impl(
         "overlay_scale": scale,
         "engine": {"name": "PlantCV", "version": plantcv_version()},
         "_png": png,
+    }
+
+
+# The enlarged crop's longest edge. A vision model downsamples anything larger,
+# so a bigger output only costs tokens.
+ZOOM_MAX_EDGE = 1024
+ZOOM_MAX_SCALE = 8
+
+
+def _zoom_impl(
+    image_path: str, x: int, y: int, w: int, h: int, scale: int | None = None
+) -> dict:
+    """The box (x, y, w, h) of the image, enlarged. Read sees the whole frame
+    at its own resolution and nothing in this server's arm can crop: in the
+    2026-10-17 agent benchmark code with Bash enlarged the plant before
+    counting leaves in 21 of 24 runs, and the server arm never could."""
+    for name, value in (("x", x), ("y", y)):
+        require_int(name, value, lo=0)
+    for name, value in (("w", w), ("h", h)):
+        require_int(name, value, lo=1)
+    if scale is not None:
+        require_int("scale", scale, lo=1, hi=ZOOM_MAX_SCALE)
+    img = load_image(check_readable(image_path))
+    H, W = img.shape[:2]
+    if x >= W or y >= H:
+        raise ParameterRangeError(
+            f"the box starts at ({x}, {y}), outside the {W}x{H} image."
+        )
+    x1, y1 = min(x + w, W), min(y + h, H)
+    crop = img[y:y1, x:x1]
+    fit = max(1, ZOOM_MAX_EDGE // max(crop.shape[:2]))
+    k = min(scale or fit, fit, ZOOM_MAX_SCALE)
+    big = cv2.resize(
+        crop,
+        None,
+        fx=k,
+        fy=k,
+        interpolation=cv2.INTER_CUBIC if k > 1 else cv2.INTER_AREA,
+    )
+    big, extra = downscale(big, max_edge=ZOOM_MAX_EDGE, min_edge=1)
+    return {
+        "box": [x, y, x1 - x, y1 - y],
+        "clipped": (x1 - x, y1 - y) != (w, h),
+        "scale": round(k * extra, 4),
+        "note": "A picture to look at, not a measurement: image pixel = "
+        "(zoomed pixel / scale) + box origin.",
+        "_png": encode_png(big),
     }
 
 
@@ -880,7 +1059,9 @@ def _measure_regions_impl(
     px_per_mm: float | None = None,
     include_histograms: bool = False,
     indices: list[str] | None = None,
+    traits: list[str] | None = None,
 ) -> dict:
+    _require_trait_names(traits)
     session = _store.get(session_id)
     geometry = {
         "mode": mode,
@@ -900,6 +1081,7 @@ def _measure_regions_impl(
             ("analyses", analyses),
             ("px_per_mm", px_per_mm),
             ("include_histograms", include_histograms or None),
+            ("traits", traits),
         ):
             if value is not None:
                 raise WrongSessionKindError(
@@ -928,6 +1110,10 @@ def _measure_regions_impl(
             px_per_mm=px_per_mm,
             include_histograms=include_histograms,
         )
+        if traits is not None:
+            for m in regions["measurements"]:
+                if m.get("traits") is not None:
+                    m["traits"] = _select_traits(m["traits"], traits)
         extra = {
             "analyses": list(requested),
             "px_per_mm": px_per_mm,
@@ -1535,21 +1721,32 @@ def build_server() -> MCPServer:
     @_loud
     def segment(
         image_path: str,
-        channel: str,
-        method: str,
-        object_type: str = "dark",
+        channel: str | None = None,
+        method: str | None = None,
+        object_type: str | None = None,
         fill_size: int = 200,
         ksize: int = 11,
         offset: int = 2,
         color_correct: bool = False,
         exclude_color_card: bool = False,
+        rules: list[dict] | None = None,
+        combine: str | None = None,
     ) -> list:
         """Segment an image. Returns the overlay image and mask diagnostics —
         NOT traits. Use the returned session_id with measure() to get traits.
 
-        object_type picks which side of the threshold is the plant ('dark' or
-        'light'); the wrong one returns the background with plausible-looking
-        traits, so call suggest_segmentation() if unsure. fill_size drops
+        One channel: channel + method + object_type. object_type picks which
+        side of the threshold is the plant ('dark' or 'light', default
+        'dark'); the wrong one returns the background with plausible-looking
+        traits, so call suggest_segmentation() if unsure.
+
+        Several channels, for a plant no one channel captures (yellowed and
+        green leaves): pass rules instead, joined by combine ('or' = any rule,
+        'and' = every rule). A rule is {"channel", "method", "object_type"}
+        or an explicit range {"channel", "min", "max"} on the channel's 0-255
+        value (h is hue in degrees/2, 0-179). Example: [{"channel": "a",
+        "method": "otsu", "object_type": "dark"}, {"channel": "b", "method":
+        "otsu", "object_type": "light"}] with combine 'or'. fill_size drops
         components smaller than itself and will erase a genuinely small
         specimen (0 disables it; negative is refused). ksize (3-1001) and
         offset (-255 to 255) apply to the 'mean' and 'gaussian' methods.
@@ -1567,12 +1764,16 @@ def build_server() -> MCPServer:
             image_path,
             channel,
             method,
+            # None reaches the impl so it can tell "not given" from "dark"
+            # when rules are passed; one channel defaults it to "dark" there.
             object_type=object_type,
             fill_size=fill_size,
             ksize=ksize,
             offset=offset,
             color_correct=color_correct,
             exclude_color_card=exclude_color_card,
+            rules=rules,
+            combine=combine,
         )
         png = result.pop("_png")
         return [json.dumps(result), Image(data=png, format="png")]
@@ -1604,6 +1805,7 @@ def build_server() -> MCPServer:
         analyses: list[str] | None = None,
         px_per_mm: float | None = None,
         include_histograms: bool = False,
+        traits: list[str] | None = None,
     ) -> MeasureResult:
         """Return plant traits for a segmentation produced by segment().
         Raises if the mask is degenerate rather than returning zeros.
@@ -1612,13 +1814,16 @@ def build_server() -> MCPServer:
         statistics. px_per_mm converts spatial traits to mm and mm2 — without it
         every size is in PIXELS and is not comparable between images shot at
         different distances or zoom. include_histograms adds three frequency
-        arrays totalling 692 numbers, off by default.
+        arrays totalling 692 numbers, off by default. traits (e.g. ["area"])
+        returns only those traits; a name the analyses do not produce is
+        refused with the available names.
         """
         return _measure_impl(
             session_id,
             analyses=analyses,
             px_per_mm=px_per_mm,
             include_histograms=include_histograms,
+            traits=traits,
         )
 
     @mcp.tool(
@@ -1640,6 +1845,7 @@ def build_server() -> MCPServer:
         px_per_mm: float | None = None,
         include_histograms: bool = False,
         indices: list[str] | None = None,
+        traits: list[str] | None = None,
     ) -> list:
         """Measure EACH plant in a multi-plant image separately.
 
@@ -1666,6 +1872,9 @@ def build_server() -> MCPServer:
         A region with no plant in it returns measured=false and a reason, NOT
         zeros: PlantCV reports a full trait set of zeros for an empty region,
         which is indistinguishable from a genuinely zero-area plant.
+
+        Every region carries the full trait table (~1,100 characters each);
+        traits=["area"] (rgb sessions) keeps only the named traits per region.
         """
         result = _measure_regions_impl(
             session_id,
@@ -1681,6 +1890,7 @@ def build_server() -> MCPServer:
             px_per_mm=px_per_mm,
             include_histograms=include_histograms,
             indices=indices,
+            traits=traits,
         )
         png = result.pop("_png")
         return [json.dumps(result), Image(data=png, format="png")]
@@ -1733,6 +1943,7 @@ def build_server() -> MCPServer:
         session_id: str,
         min_distance: int = DEFAULT_MIN_DISTANCE,
         px_per_mm: float | None = None,
+        seeds: list[list[int]] | None = None,
     ) -> list:
         """Split ONE top-view plant mask into leaf instances with PlantCV's
         distance-transform watershed and return the count, each instance's
@@ -1757,9 +1968,16 @@ def build_server() -> MCPServer:
         multi_object_mask — normal for a rosette whose leaves segment apart,
         wrong for a tray: isolate one plant first. px_per_mm scales `area` to
         mm2; area_px, centroid and bbox stay in pixels.
+
+        Touching objects the automatic split merges: pass seeds, one [x, y]
+        (full-frame pixels, on the mask) per object. A compact watershed from
+        those seeds splits the mask between them, one region per seed,
+        preferring the narrowest neck; it does not follow colour edges. The
+        count is then the number of seeds, by construction; the regions, their
+        areas and the overlay show whether each seed sits on one object.
         """
         result = _count_leaves_impl(
-            session_id, min_distance=min_distance, px_per_mm=px_per_mm
+            session_id, min_distance=min_distance, px_per_mm=px_per_mm, seeds=seeds
         )
         png = result.pop("_png")
         return [json.dumps(result), Image(data=png, format="png")]
@@ -1819,6 +2037,24 @@ def build_server() -> MCPServer:
             device=device,
             px_per_mm=px_per_mm,
         )
+        png = result.pop("_png")
+        return [json.dumps(result), Image(data=png, format="png")]
+
+    @mcp.tool(
+        title="Zoom into part of an image (returns the enlarged crop)",
+        annotations=READ_ONLY,
+    )
+    @_loud
+    def zoom_image(
+        image_path: str, x: int, y: int, w: int, h: int, scale: int | None = None
+    ) -> list:
+        """Return the box (x, y, w, h) of the image, in full-frame pixels,
+        enlarged so its longest edge is about 1024 px (or by `scale`, 1-8),
+        to look closely at what a whole-frame view shows too small: leaves to
+        count, a marker's edge, a seedling in one pot. A picture, not a
+        measurement; a box past the frame's edge is clipped and says so.
+        """
+        result = _zoom_impl(image_path, x, y, w, h, scale=scale)
         png = result.pop("_png")
         return [json.dumps(result), Image(data=png, format="png")]
 

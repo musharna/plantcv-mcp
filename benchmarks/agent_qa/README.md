@@ -1,5 +1,14 @@
 # Agent benchmark: measuring plant images with and without the server
 
+**Re-run 2026-10-18, unreleased server commit 051aff0.** After the changes
+the 10-17 misses pointed to, the server was right on 95.7% of answers and
+Claude's own code on 97.1%, both re-run together (questions right in every run:
+42 against 44, exact McNemar p = 0.63). Under the pre-registered rule this is
+a **tie**: within 2 questions, not better. Bash is still cheaper ($0.038
+against $0.066 per answer, median); time is no longer separated (14.5 s
+against 16.9 s). [Details below](#re-run-2026-10-18-server-051aff0); the 10-17
+result follows unchanged.
+
 We asked Claude Opus 5.5 46 measurement questions about rendered plant images,
 each with an exactly known answer, three times each: with no tools, with Bash
 and its own Python (PlantCV and OpenCV installed), and with plantcv-mcp plus
@@ -14,7 +23,74 @@ so a single color cut with no model already answers 28 of the 46 questions.
 
 ![Right, wrong, declined or invalid per setup](agent_qa.png)
 
-## Results
+## Re-run 2026-10-18 (server 051aff0)
+
+Pre-registered in [`PREREG_2026-10-18.md`](PREREG_2026-10-18.md) before the
+sweep. This tests an **unreleased commit**,
+`git+https://github.com/musharna/plantcv-mcp@051aff0544d4fa7337a8a891619c70c1bf90dd96`
+(it still reports 1.16.1), with dependencies pinned by `--exclude-newer
+2026-10-17`. The spec is recorded in every row and in
+[`versions.json`](rerun_2026-10-18/versions.json). The changes are
+several-channel `segment` rules with AND/OR, `zoom_image`, a seeded split in
+`count_leaves`, and `traits=` on `measure` and `measure_regions`. The Bash and
+server setups were re-run together, interleaved by question, 3 runs each;
+Claude alone was not re-run, and no 10-17 row was reused. There were 276 runs,
+0 invalid, and 0 leak hits on the audit. The sweep cost $14.89 (Bash $5.48,
+server $9.41) and took 77 min.
+
+| Setup | Right | Wrong | Questions right in all runs | Share right, all 46 | Share right, the 18 a color cut misses | Cost / answer, median | Seconds / answer, median |
+|---|---|---|---|---|---|---|---|
+| Claude + Bash/PlantCV/OpenCV + web | 134 | 4 | 44 of 46 | 97.1% [91.3, 100] | 92.6% [79.6, 100] | $0.038 [0.034, 0.043] | 14.5 [12.9, 15.9] |
+| Claude + plantcv-mcp + Read | 132 | 6 | 42 of 46 | 95.7% [90.6, 99.3] | 94.4% [85.2, 100] | $0.066 [0.061, 0.070] | 16.9 [15.8, 17.8] |
+
+**Win rule.** Non-inferiority holds (42 ≥ 44 − 2). Better fails: 3 questions
+were right in every run with Bash only (q21, q26, q36) and 1 with the server
+only (q44), p = 0.625, and the paired difference is −4.3 points [−13.0, +4.3].
+Result: **tie**. As the pre-registration noted, a win needed at least 6-0.
+
+**Against 10-17.** The server's right answers rose from 119 to 132 of 138. It
+now gets every run of q05, q06 and q08 (yellowed areas), q33 and q46, and lost
+no question it had. Bash also gained q42 and q46. The discordant split moved
+from 7-2 to 3-1 against the server.
+
+**Which changes were used** (valid server runs of 138, `diagnose.py
+--mechanism`):
+
+- `segment` with rules: 46 runs, all right.
+- `zoom_image`: 15 runs, 14 right. Another 23 runs called it by its bare name
+  (`zoom_image`, not `mcp__plantcv__zoom_image`), which Claude Code refuses;
+  4 of those retried under the full name. This count was not pre-registered.
+  Found after the confirmatory sweep: the name was copied from the server's
+  instructions, which named tools bare. Fixed in 374653a. The fix is untested
+  by any sweep, and its effect is unknown.
+- `measure` with traits: 29 runs, all right. `measure_regions` with traits:
+  12 runs, 10 right (the 2 misses are q26).
+- `count_leaves`: 1 run, and seeds in none. **The seeded split was not
+  tested.**
+
+**Server misses left.**
+
+- q26: 1,571 px for 1,599 in 2 of 3 runs, as on 10-17.
+- q31 (12 leaves): wrong in 2 of 3 runs; Bash was wrong in all 3.
+- q36: 13 leaves for 14, once.
+- q21: 592 mm² for 607.9, once.
+
+**Tokens** (`diagnose.py`, server, 10-17 → 10-18):
+
+- Fixed context (system prompt and tool list): 13,173 → 14,544 tokens.
+- Tokens added by tool results per run: median 3,284 → 2,816, mean 5,037 →
+  2,954.
+- `measure_regions` per call: median 12,367 → 3,240.
+- Total cost: $12.59 → $9.41. Cache writes are still 62% of it.
+
+Bash went from $5.32 to $5.48.
+
+![Right or wrong per setup, re-run](rerun_2026-10-18/agent_qa.png)
+
+Tables and the other figures are in [`rerun_2026-10-18/`](rerun_2026-10-18/),
+written by `plot.R` from its `results.jsonl`.
+
+## Results (2026-10-17, release 1.16.1)
 
 Each setup gave 138 answers (46 questions × 3 runs); each no-model control
 answered once per question. Shares are the mean over questions of the share
@@ -229,7 +305,7 @@ hardened. Claude alone declined every pilot question.
    declined 61 and exited 1 twice. We stopped it when a review found the
    server setup handicapped; the rows are in
    [`results_sweep1_stopped.jsonl`](results_sweep1_stopped.jsonl).
-6. **Sweep 2 (this one).** The server setup got Read, the Bash prompt names
+6. **Sweep 2 (2026-10-17, the Results section).** The server setup got Read, the Bash prompt names
    PlantCV and OpenCV, one validity rule replaced a server-only retry, OpenCV
    is pinned and versions are asserted, and the leak scan was added. The Bash
    setup's Python and the transcripts moved outside the repository, because in
@@ -237,8 +313,12 @@ hardened. Claude alone declined every pilot question.
    (the one leak hit). The Bash and server rows were run again. Claude alone's
    63 rows were kept, since its prompt and setup did not change; under the new
    rule 2 of them are invalid.
+7. **Re-run 2026-10-18.** The Bash and server setups were run against server
+   commit 051aff0, pre-registered, after 4 pilot runs listed in the
+   pre-registration. Rows are in
+   [`rerun_2026-10-18/results.jsonl`](rerun_2026-10-18/results.jsonl).
 
-Transcripts from the pilots and both sweeps are kept by the maintainer, not
+Transcripts from the pilots and all sweeps are kept by the maintainer, not
 published.
 
 ## Reproduce
