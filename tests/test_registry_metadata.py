@@ -153,3 +153,31 @@ def test_the_schema_check_rejects_what_the_registry_rejected():
     # document must still validate. Without it, an unloadable schema or a
     # validator that raised on everything would read as "the guard works".
     jsonschema.validate(SERVER_JSON, SCHEMA)
+
+
+# PlantCV 4.11.3 pins SciPy below 1.16, and no SciPy 1.15 release has a CPython
+# 3.14 wheel, so on a 3.14 interpreter `uvx plantcv-mcp` tries to build SciPy
+# from source and fails. A `requires-python` cap would not help: uv and pip skip
+# the capped release and fall back to an older, uncapped one, which fails the
+# same way (tried 2026-10-20). The launch command has to choose the interpreter.
+UVX_PYTHON = "3.13"
+
+
+def test_every_uvx_launch_in_the_readme_pins_the_interpreter():
+    launches = [
+        re.sub(r'[\s"\[\],:]+', " ", line)
+        for line in README.splitlines()
+        if "uvx" in line and "plantcv-mcp" in line
+    ]
+    assert len(launches) >= 3, f"found {len(launches)} uvx launch lines in the README"
+    for launch in launches:
+        assert f"--python {UVX_PYTHON} plantcv-mcp" in launch, (
+            f"README launch without --python {UVX_PYTHON}: {launch.strip()}"
+        )
+
+
+def test_the_registry_entry_launches_uvx_on_the_same_interpreter():
+    args = SERVER_JSON["packages"][0].get("runtimeArguments", [])
+    assert {"type": "named", "name": "--python", "value": UVX_PYTHON} in args, (
+        "registry installs run `uvx plantcv-mcp` on the client's default Python"
+    )

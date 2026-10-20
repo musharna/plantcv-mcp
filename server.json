@@ -16,6 +16,13 @@
       "identifier": "plantcv-mcp",
       "version": "1.17.0",
       "runtimeHint": "uvx",
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "--python",
+          "value": "3.13"
+        }
+      ],
       "transport": {
         "type": "stdio"
       }
