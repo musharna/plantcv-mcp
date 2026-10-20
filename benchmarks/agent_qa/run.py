@@ -633,6 +633,7 @@ def check_alt_venv() -> None:
 
 
 def main() -> None:
+    global PAUSES, STOP_AT
     ap = argparse.ArgumentParser()
     ap.add_argument("--arms", default="bare,alt,mcp")
     ap.add_argument("--reps", type=int, default=3)
@@ -669,9 +670,15 @@ def main() -> None:
         help="move rows the API ended (api_failure) to results.api_failures.jsonl "
         "so a resume re-runs each once, run nothing",
     )
+    ap.add_argument(
+        "--stop-at",
+        type=float,
+        default=STOP_AT,
+        help=f"stop the sweep when seven_day usage reaches this (default {STOP_AT})",
+    )
     a = ap.parse_args()
-    global PAUSES
     PAUSES = Path(a.results).parent / "pauses.jsonl"
+    STOP_AT = a.stop_at
     set_model(a.model)
     set_server_spec(a.server_spec, a.exclude_newer)
     questions = json.loads((HERE / "questions.json").read_text())["questions"]

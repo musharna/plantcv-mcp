@@ -117,3 +117,18 @@ Rscript $Q/plot.R $Q/haiku_2026-10-20/substitute/results.jsonl $Q/haiku_2026-10-
 ```
 
 Every result is reported, whatever it shows.
+
+## Amendment, 2026-10-20 ~19:00 EDT (before any Sonnet run)
+
+Received after this file was pushed and after the Haiku sweep started at
+18:50 EDT (no Haiku row had been written). Nothing above changes except:
+
+- **Sonnet runs this session**, right after the Haiku sweep, with the same
+  arms, reps, key, controls and analysis (`--model claude-sonnet-5-5`,
+  results in `sonnet_2026-10-20/`, transcripts under
+  `~/plantcv-mcp-artifacts/agent_qa_sonnet_1020/`). The win/tie/loss verdict
+  (Holm over both tiers) is then reported from these two sweeps.
+- **Usage stop for the Sonnet sweep: seven_day ≥ 0.90** (`run.py --stop-at
+  0.90`; Haiku keeps 0.80). It is read from every run's transcript; if reached,
+  the sweep stops, its rows are kept and reported, and the unrun triples are
+  listed as not run.
