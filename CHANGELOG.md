@@ -6,12 +6,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.17.1] — 2026-10-20
+
 ### Fixed
 
 - Install on Python 3.14: PlantCV 4.11.3 needs SciPy below 1.16, which has no
   3.14 wheels, so `uvx plantcv-mcp` on a 3.14 default failed building SciPy.
   The README's launch commands and the registry entry now pass `--python 3.13`,
   and `.python-version` sets 3.13 for checkouts.
+
+### Security
+
+- `uv.lock` pins Pillow 13.0.0 (was 12.3.0) for CVE-2026-112395, -112397, -112400,
+  -112404, -112895, -112896, -112897 and -112899, all fixed in 13.0.0. The lock is what
+  checkouts and CI install; a `uvx` install resolves its own, already 13.0.0.
 
 ## [1.17.0] — 2026-10-19
 
