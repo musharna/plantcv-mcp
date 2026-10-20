@@ -66,14 +66,15 @@ limitations:
 
 ## Install
 
-With [uv](https://docs.astral.sh/uv/) nothing needs installing: `uvx plantcv-mcp` fetches and
+With [uv](https://docs.astral.sh/uv/) nothing needs installing: `uvx --python 3.13 plantcv-mcp` fetches and
 runs the current release. Otherwise:
 
 ```bash
 pip install plantcv-mcp
 ```
 
-Requires Python 3.11+. PlantCV and its scientific stack make the first install (or first `uvx`
+Requires Python 3.11 to 3.13: PlantCV 4.11.3 needs SciPy below 1.16, which has no Python 3.14
+wheels, so `--python 3.13` keeps `uvx` off a 3.14 default. PlantCV and its scientific stack make the first install (or first `uvx`
 run) slow. From a checkout: `uv add /path/to/plantcv-mcp`. The one optional tool,
 `segment_leaves_sam()`, needs `pip install "plantcv-mcp[sam]"` (torch, torchvision,
 segment-anything); without it, that tool refuses with that command and every other tool works.
@@ -81,13 +82,13 @@ segment-anything); without it, that tool refuses with that command and every oth
 ## Configure your MCP client
 
 ```bash
-claude mcp add plantcv -- uvx plantcv-mcp
+claude mcp add plantcv -- uvx --python 3.13 plantcv-mcp
 ```
 
 Claude Desktop and other stdio hosts:
 
 ```json
-{ "mcpServers": { "plantcv": { "command": "uvx", "args": ["plantcv-mcp"] } } }
+{ "mcpServers": { "plantcv": { "command": "uvx", "args": ["--python", "3.13", "plantcv-mcp"] } } }
 ```
 
 With a pip install the command is `plantcv-mcp` ([checkout config](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#client-configuration)).

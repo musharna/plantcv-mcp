@@ -6,6 +6,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- Install on Python 3.14: PlantCV 4.11.3 needs SciPy below 1.16, which has no
+  3.14 wheels, so `uvx plantcv-mcp` on a 3.14 default failed building SciPy.
+  The README's launch commands and the registry entry now pass `--python 3.13`,
+  and `.python-version` sets 3.13 for checkouts.
+
 ## [1.17.0] — 2026-10-19
 
 ### Added
