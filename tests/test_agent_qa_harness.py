@@ -136,3 +136,73 @@ def test_tool_argument_names_are_recorded_without_their_values() -> None:
     assert row["valid"]
     assert row["tool_arg_names"] == [["image_path", "rules"]]
     assert "/x/image.png" not in json.dumps(row["tool_arg_names"])
+
+
+def test_model_flag_keeps_the_default_and_routes_other_models_to_their_own_runs() -> (
+    None
+):
+    """--model runs every arm on another model; its transcripts must not
+    overwrite the default model's runs/."""
+    import run
+
+    assert run.DEFAULT_MODEL == "claude-opus-5-5"
+    try:
+        run.set_model("claude-haiku-5-5")
+        assert run.MODEL == "claude-haiku-5-5"
+        assert run.RUNS == run.ARTIFACTS / "runs-claude-haiku-5-5"
+        run.set_model(run.DEFAULT_MODEL)
+        assert run.RUNS == run.ARTIFACTS / "runs"
+    finally:
+        run.set_model(run.DEFAULT_MODEL)
+
+
+def _rl_event(status: str, five: float, seven: float) -> dict:
+    return {
+        "type": "rate_limit_event",
+        "rate_limit_info": {
+            "status": status,
+            "resetsAt": 2000,
+            "unifiedWindows": {
+                "five_hour": {"utilization": five, "resetsAt": 1000},
+                "seven_day": {"utilization": seven, "resetsAt": 2000},
+            },
+        },
+    }
+
+
+def test_only_a_rejection_before_any_answer_is_an_api_failure() -> None:
+    """A rate-limit rejection that ended the run before the model answered is
+    a harness failure (re-run once); one after an answer, or no rejection, is
+    a run like any other."""
+    import run
+
+    answer = {"type": "assistant", "message": {"content": []}}
+    rejected = _rl_event("rejected", 1.0, 0.5)
+    assert run.api_failure([rejected])
+    assert not run.api_failure([answer, rejected])
+    assert not run.api_failure([_rl_event("allowed", 0.2, 0.5)])
+    got = run.rate_limit([_rl_event("allowed", 0.2, 0.5), rejected])
+    assert got == {"status": "rejected", "five_hour": 1.0, "seven_day": 0.5,
+                   "resets_at": 1000}  # fmt: skip
+
+
+def test_usage_windows_pause_and_stop_the_sweep(tmp_path, monkeypatch) -> None:
+    """five_hour at 0.85 sleeps until its reset and logs the pause; below, no
+    pause. seven_day at 0.80 stops the sweep: a run not yet begun returns None."""
+    import run
+
+    slept: list[float] = []
+    monkeypatch.setattr(run.time, "sleep", slept.append)
+    monkeypatch.setattr(run.time, "time", lambda: 400.0)
+    monkeypatch.setattr(run, "PAUSES", tmp_path / "pauses.jsonl")
+    try:
+        run.pause_if_limited(run.rate_limit([_rl_event("allowed", 0.84, 0.79)]), "a")
+        assert slept == [] and not run.STOP.is_set()
+        run.pause_if_limited(run.rate_limit([_rl_event("allowed", 0.85, 0.79)]), "b")
+        assert slept == [600 + 120] and not run.STOP.is_set()
+        assert json.loads((tmp_path / "pauses.jsonl").read_text())["after"] == "b"
+        run.pause_if_limited(run.rate_limit([_rl_event("allowed", 0.1, 0.80)]), "c")
+        assert run.STOP.is_set() and len(slept) == 1
+        assert run.run_one("bare", {"id": "q01"}, 1) is None
+    finally:
+        run.STOP.clear()
