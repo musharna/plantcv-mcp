@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.17.0] — 2026-10-19
+
 ### Added
 
 - `segment(rules=[...], combine="or"|"and")`: threshold several channels
@@ -59,6 +61,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   each tool under its own prefix (`mcp__plantcv__zoom_image` in Claude Code).
   In the 2026-10-18 benchmark, 23 runs copied the bare name `zoom_image` from
   the instructions, and each call was refused as an unknown tool.
+
+### Changed
+
+- README shorter, with the benchmark chart; the tools table and guard rationale moved to the guide.
 
 ## [1.16.1] — 2026-09-26
 
