@@ -23,6 +23,41 @@ so a single color cut with no model already answers 28 of the 46 questions.
 
 ![Right, wrong, declined or invalid per setup](agent_qa.png)
 
+## Haiku and Sonnet re-run 2026-10-20
+
+Does the server lift a weaker model? Pre-registered in
+[`PREREG_2026-10-20_model-tiers.md`](PREREG_2026-10-20_model-tiers.md):
+release 1.17.1 (tag v1.17.1, run from git with `--exclude-newer 2026-10-17`),
+all three setups re-run on each model, interleaved, 3 runs of the same 46
+questions. A win needs a significant lift (Holm over the two models) on one
+model and no significant loss on the other.
+
+**Haiku 5.5** ([`haiku_2026-10-20/`](haiku_2026-10-20/)): 414 runs, 0 invalid,
+0 leak hits, $0.46 in all.
+
+| Setup | Right | Wrong | Questions right in all runs | Share right, all 46 | The 18 a color cut misses | Cost / answer, median |
+|---|---|---|---|---|---|---|
+| Claude alone | 0 | 0 (138 UNKNOWN) | 0 | 0% | 0% | $0.0002 |
+| Claude + Bash/PlantCV/OpenCV + web | 110 | 28 | 32 | 79.7% [68.8, 89.2] | 55.6% [35.2, 75.9] | $0.0010 |
+| Claude + plantcv-mcp + Read | 121 | 17 | 38 | 87.7% [79.0, 95.7] | 79.6% [63.0, 94.4] | $0.0019 |
+
+- **Primary:** 9 questions right in every run with the server only, 3 with
+  Bash only; exact McNemar p = 0.146 (raw), paired difference +13.0 points
+  [0.0, +28.3]. Not significant. Counting invalid runs as wrong changes
+  nothing (no run was invalid).
+- **Mechanism:** a median of 3 server calls per run. 29 of 138 server runs
+  made none and answered from Read alone (12 tray, 8 extent, 8 leaf count; 26
+  right). No call used a bare tool name (10-18: 25 runs did).
+- **Against Opus + Bash** (10-18 rows, not run together): Haiku + server 38
+  questions right in every run, Opus + Bash 44 (0 to 6, p = 0.031). The
+  pre-registered margin (≥ 42) fails: the server does not make Haiku a
+  substitute for Opus here. Haiku + server costs $0.0019 an answer against
+  Opus + Bash's $0.038 ([`substitute/`](haiku_2026-10-20/substitute/)).
+
+**Sonnet 5.5:** pending.
+
+![Right or wrong per setup, Haiku 5.5](haiku_2026-10-20/agent_qa.png)
+
 ## Re-run 2026-10-18 (server 051aff0)
 
 Pre-registered in [`PREREG_2026-10-18.md`](PREREG_2026-10-18.md) before the
