@@ -132,3 +132,10 @@ Received after this file was pushed and after the Haiku sweep started at
   0.90`; Haiku keeps 0.80). It is read from every run's transcript; if reached,
   the sweep stops, its rows are kept and reported, and the unrun triples are
   listed as not run.
+- **Pause fix, ~23:20 EDT, before any Sonnet run** (CI review finding): with
+  `--workers 2` the five-hour pause slept only the worker that saw it. It now
+  holds every worker before its next run. The Haiku sweep never reached it
+  (five_hour at most 0.20, no rejection, no pause).
+- **Sonnet deferred** by the coordinator at 22:50 EDT (seven_day 0.84): the
+  other servers' Haiku sweeps run first, and Sonnet runs on whatever budget is
+  left, still stopping at 0.90.

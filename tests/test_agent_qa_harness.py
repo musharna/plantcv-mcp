@@ -188,21 +188,26 @@ def test_only_a_rejection_before_any_answer_is_an_api_failure() -> None:
 
 def test_usage_windows_pause_and_stop_the_sweep(tmp_path, monkeypatch) -> None:
     """five_hour at 0.85 sleeps until its reset and logs the pause; below, no
-    pause. seven_day at 0.80 stops the sweep: a run not yet begun returns None."""
+    pause. seven_day at 0.80 stops the sweep: a run not yet begun returns None. A pause holds every
+    worker: a run another worker starts waits for the reset too."""
     import run
 
     slept: list[float] = []
     monkeypatch.setattr(run.time, "sleep", slept.append)
     monkeypatch.setattr(run.time, "time", lambda: 400.0)
     monkeypatch.setattr(run, "PAUSES", tmp_path / "pauses.jsonl")
+    monkeypatch.setattr(run, "PAUSE_UNTIL", 0.0)
     try:
         run.pause_if_limited(run.rate_limit([_rl_event("allowed", 0.84, 0.79)]), "a")
         assert slept == [] and not run.STOP.is_set()
+        run.wait_for_pause()
+        assert slept == []  # no pause set: a run starts at once
         run.pause_if_limited(run.rate_limit([_rl_event("allowed", 0.85, 0.79)]), "b")
         assert slept == [600 + 120] and not run.STOP.is_set()
         assert json.loads((tmp_path / "pauses.jsonl").read_text())["after"] == "b"
         run.pause_if_limited(run.rate_limit([_rl_event("allowed", 0.1, 0.80)]), "c")
         assert run.STOP.is_set() and len(slept) == 1
         assert run.run_one("bare", {"id": "q01"}, 1) is None
+        assert slept == [720, 720]  # the next run waited for the same reset
     finally:
         run.STOP.clear()

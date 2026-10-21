@@ -71,13 +71,16 @@ SERVER_SPEC: str | None = None
 EXCLUDE_NEWER: str | None = None
 # The account's usage windows, read from each transcript's rate_limit_event.
 # A run that sees the five-hour window at or above PAUSE_AT, or a rejected
-# request, makes the sweep sleep until the window resets (each pause is logged
-# in pauses.jsonl beside the results). A seven-day window at or above STOP_AT
+# request, pauses the whole sweep until the window resets: it sets PAUSE_UNTIL,
+# and every worker waits for it before starting a run (a run already under way
+# on another worker finishes). Each pause is logged in pauses.jsonl. A seven-day window at or above STOP_AT
 # stops the sweep: runs not yet started are left for a resume.
 PAUSE_AT = 0.85
 STOP_AT = 0.80
 PAUSES: Path | None = None
 STOP = threading.Event()
+PAUSE_UNTIL = 0.0
+PAUSE_LOCK = threading.Lock()
 
 
 def server_uvx() -> list[str]:
@@ -388,18 +391,30 @@ def pause_if_limited(rl: dict[str, Any], where: str) -> None:
     hot = rl["status"] == "rejected" or (rl["five_hour"] or 0) >= PAUSE_AT
     if not hot or not rl["resets_at"]:
         return
-    wait = max(0.0, rl["resets_at"] - time.time()) + 120
+    global PAUSE_UNTIL
+    with PAUSE_LOCK:
+        PAUSE_UNTIL = max(PAUSE_UNTIL, rl["resets_at"] + 120)
+    wait = max(0.0, PAUSE_UNTIL - time.time())
     start = dt.datetime.now().astimezone()
     print(f"pausing {wait / 60:.0f} min after {where}: {rl}", flush=True)
     if PAUSES is not None:
         with PAUSES.open("a") as fh:
             fh.write(json.dumps({"after": where, "at": start.isoformat(timespec="seconds"),
                                  "sleep_s": round(wait), **rl}) + "\n")  # fmt: skip
-    time.sleep(wait)
+    wait_for_pause()
+
+
+def wait_for_pause() -> None:
+    """Sleep until PAUSE_UNTIL, if a pause is set; every worker calls this
+    before it starts a run, so one worker's pause holds the whole sweep."""
+    wait = PAUSE_UNTIL - time.time()
+    if wait > 0:
+        time.sleep(wait)
 
 
 def run_one(arm: str, q: dict[str, Any], rep: int) -> dict[str, Any] | None:
     """One attempt, scored; None if the sweep was stopped before it began."""
+    wait_for_pause()
     if STOP.is_set():
         return None
     out = RUNS / arm / f"{q['id']}-{rep}.jsonl"
