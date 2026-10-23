@@ -404,6 +404,26 @@ def pause_if_limited(rl: dict[str, Any], where: str) -> None:
     wait_for_pause()
 
 
+def spend_stop() -> str | None:
+    """Why an API-billed sweep must stop before its next run, or None.
+
+    Set ``BENCH_SPEND_GATE`` to the shared spend meter's script and each run
+    first asks it (``check``, track from ``BENCH_TRACK``); any non-zero exit
+    (spend cap, billing violation, checkpoint) stops the sweep cleanly.
+    """
+    gate = os.environ.get("BENCH_SPEND_GATE")
+    if not gate:
+        return None
+    p = subprocess.run(
+        [sys.executable, gate, "check"], capture_output=True, text=True, check=False
+    )
+    return (
+        None
+        if p.returncode == 0
+        else (p.stderr.strip() or f"spend gate exit {p.returncode}")
+    )
+
+
 def wait_for_pause() -> None:
     """Sleep until PAUSE_UNTIL, if a pause is set; every worker calls this
     before it starts a run, so one worker's pause holds the whole sweep."""
@@ -415,6 +435,10 @@ def wait_for_pause() -> None:
 def run_one(arm: str, q: dict[str, Any], rep: int) -> dict[str, Any] | None:
     """One attempt, scored; None if the sweep was stopped before it began."""
     wait_for_pause()
+    why = spend_stop()
+    if why and not STOP.is_set():
+        STOP.set()
+        print(f"STOP before {arm} {q['id']} rep{rep}: {why}", flush=True)
     if STOP.is_set():
         return None
     out = RUNS / arm / f"{q['id']}-{rep}.jsonl"
@@ -777,7 +801,7 @@ def main() -> None:
     if failures:
         sys.exit(f"{len(failures)} runs stopped by a harness error: {failures[:3]}")
     if STOP.is_set():
-        sys.exit(f"stopped: seven_day usage reached {STOP_AT}; resume after the reset")
+        sys.exit("stopped by the usage or spend gate (see the STOP line above); resume after it clears")
     sys.exit(0)
 
 

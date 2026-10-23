@@ -211,3 +211,26 @@ def test_usage_windows_pause_and_stop_the_sweep(tmp_path, monkeypatch) -> None:
         assert slept == [720, 720]  # the next run waited for the same reset
     finally:
         run.STOP.clear()
+
+
+def test_spend_gate_stops_the_sweep_before_a_run(tmp_path, monkeypatch) -> None:
+    """API-billed sweeps (2026-10-23): run_one asks BENCH_SPEND_GATE first; a
+    non-zero exit stops the sweep before the run starts. Under the cap, or
+    with the gate unset, nothing stops."""
+    import run
+
+    gate = tmp_path / "gate.py"
+    gate.write_text("import os, sys\nprint('cap reached', file=sys.stderr)\nsys.exit(int(os.environ['GATE_RC']))\n")
+    monkeypatch.setattr(run, "PAUSE_UNTIL", 0.0)
+    monkeypatch.setenv("BENCH_SPEND_GATE", str(gate))
+    try:
+        monkeypatch.setenv("GATE_RC", "0")
+        assert run.spend_stop() is None  # under the cap
+        monkeypatch.setenv("GATE_RC", "3")
+        assert run.spend_stop() == "cap reached"
+        assert run.run_one("bare", {"id": "q01"}, 1) is None
+        assert run.STOP.is_set()
+        monkeypatch.delenv("BENCH_SPEND_GATE")
+        assert run.spend_stop() is None  # unset: subscription sweeps unchanged
+    finally:
+        run.STOP.clear()
