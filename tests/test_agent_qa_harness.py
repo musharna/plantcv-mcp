@@ -220,7 +220,9 @@ def test_spend_gate_stops_the_sweep_before_a_run(tmp_path, monkeypatch) -> None:
     import run
 
     gate = tmp_path / "gate.py"
-    gate.write_text("import os, sys\nprint('cap reached', file=sys.stderr)\nsys.exit(int(os.environ['GATE_RC']))\n")
+    gate.write_text(
+        "import os, sys\nprint('cap reached', file=sys.stderr)\nsys.exit(int(os.environ['GATE_RC']))\n"
+    )
     monkeypatch.setattr(run, "PAUSE_UNTIL", 0.0)
     monkeypatch.setenv("BENCH_SPEND_GATE", str(gate))
     try:

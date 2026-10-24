@@ -801,7 +801,9 @@ def main() -> None:
     if failures:
         sys.exit(f"{len(failures)} runs stopped by a harness error: {failures[:3]}")
     if STOP.is_set():
-        sys.exit("stopped by the usage or spend gate (see the STOP line above); resume after it clears")
+        sys.exit(
+            "stopped by the usage or spend gate (see the STOP line above); resume after it clears"
+        )
     sys.exit(0)
 
 
