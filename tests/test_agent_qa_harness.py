@@ -208,7 +208,39 @@ def test_usage_windows_pause_and_stop_the_sweep(tmp_path, monkeypatch) -> None:
         run.pause_if_limited(run.rate_limit([_rl_event("allowed", 0.1, 0.80)]), "c")
         assert run.STOP.is_set() and len(slept) == 1
         assert run.run_one("bare", {"id": "q01"}, 1) is None
-        assert slept == [720, 720]  # the next run waited for the same reset
+        assert slept == [720]  # a stopped sweep does not sleep out the pause
+    finally:
+        run.STOP.clear()
+
+
+def test_a_run_waits_for_the_pause_then_asks_the_spend_gate_again(
+    tmp_path, monkeypatch
+) -> None:
+    """A pause holds every worker, and the spend gate is asked again once it
+    clears: here the gate passes before the pause and refuses after it, so the
+    run sleeps out the pause and then stops without starting."""
+    import run
+
+    calls = tmp_path / "calls"
+    gate = tmp_path / "gate.py"
+    gate.write_text(
+        "import pathlib, sys\n"
+        f"p = pathlib.Path({str(calls)!r})\n"
+        "n = int(p.read_text()) + 1 if p.exists() else 1\n"
+        "p.write_text(str(n))\n"
+        "print('cap reached', file=sys.stderr)\n"
+        "sys.exit(0 if n == 1 else 3)\n"
+    )
+    slept: list[float] = []
+    monkeypatch.setattr(run.time, "sleep", slept.append)
+    monkeypatch.setattr(run.time, "time", lambda: 400.0)
+    monkeypatch.setattr(run, "PAUSE_UNTIL", 1120.0)
+    monkeypatch.setenv("BENCH_SPEND_GATE", str(gate))
+    try:
+        assert run.run_one("bare", {"id": "q01"}, 1) is None
+        assert slept == [720]  # the run waited for the pause first
+        assert calls.read_text() == "2"  # and asked the gate again after it
+        assert run.STOP.is_set()
     finally:
         run.STOP.clear()
 

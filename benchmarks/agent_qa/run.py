@@ -432,14 +432,26 @@ def wait_for_pause() -> None:
         time.sleep(wait)
 
 
+def stopped_before(arm: str, q: dict[str, Any], rep: int) -> bool:
+    """True if the sweep is stopped, asking the spend gate if it is not yet."""
+    if not STOP.is_set():
+        why = spend_stop()
+        if why and not STOP.is_set():
+            STOP.set()
+            print(f"STOP before {arm} {q['id']} rep{rep}: {why}", flush=True)
+    return STOP.is_set()
+
+
 def run_one(arm: str, q: dict[str, Any], rep: int) -> dict[str, Any] | None:
-    """One attempt, scored; None if the sweep was stopped before it began."""
+    """One attempt, scored; None if the sweep was stopped before it began.
+
+    The stop checks run before a pending pause, so a stopped sweep returns at
+    once rather than sleeping out the pause, and again after it, so the spend
+    gate is read when the billed call is about to fire."""
+    if stopped_before(arm, q, rep):
+        return None
     wait_for_pause()
-    why = spend_stop()
-    if why and not STOP.is_set():
-        STOP.set()
-        print(f"STOP before {arm} {q['id']} rep{rep}: {why}", flush=True)
-    if STOP.is_set():
+    if stopped_before(arm, q, rep):
         return None
     out = RUNS / arm / f"{q['id']}-{rep}.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)
