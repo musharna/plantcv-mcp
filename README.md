@@ -81,8 +81,8 @@ the server keeps, to your imagery: `plantcv-mcp --root /data/phenotyping`. `--no
 
 ## What the benchmark shows
 
-Claude was compared with itself writing its own code (mostly OpenCV) in a Python environment we
-set up with the same PlantCV and OpenCV, on 46 measurement questions about rendered plant
+Claude with the server was compared with Claude writing its own code (mostly OpenCV) in a
+Python environment we set up with the same PlantCV and OpenCV, on 46 measurement questions about rendered plant
 images, 3 runs each. A tie means the server matches that result without you building the
 environment. Questions right in every run, server against Claude's own code: Claude Haiku 5.5
 38 against 32, Sonnet 5.5 33 against 28, Opus 5.5 42 against 44. None is separated
