@@ -54,7 +54,33 @@ model and no significant loss on the other.
   substitute for Opus here. Haiku + server costs $0.0019 an answer against
   Opus + Bash's $0.038 ([`substitute/`](haiku_2026-10-20/substitute/)).
 
-**Sonnet 5.5:** pending.
+**Sonnet 5.5** ([`sonnet_2026-10-20/`](sonnet_2026-10-20/)): 414 runs on
+2026-10-23 and 10-24, on an API key under a spend gate (the PREREG's
+amendments); 8 invalid (all Claude alone, 900 s timeouts), 0 leak hits, $32.28
+in all.
+
+| Setup | Right | Wrong | Questions right in all runs | Share right, all 46 | The 18 a color cut misses | Cost / answer, median |
+|---|---|---|---|---|---|---|
+| Claude alone | 0 | 0 (68 UNKNOWN, 62 no answer, 8 invalid) | 0 | 0% | 0% | $0.0075 |
+| Claude + Bash/PlantCV/OpenCV + web | 100 | 38 | 28 | 72.5% [60.9, 83.3] | 72.2% [53.7, 88.9] | $0.0103 |
+| Claude + plantcv-mcp + Read | 105 | 33 | 33 | 76.1% [63.8, 87.0] | 72.2% [53.7, 90.7] | $0.0236 |
+
+- **Primary:** 8 questions right in every run with the server only, 3 with
+  Bash only; exact McNemar p = 0.227 (raw), paired difference +10.9 points
+  [−2.2, +23.9]. Not significant. No server or Bash run was invalid.
+- **Mechanism:** a median of 3 server calls per run; 31 of 138 server runs
+  made none and answered from Read alone (22 right). 12 runs used a bare tool
+  name (Haiku: 0).
+- **Against Opus + Bash** (10-18 rows, not run together): Sonnet + server 33,
+  Opus + Bash 44 (0 to 11, p = 0.001); the margin (≥ 42) fails.
+- **Claude alone** cost $27.12 of the sweep's $32.28. With no tools, Sonnet
+  sometimes wrote tool calls as plain text and kept going: 18 runs cost about
+  $1.50 each (up to 130,000 output tokens in 530 to 670 s), and the 8 timeouts
+  are runs cut off at 900 s, at least one of them mid-way through the same
+  kind of text.
+
+**Win rule across both models: TIE.** Holm-adjusted McNemar p: Haiku 0.29,
+Sonnet 0.29. No lift and no loss at either.
 
 ![Right or wrong per setup, Haiku 5.5](haiku_2026-10-20/agent_qa.png)
 
