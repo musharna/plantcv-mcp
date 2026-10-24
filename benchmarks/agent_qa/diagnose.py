@@ -171,6 +171,27 @@ def mechanism(results: Path) -> None:
         cats = sorted({r["category"] for r in used})
         right = sum(r["verdict"] == "right" for r in used)
         print(f"{label}\t{len(used)}\t{len(mcp)}\t{right}\t{','.join(cats)}")
+    # Did the server get used at all? Server calls per valid run, the runs
+    # with none (the mechanism did not fire), and calls to a server tool by its
+    # bare name (no mcp__plantcv__ prefix), which Claude Code refuses. Other
+    # refused names (a built-in such as Bash) are not counted as bare names.
+    n = [sum(c.startswith("mcp__plantcv__") for c in r["tool_calls"]) for r in mcp]
+    bare = []
+    for r in mcp:
+        names = {
+            t.removeprefix("mcp__plantcv__")
+            for t in r["tools_available"]
+            if t.startswith("mcp__plantcv__")
+        }
+        if any(c in names for c in r["tool_calls"]):
+            bare.append(r)
+    if n:
+        print(
+            f"server calls per valid mcp run: median {st.median(n)}, mean "
+            f"{st.mean(n):.2f}; runs with 0 server calls: {n.count(0)} of {len(n)} "
+            f"({sum(r['verdict'] == 'right' for r, k in zip(mcp, n, strict=True) if k == 0)} right); "
+            f"runs with a bare-name call: {len(bare)}"
+        )
 
 
 def main() -> None:

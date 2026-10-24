@@ -26,6 +26,7 @@ so a Bash call that searches the disk does not find them beside the key.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import hashlib
 import json
 import os
@@ -68,6 +69,18 @@ SERVER_SPEC: str | None = None
 # PyPI at that time, so a git install resolves the same NumPy/scikit-image as
 # the alt arm's venv (check_versions asserts they match).
 EXCLUDE_NEWER: str | None = None
+# The account's usage windows, read from each transcript's rate_limit_event.
+# A run that sees the five-hour window at or above PAUSE_AT, or a rejected
+# request, pauses the whole sweep until the window resets: it sets PAUSE_UNTIL,
+# and every worker waits for it before starting a run (a run already under way
+# on another worker finishes). Each pause is logged in pauses.jsonl. A seven-day window at or above STOP_AT
+# stops the sweep: runs not yet started are left for a resume.
+PAUSE_AT = 0.85
+STOP_AT = 0.80
+PAUSES: Path | None = None
+STOP = threading.Event()
+PAUSE_UNTIL = 0.0
+PAUSE_LOCK = threading.Lock()
 
 
 def server_uvx() -> list[str]:
@@ -110,6 +123,17 @@ def set_server_spec(spec: str | None, exclude_newer: str | None) -> None:
                 f"--server-spec must be {SPEC_PREFIX}<full 40-hex sha>, got {spec!r}"
             )
     SERVER_SPEC, EXCLUDE_NEWER = spec, exclude_newer
+
+
+DEFAULT_MODEL = MODEL
+
+
+def set_model(model: str) -> None:
+    """--model runs every arm on another model. Its transcripts go to their own
+    runs-<model>/ so they never overwrite the default model's."""
+    global MODEL, RUNS
+    MODEL = model
+    RUNS = ARTIFACTS / ("runs" if model == DEFAULT_MODEL else f"runs-{model}")
 
 
 PLANTCV = "plantcv==4.11.3"  # the version plantcv-mcp 1.16.1 pins, so both arms run the same PlantCV
@@ -329,7 +353,106 @@ def assess(arm: str, stdout: str, rc: int | str) -> dict[str, Any]:
     }
 
 
-def run_one(arm: str, q: dict[str, Any], rep: int) -> dict[str, Any]:
+def rate_limit(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """The last rate_limit_event's status and five-hour / seven-day windows."""
+    info = next(
+        (e["rate_limit_info"] for e in reversed(events)
+         if e.get("type") == "rate_limit_event" and e.get("rate_limit_info")),
+        {},
+    )  # fmt: skip
+    win = info.get("unifiedWindows") or {}
+    return {
+        "status": info.get("status"),
+        "five_hour": (win.get("five_hour") or {}).get("utilization"),
+        "seven_day": (win.get("seven_day") or {}).get("utilization"),
+        "resets_at": (win.get("five_hour") or {}).get("resetsAt")
+        or info.get("resetsAt"),
+    }
+
+
+def api_failure(events: list[dict[str, Any]]) -> bool:
+    """The API ended the run before the model answered: a request was rejected
+    for the rate limit and no assistant message came back. Read from the
+    transcript, never from the reply or its score."""
+    rejected = rate_limit(events)["status"] == "rejected"
+    answered = any(e.get("type") == "assistant" for e in events)
+    return rejected and not answered
+
+
+def pause_if_limited(rl: dict[str, Any], where: str) -> None:
+    """Sleep until the five-hour window resets when it is at PAUSE_AT or a
+    request was rejected, logging the pause; set STOP when the seven-day
+    window is at STOP_AT."""
+    if (rl["seven_day"] or 0) >= STOP_AT and not STOP.is_set():
+        STOP.set()
+        print(
+            f"STOP after {where}: seven_day {rl['seven_day']} >= {STOP_AT}", flush=True
+        )
+    hot = rl["status"] == "rejected" or (rl["five_hour"] or 0) >= PAUSE_AT
+    if not hot or not rl["resets_at"]:
+        return
+    global PAUSE_UNTIL
+    with PAUSE_LOCK:
+        PAUSE_UNTIL = max(PAUSE_UNTIL, rl["resets_at"] + 120)
+    wait = max(0.0, PAUSE_UNTIL - time.time())
+    start = dt.datetime.now().astimezone()
+    print(f"pausing {wait / 60:.0f} min after {where}: {rl}", flush=True)
+    if PAUSES is not None:
+        with PAUSES.open("a") as fh:
+            fh.write(json.dumps({"after": where, "at": start.isoformat(timespec="seconds"),
+                                 "sleep_s": round(wait), **rl}) + "\n")  # fmt: skip
+    wait_for_pause()
+
+
+def spend_stop() -> str | None:
+    """Why an API-billed sweep must stop before its next run, or None.
+
+    Set ``BENCH_SPEND_GATE`` to the shared spend meter's script and each run
+    first asks it (``check``, track from ``BENCH_TRACK``); any non-zero exit
+    (spend cap, billing violation, checkpoint) stops the sweep cleanly.
+    """
+    gate = os.environ.get("BENCH_SPEND_GATE")
+    if not gate:
+        return None
+    p = subprocess.run(
+        [sys.executable, gate, "check"], capture_output=True, text=True, check=False
+    )
+    return (
+        None
+        if p.returncode == 0
+        else (p.stderr.strip() or f"spend gate exit {p.returncode}")
+    )
+
+
+def wait_for_pause() -> None:
+    """Sleep until PAUSE_UNTIL, if a pause is set; every worker calls this
+    before it starts a run, so one worker's pause holds the whole sweep."""
+    wait = PAUSE_UNTIL - time.time()
+    if wait > 0:
+        time.sleep(wait)
+
+
+def stopped_before(arm: str, q: dict[str, Any], rep: int) -> bool:
+    """True if the sweep is stopped, asking the spend gate if it is not yet."""
+    if not STOP.is_set():
+        why = spend_stop()
+        if why and not STOP.is_set():
+            STOP.set()
+            print(f"STOP before {arm} {q['id']} rep{rep}: {why}", flush=True)
+    return STOP.is_set()
+
+
+def run_one(arm: str, q: dict[str, Any], rep: int) -> dict[str, Any] | None:
+    """One attempt, scored; None if the sweep was stopped before it began.
+
+    The stop checks run before a pending pause, so a stopped sweep returns at
+    once rather than sleeping out the pause, and again after it, so the spend
+    gate is read when the billed call is about to fire."""
+    if stopped_before(arm, q, rep):
+        return None
+    wait_for_pause()
+    if stopped_before(arm, q, rep):
+        return None
     out = RUNS / arm / f"{q['id']}-{rep}.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="agentqa-") as d:
@@ -381,6 +504,9 @@ def run_one(arm: str, q: dict[str, Any], rep: int) -> dict[str, Any]:
         seconds = round(time.monotonic() - t0, 1)
     out.write_text(stdout)
     row = assess(arm, stdout, rc)
+    events = [json.loads(ln) for ln in stdout.splitlines() if ln.startswith("{")]
+    rl = rate_limit(events)
+    pause_if_limited(rl, f"{arm} {q['id']} rep{rep}")
     return {
         "arm": arm,
         "qid": q["id"],
@@ -390,6 +516,10 @@ def run_one(arm: str, q: dict[str, Any], rep: int) -> dict[str, Any]:
         "prompt_note": ARM_NOTE[arm],
         "server_spec": (SERVER_SPEC or SERVER) if arm == "mcp" else None,
         "exclude_newer": EXCLUDE_NEWER if arm == "mcp" else None,
+        # Asked for; the model served is "model", from the init event.
+        "model_requested": MODEL,
+        "rate_limit": rl,
+        "api_failure": api_failure(events),
         **row,
         **score(q, row["reply"]),
     }
@@ -442,6 +572,38 @@ def rescore(results: Path, by_id: dict[str, dict[str, Any]]) -> None:
                   f" ({new['value']!r}, slip {new['slip']})")  # fmt: skip
         r.update(new)
     results.write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+
+def drop_api_failures(results: Path) -> None:
+    """Move every row the API ended to results.api_failures.jsonl, unless its
+    triple was already dropped once (then it stays, and counts as invalid)."""
+    side = results.with_name("results.api_failures.jsonl")
+    dropped = set()
+    if side.exists():
+        for ln in side.read_text().splitlines():
+            r = json.loads(ln)
+            dropped.add((r["arm"], r["qid"], r["rep"]))
+    rows = [json.loads(ln) for ln in results.read_text().splitlines()]
+    keep, move = [], []
+    for r in rows:
+        t = (r["arm"], r["qid"], r["rep"])
+        (move if r.get("api_failure") and t not in dropped else keep).append(r)
+    with side.open("a") as fh:
+        fh.writelines(json.dumps(r) + "\n" for r in move)
+    results.write_text("".join(json.dumps(r) + "\n" for r in keep))
+    print(
+        f"moved {len(move)} API-failure rows to {side.name}; resume to re-run them once"
+    )
+
+
+def record_models_served(results: Path) -> None:
+    """Add to versions.json the models the init events reported, so the file
+    says what was served and not only what was asked for."""
+    vf = results.parent / "versions.json"
+    rows = [json.loads(ln) for ln in results.read_text().splitlines()]
+    v = json.loads(vf.read_text())
+    v["models_served"] = sorted({str(r.get("model")) for r in rows})
+    vf.write_text(json.dumps(v, indent=1) + "\n")
 
 
 def make_alt_venv() -> None:
@@ -522,6 +684,7 @@ def check_alt_venv() -> None:
 
 
 def main() -> None:
+    global PAUSES, STOP_AT
     ap = argparse.ArgumentParser()
     ap.add_argument("--arms", default="bare,alt,mcp")
     ap.add_argument("--reps", type=int, default=3)
@@ -551,11 +714,30 @@ def main() -> None:
         "--exclude-newer",
         help="uvx --exclude-newer for the server environment's dependencies",
     )
+    ap.add_argument("--model", default=MODEL, help=f"claude --model (default {MODEL})")
+    ap.add_argument(
+        "--drop-api-failures",
+        action="store_true",
+        help="move rows the API ended (api_failure) to results.api_failures.jsonl "
+        "so a resume re-runs each once, run nothing",
+    )
+    ap.add_argument(
+        "--stop-at",
+        type=float,
+        default=STOP_AT,
+        help=f"stop the sweep when seven_day usage reaches this (default {STOP_AT})",
+    )
     a = ap.parse_args()
+    PAUSES = Path(a.results).parent / "pauses.jsonl"
+    STOP_AT = a.stop_at
+    set_model(a.model)
     set_server_spec(a.server_spec, a.exclude_newer)
     questions = json.loads((HERE / "questions.json").read_text())["questions"]
     if a.make_alt_venv:
         make_alt_venv()
+        return
+    if a.drop_api_failures:
+        drop_api_failures(Path(a.results))
         return
     if a.rescore:
         rescore(Path(a.results), {q["id"]: q for q in questions})
@@ -615,6 +797,8 @@ def main() -> None:
                     f"[{n}/{len(todo)}] HARNESS ERROR, not recorded: {exc}", flush=True
                 )
                 continue
+            if r is None:  # not started: the sweep was stopped
+                continue
             with lock, results.open("a") as fh:
                 fh.write(json.dumps(r) + "\n")
             print(
@@ -624,8 +808,14 @@ def main() -> None:
                 + ("" if r["valid"] else f" INVALID ({r['invalid_reason']})"),
                 flush=True,
             )
+    if results.exists() and (results.parent / "versions.json").exists():
+        record_models_served(results)
     if failures:
         sys.exit(f"{len(failures)} runs stopped by a harness error: {failures[:3]}")
+    if STOP.is_set():
+        sys.exit(
+            "stopped by the usage or spend gate (see the STOP line above); resume after it clears"
+        )
     sys.exit(0)
 
 

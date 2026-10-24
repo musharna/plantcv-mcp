@@ -1,0 +1,3 @@
+subset	questions_paired	mcp_all_right	alt_all_right	only_mcp	only_alt	exact_mcnemar_p	diff_share	diff_lo	diff_hi
+all	46	33	44	0	11	0.000977	-0.2391	-0.3696	-0.1304
+colour_cut_wrong	18	12	16	0	4	0.125	-0.2222	-0.4444	-0.0556
