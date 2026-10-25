@@ -170,6 +170,23 @@ REQUIRED_TOOLS = {
     "alt": {"Bash", "Read", "WebSearch", "WebFetch"},
     "mcp": {"Read"},
 }
+WEB_TOOLS = ("WebSearch", "WebFetch")
+# A question set can turn the alt arm's web tools off ("alt_web": false in its
+# questions file): the field set's truth is public online. Set once by main()
+# from the questions file before any run, like SERVER_SPEC.
+ALT_WEB = True
+
+
+def set_alt_web(on: bool) -> None:
+    global ALT_WEB
+    ALT_WEB = bool(on)
+    REQUIRED_TOOLS["alt"] = {"Bash", "Read", *(WEB_TOOLS if ALT_WEB else ())}
+
+
+def alt_tools() -> str:
+    return ",".join(["Bash", "Read", *(WEB_TOOLS if ALT_WEB else ())])
+
+
 # Anything that could carry the answer key into a run: the key and builder,
 # the benchmark directory (local, and on GitHub for WebFetch/Bash curl), the
 # worktree, and the artifacts directory. Scanned in every tool input AND
@@ -183,6 +200,21 @@ LEAK_MARKERS = (
     "/benchmarks/",
     "github.com/musharna/plantcv-mcp",
     "raw.githubusercontent.com/musharna",
+)
+# The field set (field_2026-10-24/) is real Aberystwyth trays whose hand
+# annotations and leaf counts are public (Zenodo; CVPPP LCC A4). Matched
+# without case, in every run of every set.
+SOURCE_LEAK_MARKERS = (
+    "zenodo",
+    "zenodo.168158",  # (a bare 168158 could be a pixel count)
+    "records/168158",
+    "aberystwyth",
+    "plant-phenotyping.org",
+    "cvppp",
+    "psi_tray",
+    "_top_gt",
+    "_top-gt",
+    "leaf-evaluation",
 )
 # A tool call whose input mentions one of these could have read the answer key
 # or the server's code instead of measuring the image. Checked per run and
@@ -235,7 +267,7 @@ def arm_flags(arm: str, tmp: Path) -> list[str]:
     if arm == "bare":
         return ["--tools", "", "--strict-mcp-config", "--mcp-config", str(empty)]
     if arm == "alt":
-        tools = "Bash,Read,WebSearch,WebFetch"
+        tools = alt_tools()
         return [
             "--tools", tools, "--allowedTools", tools,
             "--strict-mcp-config", "--mcp-config", str(empty),
@@ -294,7 +326,10 @@ def leaks(events: list[dict[str, Any]]) -> list[str]:
         [json.dumps(u.get("input", {})) for u in tool_uses(events)]
         + tool_results(events)
     )
-    return [m for m in LEAK_MARKERS if m in text]
+    low = text.lower()
+    return [m for m in LEAK_MARKERS if m in text] + [
+        m for m in SOURCE_LEAK_MARKERS if m in low
+    ]
 
 
 def assess(arm: str, stdout: str, rc: int | str) -> dict[str, Any]:
@@ -322,6 +357,8 @@ def assess(arm: str, stdout: str, rc: int | str) -> dict[str, Any]:
             why.append(f"tools present: {sorted(tools)}")
         if not REQUIRED_TOOLS[arm] <= tools:
             why.append(f"missing tools {sorted(REQUIRED_TOOLS[arm] - tools)}")
+        if arm == "alt" and not ALT_WEB and tools & set(WEB_TOOLS):
+            why.append(f"web tools present: {sorted(tools & set(WEB_TOOLS))}")
         if arm == "mcp":
             status = [s.get("status") for s in init.get("mcp_servers") or []]
             if status != ["connected"] or not any(
@@ -442,6 +479,46 @@ def stopped_before(arm: str, q: dict[str, Any], rep: int) -> bool:
     return STOP.is_set()
 
 
+# Where the questions' images live: HERE/images for the rendered set, or the
+# questions file's "images_dir" (the field set keeps its dataset images
+# outside the repo). Set once by main() from the questions file.
+IMAGES = HERE / "images"
+
+
+def prepare_workdir(q: dict[str, Any], tmp: Path) -> Path:
+    """Copy the question's image (renamed image.<ext>) and any extra
+    directories it names into the empty working directory, checking every
+    file against the key's sha256 first. Returns the image's path."""
+    image = tmp / ("image" + Path(q["image"]).suffix)
+    shutil.copyfile(IMAGES / q["image"], image)
+    if hashlib.sha256(image.read_bytes()).hexdigest() != q["sha256"]:
+        raise HarnessError(
+            f"{q['id']}: {IMAGES / q['image']} does not match the questions file; "
+            "rebuild the set"
+        )
+    for name, rel in (q.get("extra_dirs") or {}).items():
+        shutil.copytree(IMAGES / rel, tmp / name)
+    want = q.get("extra_sha256") or {}
+    have = {
+        str(p.relative_to(tmp)): hashlib.sha256(p.read_bytes()).hexdigest()
+        for name in (q.get("extra_dirs") or {})
+        for p in sorted((tmp / name).rglob("*"))
+        if p.is_file()
+    }
+    if have != want:
+        raise HarnessError(f"{q['id']}: extra files differ from the questions file")
+    return image
+
+
+def render_prompt(arm: str, q: dict[str, Any], image: Path) -> str:
+    return (
+        PROMPT.format(
+            question=q["question"], path=image, answer_format=q["answer_format"]
+        )
+        + ARM_NOTE[arm]
+    )
+
+
 def run_one(arm: str, q: dict[str, Any], rep: int) -> dict[str, Any] | None:
     """One attempt, scored; None if the sweep was stopped before it began.
 
@@ -460,19 +537,8 @@ def run_one(arm: str, q: dict[str, Any], rep: int) -> dict[str, Any] | None:
         # config files sit beside it, not in it.
         tmp = Path(d) / "work"
         tmp.mkdir()
-        image = tmp / ("image" + Path(q["image"]).suffix)
-        shutil.copyfile(HERE / "images" / q["image"], image)
-        if hashlib.sha256(image.read_bytes()).hexdigest() != q["sha256"]:
-            raise HarnessError(
-                f"{q['id']}: images/{q['image']} does not match questions.json; "
-                "run build_questions.py"
-            )
-        prompt = (
-            PROMPT.format(
-                question=q["question"], path=image, answer_format=q["answer_format"]
-            )
-            + ARM_NOTE[arm]
-        )
+        image = prepare_workdir(q, tmp)
+        prompt = render_prompt(arm, q, image)
         cmd = [
             "claude", "-p", prompt, "--model", MODEL, "--setting-sources", "",
             "--output-format", "stream-json", "--verbose", "--system-prompt", SYSTEM,
@@ -549,12 +615,12 @@ def audit(results: Path) -> None:
 def oracle(questions: list[dict[str, Any]]) -> None:
     """Positive control before any run: every key answer, written as a reply,
     scores right, and UNKNOWN scores declined. Stops the sweep otherwise."""
-    from score import truth_value
+    from score import truth_answer
 
     bad = [
         q["id"]
         for q in questions
-        if score(q, f"ANSWER: {truth_value(q)}")["verdict"] != "right"
+        if score(q, f"ANSWER: {truth_answer(q)}")["verdict"] != "right"
         or score(q, "ANSWER: UNKNOWN")["verdict"] != "declined"
     ]
     if bad:
@@ -683,6 +749,44 @@ def check_alt_venv() -> None:
         )
 
 
+def load_set(path: Path) -> list[dict[str, Any]]:
+    """Read a questions file and set what it governs: where its images are,
+    whether the alt arm has the web, and (for a named set) the transcripts'
+    directory, so two sets' runs never share one."""
+    global IMAGES, RUNS
+    doc = json.loads(path.read_text())
+    images = doc.get("images_dir")
+    IMAGES = Path(images).expanduser() if images else HERE / "images"
+    set_alt_web(doc.get("alt_web", True))
+    if doc.get("set"):
+        RUNS = RUNS.parent / f"{RUNS.name}-{doc['set']}"
+    return doc["questions"]
+
+
+def dry_run(questions: list[dict[str, Any]], arms: list[str]) -> None:
+    """Everything a sweep would send, with no model call: each question's
+    work directory is built and checked (image and extra files against their
+    sha256), its prompt rendered, and each arm's claude flags printed."""
+    for arm in arms:
+        with tempfile.TemporaryDirectory(prefix="agentqa-dry-") as d:
+            flags = arm_flags(arm, Path(d) / "work")
+        print(
+            f"== arm {arm}: required tools {sorted(REQUIRED_TOOLS[arm])}; flags {flags}"
+        )
+    for q in questions:
+        with tempfile.TemporaryDirectory(prefix="agentqa-dry-") as d:
+            tmp = Path(d) / "work"
+            tmp.mkdir()
+            image = prepare_workdir(q, tmp)
+            files = sorted(
+                str(p.relative_to(tmp)) for p in tmp.rglob("*") if p.is_file()
+            )
+            for arm in arms:
+                print(f"-- {q['id']} [{arm}] work dir: {len(files)} files")
+                print(render_prompt(arm, q, image))
+    print(f"dry run: {len(questions)} questions x {len(arms)} arms, no model called")
+
+
 def main() -> None:
     global PAUSES, STOP_AT
     ap = argparse.ArgumentParser()
@@ -690,7 +794,22 @@ def main() -> None:
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--only", default="", help="comma-separated question ids")
-    ap.add_argument("--results", default=str(HERE / "results.jsonl"))
+    ap.add_argument(
+        "--questions",
+        default=str(HERE / "questions.json"),
+        help="the question set (default the rendered set, questions.json)",
+    )
+    ap.add_argument(
+        "--results",
+        default=None,
+        help="results.jsonl (default: beside the questions file)",
+    )
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="build every work dir, render every prompt, print each arm's tools; "
+        "call no model",
+    )
     ap.add_argument(
         "--make-alt-venv",
         action="store_true",
@@ -728,11 +847,22 @@ def main() -> None:
         help=f"stop the sweep when seven_day usage reaches this (default {STOP_AT})",
     )
     a = ap.parse_args()
+    qfile = Path(a.questions).resolve()
+    if a.results is None:
+        a.results = str(qfile.parent / "results.jsonl")
     PAUSES = Path(a.results).parent / "pauses.jsonl"
     STOP_AT = a.stop_at
     set_model(a.model)
     set_server_spec(a.server_spec, a.exclude_newer)
-    questions = json.loads((HERE / "questions.json").read_text())["questions"]
+    questions = load_set(qfile)
+    if a.dry_run:
+        oracle(questions)
+        keep = set(a.only.split(",")) if a.only else None
+        dry_run(
+            [q for q in questions if keep is None or q["id"] in keep],
+            a.arms.split(","),
+        )
+        return
     if a.make_alt_venv:
         make_alt_venv()
         return
