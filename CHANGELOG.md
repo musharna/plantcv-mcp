@@ -6,6 +6,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- `measure_regions` no longer times out on field trays. PlantCV's
+  `create_labels(roi_type="partial")` filled a full frame once per ROI per
+  contour, so a 4x5 grid on a 2560x1920 tray with 6.2k-6.6k mask contours took
+  over 900 s per call (all 4 timeouts of the 2026-10-24 field benchmark). The
+  labels are now computed per contour tree inside its bounding box
+  (`labels.py`), a few seconds on the same masks, and are tested pixel-identical
+  to PlantCV's on synthetic masks and real tray masks. A new work-count
+  workload (`measure_regions_fragmented`) goes red if the per-contour passes
+  come back.
+
 ## [1.17.1] — 2026-10-20
 
 ### Fixed
