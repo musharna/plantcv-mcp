@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.17.2] — 2026-10-26
+
 ### Fixed
 
 - `measure_regions` no longer times out on field trays. PlantCV's
