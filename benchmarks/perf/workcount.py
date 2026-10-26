@@ -293,13 +293,8 @@ def w_measure_regions(call, counted, d):
     }
 
 
-def w_measure_regions_fragmented(call, counted, d):
-    """A tray whose mask has many contours (holes), as a field tray's does.
-
-    PlantCV's create_labels did a full-frame pass per ROI per contour, so its
-    cv2 count grew as ROIs x contours (here 6 x 133 fillPoly calls). With
-    `w_measure_regions`' 6 contours that product was invisible.
-    """
+def _fragmented_tray_png(d: Path) -> str:
+    """Six plants, each with a lattice of holes: 133 contours in all."""
     import numpy as np
 
     img = _soil(240, 360)
@@ -312,7 +307,17 @@ def w_measure_regions_fragmented(call, counted, d):
                 for hy in range(cy - 30, cy + 31, 12):
                     if (hx - cx) ** 2 + (hy - cy) ** 2 <= 34**2:
                         img[(xx - hx) ** 2 + (yy - hy) ** 2 <= 9] = (96, 70, 52)
-    s = _segment(call, _png(d / "tray.png", img))
+    return _png(d / "tray.png", img)
+
+
+def w_measure_regions_fragmented(call, counted, d):
+    """A tray whose mask has many contours (holes), as a field tray's does.
+
+    PlantCV's create_labels did a full-frame pass per ROI per contour, so its
+    cv2 count grew as ROIs x contours (here 6 x 133 fillPoly calls). With
+    `w_measure_regions`' 6 contours that product was invisible.
+    """
+    s = _segment(call, _fragmented_tray_png(d))
     grid = {"mode": "rect_grid", "nrows": 2, "ncols": 3, "coord": [0, 0]}
     grid |= {"height": 120, "width": 120, "spacing": [120, 120]}
     with counted():
@@ -323,6 +328,15 @@ def w_measure_regions_fragmented(call, counted, d):
             x["traits"]["area"]["value"] for x in r["regions"] if x.get("measured")
         ),
     }
+
+
+def w_measure_fragmented(call, counted, d):
+    """`measure` on the whole fragmented tray: one full-frame ROI, so the
+    PlantCV labeller's cost is contours x frame (133 full-frame fills)."""
+    s = _segment(call, _fragmented_tray_png(d))
+    with counted():
+        r = call("measure", {"session_id": s["session_id"], "analyses": ["size"]})
+    return {"area": r["traits"]["area"]["value"]}
 
 
 def w_measure_morphology(call, counted, d):
@@ -439,6 +453,7 @@ WORKLOADS: dict[str, Callable] = {
     "measure": w_measure_size_color,
     "measure_regions": w_measure_regions,
     "measure_regions_fragmented": w_measure_regions_fragmented,
+    "measure_fragmented": w_measure_fragmented,
     "measure_morphology": w_measure_morphology,
     "count_leaves": w_count_leaves,
     "calibrate_scale_from_marker": w_calibrate_scale,
