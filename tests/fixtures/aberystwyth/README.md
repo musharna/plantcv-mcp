@@ -29,3 +29,25 @@ leaves and leaves mostly hidden under others; a mask-based method cannot see
 the hidden ones.
 
 These files ship in the sdist with the tests and are not part of the wheel.
+
+## Tray mask crops (`*_mask_crop.png`)
+
+Binary masks derived from two tray images of the same dataset (CC BY 4.0, as
+above). `tests/test_labels.py` checks the region labeller against PlantCV's
+`create_labels` on them: real mask structure, with hundreds of holes, objects
+crossing cell boundaries, and one component filling most of a crop.
+
+**Changes made:** each is the mask this server's own tools produced for the
+2026-10-24 field benchmark (question id in brackets), then cropped. Pixels are
+0/255 (PNG, lossless).
+
+| file                               | source image (`PSI_Tray032/tv/`)                   | mask recipe                                                                  | crop `y0:y1, x0:x1` |
+| ---------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------- |
+| `tray032_2015-12-18_mask_crop.png` | `PSI_Tray032_2015-12-18--14-08-19_top.png` (f1_03) | `segment` channel a, otsu, dark, fill_size 150; `refine` opening 3, fill 150 | `95:515, 400:850`   |
+| `tray032_2016-01-17_mask_crop.png` | `PSI_Tray032_2016-01-17--14-07-22_top.png` (f1_10) | `segment` channel a, otsu, dark (fill_size 200)                              | `62:262, 380:780`   |
+
+The 2015-12-18 crop spans the boundary between the first two cells of the 4x5
+grid the benchmark agent drew there (cells 420 px wide, 23 px apart). The
+2016-01-17 crop spans the gap between the first two circles `auto_grid` drew.
+Crops are small because the reference, PlantCV's own `create_labels`, costs
+ROIs x contours x frame.

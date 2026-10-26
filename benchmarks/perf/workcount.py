@@ -293,6 +293,38 @@ def w_measure_regions(call, counted, d):
     }
 
 
+def w_measure_regions_fragmented(call, counted, d):
+    """A tray whose mask has many contours (holes), as a field tray's does.
+
+    PlantCV's create_labels did a full-frame pass per ROI per contour, so its
+    cv2 count grew as ROIs x contours (here 6 x 133 fillPoly calls). With
+    `w_measure_regions`' 6 contours that product was invisible.
+    """
+    import numpy as np
+
+    img = _soil(240, 360)
+    yy, xx = np.mgrid[:240, :360]
+    for r_ in range(2):
+        for c_ in range(3):
+            cx, cy = 60 + 120 * c_, 60 + 120 * r_
+            img[(xx - cx) ** 2 + (yy - cy) ** 2 <= 42**2] = (52, 148, 62)
+            for hx in range(cx - 30, cx + 31, 12):
+                for hy in range(cy - 30, cy + 31, 12):
+                    if (hx - cx) ** 2 + (hy - cy) ** 2 <= 34**2:
+                        img[(xx - hx) ** 2 + (yy - hy) ** 2 <= 9] = (96, 70, 52)
+    s = _segment(call, _png(d / "tray.png", img))
+    grid = {"mode": "rect_grid", "nrows": 2, "ncols": 3, "coord": [0, 0]}
+    grid |= {"height": 120, "width": 120, "spacing": [120, 120]}
+    with counted():
+        r = call("measure_regions", {"session_id": s["session_id"], **grid})
+    return {
+        "measured": sum(bool(x.get("measured")) for x in r["regions"]),
+        "areas": sorted(
+            x["traits"]["area"]["value"] for x in r["regions"] if x.get("measured")
+        ),
+    }
+
+
 def w_measure_morphology(call, counted, d):
     import numpy as np
 
@@ -406,6 +438,7 @@ WORKLOADS: dict[str, Callable] = {
     "refine": w_refine,
     "measure": w_measure_size_color,
     "measure_regions": w_measure_regions,
+    "measure_regions_fragmented": w_measure_regions_fragmented,
     "measure_morphology": w_measure_morphology,
     "count_leaves": w_count_leaves,
     "calibrate_scale_from_marker": w_calibrate_scale,
