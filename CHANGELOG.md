@@ -17,6 +17,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   to PlantCV's on synthetic masks and real tray masks. A new work-count
   workload (`measure_regions_fragmented`) goes red if the per-contour passes
   come back.
+- `measure` (whole-mask traits) used the same PlantCV labeller with one
+  full-frame ROI, so its cost was contours x frame: 12 s on a field tray with
+  1.3k contours and 17 s with 2.9k. It now uses the same labeller as
+  `measure_regions`, about 2.0-2.5 s on those trays, with identical traits
+  (size and colour, histograms included). A test refuses any new
+  `pcv.create_labels` call site, and the `measure_fragmented` work count goes
+  red if the per-contour passes come back.
 
 ## [1.17.1] — 2026-10-20
 
