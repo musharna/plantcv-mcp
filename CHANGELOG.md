@@ -27,6 +27,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `pcv.create_labels` call site, and the `measure_fragmented` work count goes
   red if the per-contour passes come back.
 
+### Security
+
+- `uv.lock` pins opentelemetry-api 1.45.1 (was 1.44.0) for CVE-2026-114603, fixed in
+  1.45.1. The lock is what checkouts and CI install; a `uvx` install resolves its own.
+
 ## [1.17.1] — 2026-10-20
 
 ### Fixed
