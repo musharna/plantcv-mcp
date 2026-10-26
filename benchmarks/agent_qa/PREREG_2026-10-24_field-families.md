@@ -69,3 +69,49 @@ uv run python benchmarks/agent_qa/run.py \
   the 10 F2 questions.
 - **Grown, overlapping rosettes are mostly excluded.** Plants touching a
   neighbour cannot be separated in the annotation (39 of 210).
+
+## Amendment, 2026-10-26: F1 mcp re-run on 1.17.2
+
+Written before the re-run starts. The pilot rows above it are committed with it.
+
+**Why.** The pilot's mcp arm on F1 (1.17.1 at `30e12b3`) was 4 right, 2 wrong
+and 4 timeouts at 900 s (f1_03, f1_08, f1_09, f1_10). The alt arm was 6 right.
+All four timeouts were spent inside `measure_regions`, in PlantCV's
+`create_labels(roi_type="partial")`. Releases 1.17.1 → 1.17.2 replace it with
+a pixel-identical labeller (PR #158 for `measure_regions`, #159 for
+`measure_traits`). Nothing else about the server changed what it measures.
+
+**Run.** mcp arm only, F1 only (n = 10), 1 rep, same model, prompt, timeout,
+validity rule and leak scan. Server: 1.17.2 at its release merge commit, with
+the pilot's `--exclude-newer`, so only the server's own code differs.
+Results go to their own file; the pilot rows are not touched.
+
+```
+uv run python benchmarks/agent_qa/run.py \
+  --questions benchmarks/agent_qa/field_2026-10-24/questions.json \
+  --results benchmarks/agent_qa/field_2026-10-24/rerun_2026-10-26/results.jsonl \
+  --arms mcp --reps 1 --model claude-sonnet-5-5 --workers 1 \
+  --only f1_01,f1_02,f1_03,f1_04,f1_05,f1_06,f1_07,f1_08,f1_09,f1_10 \
+  --server-spec git+https://github.com/musharna/plantcv-mcp@6a68a6b7069a8b83503474b11d720d6a75dc29a3 \
+  --exclude-newer 2026-10-17
+```
+
+**Readouts, fixed now.**
+
+- Primary: mcp right of 10 at 1.17.2, against the pilot's alt 6 of 10,
+  paired by question (both, mcp only, alt only, neither).
+- Mechanism: the number of 900 s timeouts. The fix is shown to have engaged
+  only if it falls from 4; any timeout left is read from its transcript, not
+  assumed to be load.
+- Also reported: mcp at 1.17.1 vs 1.17.2 per question, px-right and mm²-right
+  separately, and cost.
+
+**What it can and cannot say.**
+
+- It is a pilot: 1 rep, n = 10, on tray 032, which the server was developed
+  beside (see the caveat above). It is reported as descriptive.
+- No confirmatory run can follow on this dataset: only trays 031 and 032 are
+  hand-annotated, and 031 is excluded.
+- The pilot's two wrong mcp answers came from the colour threshold and from
+  `calibrate_scale_from_marker` on rim crops, which this release does not touch.
+  If they stay wrong, that is the expected result, not a new finding.
