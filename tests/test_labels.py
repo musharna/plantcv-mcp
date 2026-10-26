@@ -319,3 +319,94 @@ def test_measure_regions_no_longer_calls_create_labels(monkeypatch):
     out = measure_regions(img, mask, regions)
     areas = [r["traits"]["area"]["value"] for r in out]
     assert areas[0] < areas[1], "both cells measured, in order"
+
+
+def _whole_frame(mask):
+    """The one ROI `measure_traits` labels with: the whole frame."""
+    h, w = mask.shape
+    return pcv.roi.rectangle(img=_img(mask), x=0, y=0, h=h, w=w)
+
+
+@pytest.mark.parametrize(
+    "name", ["tray032_2015-12-18_mask_crop.png", "tray032_2016-01-17_mask_crop.png"]
+)
+def test_the_whole_frame_roi_on_real_tray_masks(name):
+    mask = cv2.imread(str(FIXTURES / name), cv2.IMREAD_GRAYSCALE)
+    hier = cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)[1][0]
+    assert (hier[:, 3] >= 0).sum() > 50, "the fixture is the many-holed real mask"
+    got = _same_as_plantcv(mask, _whole_frame(mask))
+    assert got.max() == 1 and (got[mask > 0] == 1).mean() > 0.9
+
+
+@pytest.mark.parametrize("seed", range(30))
+def test_the_whole_frame_roi_on_random_masks(seed):
+    rng = np.random.default_rng(1000 + seed)
+    mask = _random_mask(rng, int(rng.integers(30, 100)), int(rng.integers(30, 120)))
+    _same_as_plantcv(mask, _whole_frame(mask))
+
+
+def _plant(mask):
+    img = np.zeros((*mask.shape, 3), np.uint8)
+    img[mask > 0] = (40, 200, 40)
+    img[mask == 0] = (60, 50, 40)
+    return img
+
+
+def test_measure_traits_no_longer_calls_create_labels(monkeypatch):
+    """The whole-mask path must not reach PlantCV's labeller (contours x
+    frame); the `measure_fragmented` work count catches the same regression."""
+    from plantcv_mcp.measurement import measure_traits
+
+    def refuse(**kwargs):
+        raise AssertionError("pcv.create_labels reached from measure_traits")
+
+    mask = cv2.imread(
+        str(FIXTURES / "tray032_2016-01-17_mask_crop.png"), cv2.IMREAD_GRAYSCALE
+    )
+    monkeypatch.setattr(pcv, "create_labels", refuse)
+    traits = measure_traits(_plant(mask), mask, analyses=("size",))
+    assert traits["area"]["value"] > 0
+
+
+@pytest.mark.parametrize(
+    "name", ["tray032_2015-12-18_mask_crop.png", "tray032_2016-01-17_mask_crop.png"]
+)
+def test_measure_traits_equal_the_plantcv_labeller_on_real_masks(monkeypatch, name):
+    """Every trait, size and colour, with histograms, against the same call
+    labelled by PlantCV itself."""
+    from plantcv_mcp import measurement
+
+    mask = cv2.imread(str(FIXTURES / name), cv2.IMREAD_GRAYSCALE)
+    img = _plant(mask)
+    args = (img, mask, ("size", "color"), None, True)
+    ours = measurement.measure_traits(*args)
+    monkeypatch.setattr(
+        measurement,
+        "create_labels_partial",
+        lambda m, r: pcv.create_labels(mask=m, rois=r, roi_type="partial"),
+    )
+    theirs = measurement.measure_traits(*args)
+    assert len(ours) > 20 and ours["area"]["value"] > 0
+    assert ours == theirs
+
+
+def test_only_the_fallback_calls_plantcvs_labeller():
+    """#158 replaced the call in `measure_regions` and left `measure_traits`'
+    one: any new `pcv.create_labels(...)` call site in the package fails here."""
+    import ast
+
+    src = Path(labels.__file__).parent
+    calls = []
+    for path in sorted(src.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            f = getattr(node, "func", None)
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(f, ast.Attribute)
+                and f.attr == "create_labels"
+                and isinstance(f.value, ast.Name)
+                and f.value.id == "pcv"
+            ):
+                calls.append(f"{path.name}:{node.lineno}")
+    # Positive control: the scan sees the one allowed call, the fallback.
+    assert [c.split(":")[0] for c in calls] == ["labels.py"], calls

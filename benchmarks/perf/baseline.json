@@ -193,7 +193,7 @@
  "measure": {
   "cv2": {
    "cv2.arcLength": 2,
-   "cv2.bitwise_and": 2,
+   "cv2.bitwise_and": 1,
    "cv2.boundingRect": 1,
    "cv2.circle": 2,
    "cv2.connectedComponentsWithStats": 2,
@@ -239,6 +239,15 @@
    "imaging.py:load_image_with_digest": 1,
    "imaging.py:open_regular_file": 1,
    "imaging.py:read_image_bytes": 1,
+   "labels.py:_Forest.__init__": 1,
+   "labels.py:_Forest.contour_fill": 1,
+   "labels.py:_Forest.labels_for": 1,
+   "labels.py:_Forest.sub_hierarchy": 1,
+   "labels.py:_Forest.subtree": 2,
+   "labels.py:_Forest.tree": 2,
+   "labels.py:_replayable": 1,
+   "labels.py:_roi_raster": 1,
+   "labels.py:create_labels_partial": 1,
    "measurement.py:_read_group": 1,
    "measurement.py:isolated_pcv_outputs": 1,
    "measurement.py:measure_traits": 1,
@@ -264,7 +273,6 @@
    "plantcv/plantcv/analyze/color.py:color": 1,
    "plantcv/plantcv/analyze/size.py:size": 1,
    "plantcv/plantcv/classes.py:Outputs.clear": 1,
-   "plantcv/plantcv/create_labels.py:create_labels": 1,
    "plantcv/plantcv/roi/roi_methods.py:rectangle": 1
   },
   "spawns": {}
@@ -272,16 +280,15 @@
  "measure_fragmented": {
   "cv2": {
    "cv2.arcLength": 151,
-   "cv2.bitwise_and": 150,
    "cv2.boundingRect": 1,
    "cv2.circle": 2,
    "cv2.connectedComponentsWithStats": 3,
    "cv2.contourArea": 1,
    "cv2.convexHull": 1,
    "cv2.cvtColor": 1,
-   "cv2.drawContours": 6,
+   "cv2.drawContours": 16,
    "cv2.fillPoly": 151,
-   "cv2.findContours": 4,
+   "cv2.findContours": 9,
    "cv2.fitEllipse": 1,
    "cv2.imdecode": 1,
    "cv2.line": 4,
@@ -316,6 +323,15 @@
    "imaging.py:load_image_with_digest": 1,
    "imaging.py:open_regular_file": 1,
    "imaging.py:read_image_bytes": 1,
+   "labels.py:_Forest.__init__": 1,
+   "labels.py:_Forest.contour_fill": 150,
+   "labels.py:_Forest.labels_for": 6,
+   "labels.py:_Forest.sub_hierarchy": 6,
+   "labels.py:_Forest.subtree": 12,
+   "labels.py:_Forest.tree": 12,
+   "labels.py:_replayable": 1,
+   "labels.py:_roi_raster": 1,
+   "labels.py:create_labels_partial": 1,
    "measurement.py:_read_group": 1,
    "measurement.py:isolated_pcv_outputs": 1,
    "measurement.py:measure_traits": 1,
@@ -340,7 +356,6 @@
   "plantcv": {
    "plantcv/plantcv/analyze/size.py:size": 1,
    "plantcv/plantcv/classes.py:Outputs.clear": 1,
-   "plantcv/plantcv/create_labels.py:create_labels": 1,
    "plantcv/plantcv/roi/roi_methods.py:rectangle": 1
   },
   "spawns": {}
@@ -348,7 +363,6 @@
  "measure_images": {
   "cv2": {
    "cv2.arcLength": 10,
-   "cv2.bitwise_and": 7,
    "cv2.boundingRect": 3,
    "cv2.circle": 6,
    "cv2.connectedComponentsWithStats": 9,
@@ -402,6 +416,15 @@
    "imaging.py:load_image_with_digest": 3,
    "imaging.py:open_regular_file": 3,
    "imaging.py:read_image_bytes": 3,
+   "labels.py:_Forest.__init__": 3,
+   "labels.py:_Forest.contour_fill": 7,
+   "labels.py:_Forest.labels_for": 3,
+   "labels.py:_Forest.sub_hierarchy": 3,
+   "labels.py:_Forest.subtree": 6,
+   "labels.py:_Forest.tree": 6,
+   "labels.py:_replayable": 3,
+   "labels.py:_roi_raster": 3,
+   "labels.py:create_labels_partial": 3,
    "limits.py:require_fill_size": 1,
    "limits.py:require_int": 1,
    "limits.py:require_threshold_params": 4,
@@ -426,7 +449,6 @@
   "plantcv": {
    "plantcv/plantcv/analyze/size.py:size": 3,
    "plantcv/plantcv/classes.py:Outputs.clear": 3,
-   "plantcv/plantcv/create_labels.py:create_labels": 3,
    "plantcv/plantcv/fill.py:fill": 3,
    "plantcv/plantcv/rgb2gray_lab.py:rgb2gray_lab": 3,
    "plantcv/plantcv/roi/roi_methods.py:rectangle": 3,

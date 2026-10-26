@@ -16,6 +16,7 @@ from typing_extensions import TypedDict
 
 from .contracts import closed
 from .diagnostics import analyze_mask, assert_not_degenerate
+from .labels import create_labels_partial
 
 
 @closed
@@ -219,7 +220,8 @@ def measure_traits(
     # this process; see isolated_pcv_outputs for the lock and the restore.
     with isolated_pcv_outputs():
         roi = pcv.roi.rectangle(img=img, x=0, y=0, h=img.shape[0], w=img.shape[1])
-        labeled, n = pcv.create_labels(mask=mask, rois=roi, roi_type="partial")
+        # PlantCV's labels without its contours x frame passes (labels.py).
+        labeled, n = create_labels_partial(mask, roi)
 
         if "size" in analyses:
             pcv.analyze.size(img=img, labeled_mask=labeled, n_labels=n)
