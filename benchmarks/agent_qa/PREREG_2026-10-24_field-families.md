@@ -84,13 +84,15 @@ a pixel-identical labeller (PR #158 for `measure_regions`, #159 for
 **Run.** mcp arm only, F1 only (n = 10), 1 rep, same model, prompt, timeout,
 validity rule and leak scan. Server: 1.17.2 at its release merge commit, with
 the pilot's `--exclude-newer`, so only the server's own code differs.
-Results go to their own file; the pilot rows are not touched.
+Two workers, as in the pilot's mcp arm. Results and transcripts go to their
+own file and directory; the pilot's rows and transcripts are not touched.
 
 ```
+AGENTQA_ARTIFACTS=~/plantcv-mcp-artifacts/agent_qa/rerun-2026-10-26 \
 uv run python benchmarks/agent_qa/run.py \
   --questions benchmarks/agent_qa/field_2026-10-24/questions.json \
   --results benchmarks/agent_qa/field_2026-10-24/rerun_2026-10-26/results.jsonl \
-  --arms mcp --reps 1 --model claude-sonnet-5-5 --workers 1 \
+  --arms mcp --reps 1 --model claude-sonnet-5-5 --workers 2 \
   --only f1_01,f1_02,f1_03,f1_04,f1_05,f1_06,f1_07,f1_08,f1_09,f1_10 \
   --server-spec git+https://github.com/musharna/plantcv-mcp@6a68a6b7069a8b83503474b11d720d6a75dc29a3 \
   --exclude-newer 2026-10-17
