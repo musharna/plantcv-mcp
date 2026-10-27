@@ -1,0 +1,275 @@
+[
+ {
+  "id": "f2_01",
+  "truth": 6,
+  "date_median": 7,
+  "A": {
+   "watershed": 3,
+   "watershed_s": 0.0,
+   "watershed_warn": [
+    "min_distance_sensitive"
+   ],
+   "sam": 7,
+   "sam_s": 39.5,
+   "sam_warn": []
+  },
+  "B_polarity": "dark",
+  "B": {
+   "watershed": null,
+   "watershed_refused": "LeafCountRefusedError: implausible_coverage: The mask covers 99.6% of the frame. If you expected a plant against ",
+   "sam": null,
+   "sam_refused": "LeafCountRefusedError: implausible_coverage: The mask covers 99.6% of the frame. If you expected a plant against "
+  }
+ },
+ {
+  "id": "f2_02",
+  "truth": 9,
+  "date_median": 9,
+  "A": {
+   "watershed": 6,
+   "watershed_s": 0.0,
+   "watershed_warn": [
+    "min_distance_sensitive"
+   ],
+   "sam": 8,
+   "sam_s": 33.4,
+   "sam_warn": []
+  },
+  "B_polarity": "dark",
+  "B": {
+   "watershed": 37,
+   "watershed_s": 0.3,
+   "watershed_warn": [
+    "min_distance_sensitive",
+    "frame_clipping"
+   ],
+   "sam": 2,
+   "sam_s": 25.5,
+   "sam_warn": [
+    "low_instance_coverage",
+    "frame_clipping"
+   ]
+  }
+ },
+ {
+  "id": "f2_03",
+  "truth": 10,
+  "date_median": 10,
+  "A": {
+   "watershed": 6,
+   "watershed_s": 0.0,
+   "watershed_warn": [],
+   "sam": 9,
+   "sam_s": 37.5,
+   "sam_warn": []
+  },
+  "B_polarity": "dark",
+  "B": {
+   "watershed": 52,
+   "watershed_s": 0.3,
+   "watershed_warn": [
+    "min_distance_sensitive",
+    "frame_clipping"
+   ],
+   "sam": null,
+   "sam_refused": "LeafCountRefusedError: Segment Anything returned 6 candidate mask(s) and none passed the leaf filter (score, size"
+  }
+ },
+ {
+  "id": "f2_04",
+  "truth": 12,
+  "date_median": 12,
+  "A": {
+   "watershed": 8,
+   "watershed_s": 0.1,
+   "watershed_warn": [
+    "min_distance_sensitive"
+   ],
+   "sam": 13,
+   "sam_s": 31.7,
+   "sam_warn": []
+  },
+  "B_polarity": "dark",
+  "B": {
+   "watershed": 8,
+   "watershed_s": 0.1,
+   "watershed_warn": [
+    "min_distance_sensitive"
+   ],
+   "sam": 13,
+   "sam_s": 32.8,
+   "sam_warn": []
+  }
+ },
+ {
+  "id": "f2_05",
+  "truth": 23,
+  "date_median": 14,
+  "A": {
+   "watershed": 8,
+   "watershed_s": 0.1,
+   "watershed_warn": [
+    "min_distance_sensitive"
+   ],
+   "sam": 27,
+   "sam_s": 32.4,
+   "sam_warn": []
+  },
+  "B_polarity": "dark",
+  "B": {
+   "watershed": 8,
+   "watershed_s": 0.1,
+   "watershed_warn": [
+    "min_distance_sensitive"
+   ],
+   "sam": 27,
+   "sam_s": 32.8,
+   "sam_warn": []
+  }
+ },
+ {
+  "id": "f2_06",
+  "truth": 16,
+  "date_median": 16,
+  "A": {
+   "watershed": 14,
+   "watershed_s": 0.1,
+   "watershed_warn": [
+    "min_distance_sensitive"
+   ],
+   "sam": 21,
+   "sam_s": 29.8,
+   "sam_warn": []
+  },
+  "B_polarity": "dark",
+  "B": {
+   "watershed": 14,
+   "watershed_s": 0.1,
+   "watershed_warn": [
+    "min_distance_sensitive"
+   ],
+   "sam": 21,
+   "sam_s": 29.0,
+   "sam_warn": []
+  }
+ },
+ {
+  "id": "f2_07",
+  "truth": 20,
+  "date_median": 20,
+  "A": {
+   "watershed": 12,
+   "watershed_s": 0.1,
+   "watershed_warn": [
+    "min_distance_sensitive"
+   ],
+   "sam": 20,
+   "sam_s": 31.0,
+   "sam_warn": []
+  },
+  "B_polarity": "dark",
+  "B": {
+   "watershed": 12,
+   "watershed_s": 0.1,
+   "watershed_warn": [
+    "min_distance_sensitive"
+   ],
+   "sam": 20,
+   "sam_s": 31.0,
+   "sam_warn": []
+  }
+ },
+ {
+  "id": "f2_08",
+  "truth": 23,
+  "date_median": 21,
+  "A": {
+   "watershed": 12,
+   "watershed_s": 0.2,
+   "watershed_warn": [
+    "min_distance_sensitive",
+    "frame_clipping"
+   ],
+   "sam": 26,
+   "sam_s": 42.6,
+   "sam_warn": [
+    "frame_clipping"
+   ]
+  },
+  "B_polarity": "light",
+  "B": {
+   "watershed": 20,
+   "watershed_s": 0.3,
+   "watershed_warn": [
+    "min_distance_sensitive",
+    "frame_clipping"
+   ],
+   "sam": 21,
+   "sam_s": 33.9,
+   "sam_warn": [
+    "frame_clipping"
+   ]
+  }
+ },
+ {
+  "id": "f2_09",
+  "truth": 25,
+  "date_median": 25,
+  "A": {
+   "watershed": 13,
+   "watershed_s": 0.3,
+   "watershed_warn": [
+    "min_distance_sensitive"
+   ],
+   "sam": 28,
+   "sam_s": 38.7,
+   "sam_warn": []
+  },
+  "B_polarity": "light",
+  "B": {
+   "watershed": 3,
+   "watershed_s": 0.1,
+   "watershed_warn": [
+    "min_distance_sensitive",
+    "frame_clipping"
+   ],
+   "sam": 9,
+   "sam_s": 29.9,
+   "sam_warn": [
+    "frame_clipping"
+   ]
+  }
+ },
+ {
+  "id": "f2_10",
+  "truth": 29,
+  "date_median": 30,
+  "A": {
+   "watershed": 13,
+   "watershed_s": 0.4,
+   "watershed_warn": [
+    "min_distance_sensitive",
+    "frame_clipping"
+   ],
+   "sam": 33,
+   "sam_s": 39.3,
+   "sam_warn": [
+    "frame_clipping"
+   ]
+  },
+  "B_polarity": "light",
+  "B": {
+   "watershed": 1,
+   "watershed_s": 0.0,
+   "watershed_warn": [
+    "min_distance_sensitive",
+    "frame_clipping"
+   ],
+   "sam": 2,
+   "sam_s": 38.1,
+   "sam_warn": [
+    "frame_clipping"
+   ]
+  }
+ }
+]
