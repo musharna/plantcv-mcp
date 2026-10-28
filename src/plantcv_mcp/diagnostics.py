@@ -147,6 +147,57 @@ class Advisory:
     message: str
 
 
+def excess_green(img: np.ndarray, mask: np.ndarray) -> float | None:
+    """Mean excess green, (2G - R - B) / (R + G + B), over the masked pixels
+    of a BGR image; None for an empty mask. Chromaticity, so a dark leaf in
+    shadow is as green as a lit one; a grey or black pixel scores 0."""
+    sel = mask > 0
+    if not sel.any():
+        return None
+    px = img[sel].astype(np.float64)
+    total = px.sum(axis=1)
+    exg = np.divide(
+        2 * px[:, 1] - px[:, 2] - px[:, 0],
+        total,
+        out=np.zeros_like(total),
+        where=total > 0,
+    )
+    return float(exg.mean())
+
+
+# A mask this green is plant, however much of the frame it fills. Measured
+# 2026-10-28: grown rosettes cropped to their own pot cell (Aberystwyth tray
+# 032, field benchmark F2) fill 56-86% of the crop at mean excess green
+# 0.28-0.32, and plants in their pot cells score 0.25 or more; every one of
+# the 272 masks over 50% of the frame that otsu gives on the 46 synthetic
+# benchmark images (6 channels x 2 polarities, all background or background
+# plus plant) scores 0.123 or less.
+PLANT_GREEN = 0.2
+
+
+def plant_fills_frame_advisory(
+    img: np.ndarray, mask: np.ndarray, diag: MaskDiagnostics
+) -> "Advisory | None":
+    """The leaf counters refuse a mask over half the frame as probably
+    inverted. A plant cropped to its own pot fills more than half and is not
+    inverted, so a plant-green mask is counted, with this said beside the
+    count; anything less green is still refused."""
+    if diag.mask_fraction <= 0.5:
+        return None
+    green = excess_green(img, mask)
+    if green is None or green < PLANT_GREEN:
+        return None
+    return Advisory(
+        code="plant_fills_frame",
+        message=(
+            f"The mask covers {diag.mask_fraction:.1%} of the frame but is plant "
+            f"green (mean excess green {green:.2f}, at least {PLANT_GREEN}), so it "
+            "is counted as a plant that fills its crop rather than refused as an "
+            "inverted mask. Check the overlay if the background itself is green."
+        ),
+    )
+
+
 def implausible_coverage_warning(
     diag: MaskDiagnostics,
     max_fraction: float = 0.5,

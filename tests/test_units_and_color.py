@@ -182,7 +182,7 @@ def test_instructions_say_tool_names_are_client_prefixed_before_naming_one():
 
 def test_every_tool_publishes_annotations_and_a_title():
     tools = asyncio.run(build_server().list_tools())
-    assert len(tools) == 17
+    assert len(tools) == 18
     for t in tools:
         assert t.title, f"{t.name} has no title"
         assert t.annotations is not None, f"{t.name} has no annotations"
@@ -196,10 +196,10 @@ def test_every_tool_publishes_annotations_and_a_title():
             assert t.annotations.idempotent_hint is True
             assert t.annotations.open_world_hint is True
             continue
-        if t.name == "correct_lens_distortion":
-            # The one tool that writes (the corrected image). Claiming
-            # read-only here would be lying to every client that trusts the
-            # hint to skip a confirmation.
+        if t.name in ("correct_lens_distortion", "crop_image"):
+            # The two tools that write (the corrected image, the crop).
+            # Claiming read-only here would be lying to every client that
+            # trusts the hint to skip a confirmation.
             assert t.annotations.read_only_hint is False
             assert t.annotations.destructive_hint is False
             assert t.annotations.idempotent_hint is True
@@ -246,6 +246,7 @@ def test_every_structured_tool_publishes_an_output_schema():
         "segment_thermal",
         "correct_lens_distortion",
         "zoom_image",
+        "crop_image",
     }
     # measure_regions joined this set when per-region measurement shipped: it
     # returns the labelled overlay alongside the rows, because per-region

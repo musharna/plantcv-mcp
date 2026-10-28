@@ -1,8 +1,17 @@
+from pathlib import Path
+
+import cv2
 import numpy as np
 import pytest
 
 from plantcv_mcp.segmentation import UnknownChannelError
-from plantcv_mcp.suggest import colorspace_sheet, polarity_report, threshold_sheet
+from plantcv_mcp.suggest import (
+    GREEN_FLOOR,
+    GREENNESS_MARGIN,
+    colorspace_sheet,
+    polarity_report,
+    threshold_sheet,
+)
 
 
 def _img():
@@ -107,3 +116,46 @@ def test_polarity_report_warns_when_the_recommended_polarity_selects_nothing():
     clean = np.full((200, 200, 3), 200, np.uint8)
     clean[60:140, 60:140] = 30
     assert polarity_report(clean, "l")["warnings"] == []
+
+
+# --- a plant that fills its pot (field benchmark F2, 2026-10-27) ---
+
+POTCELLS = Path(__file__).parent / "fixtures" / "aberystwyth"
+
+
+@pytest.mark.parametrize(
+    ("channel", "plant_side"), [("a", "dark"), ("b", "light"), ("s", "light")]
+)
+def test_polarity_report_picks_the_rosette_that_fills_its_pot(channel, plant_side):
+    """A real grown rosette in its own pot cell. The plant is the larger side,
+    so "the plant covers less of the frame" recommended the soil, and the SAM
+    count on that mask was 2 for a 29-leaf plant. The green side is the plant."""
+    img = cv2.imread(str(POTCELLS / "tray032_2016-01-17_potcell_r1c5.png"))
+    rep = polarity_report(img, channel)
+    # The premise: the plant side really is the bigger one here.
+    assert rep[plant_side]["mask_fraction"] > 0.5
+    assert rep["recommended"] == plant_side
+    assert rep["ambiguous"] is False
+    assert rep["basis"].startswith("greenness")
+    assert rep[plant_side]["excess_green"] >= GREEN_FLOOR
+
+
+def test_polarity_report_keeps_a_purple_plant_on_grey_with_coverage():
+    """Grey scores 0 and purple scores negative, so "the greener side" is the
+    background. The green floor keeps the scene with coverage, which picks the
+    square, and the basis says so. Positive control: the same scene in green
+    is decided by greenness, to the square. Which side the square is on `l`
+    depends on its colour, so the test finds it by its 9% coverage."""
+    for colour, basis in (((150, 40, 150), "coverage"), ((40, 150, 40), "greenness")):
+        scene = np.full((200, 200, 3), 128, np.uint8)
+        scene[70:130, 70:130] = colour  # BGR
+        rep = polarity_report(scene, "l")
+        (square,) = [k for k in ("dark", "light") if rep[k]["mask_fraction"] < 0.2]
+        grey = "light" if square == "dark" else "dark"
+        assert rep["recommended"] == square, colour
+        assert rep["basis"].startswith(basis), (colour, rep["basis"])
+        if basis == "coverage":
+            # The premise: a gap that, with no floor, would choose the grey.
+            gap = rep[grey]["excess_green"] - rep[square]["excess_green"]
+            assert gap >= GREENNESS_MARGIN
+            assert rep[grey]["excess_green"] < GREEN_FLOOR

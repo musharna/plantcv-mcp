@@ -122,6 +122,23 @@ class DroppedObject:
     split_by_op_name: str | None
 
 
+@dataclass(frozen=True)
+class FloodedHoles:
+    """A fill_holes op that filled more pixels than the mask held before it.
+
+    Holes in a plant are gaps between and inside leaves, a fraction of the
+    plant. Filling more than the whole mask means a ring (a pot rim, a tray
+    edge, specks along the frame border) enclosed background, and fill_holes
+    filled everything inside it: on the F2 seedling's pot cell (tray 032,
+    2015-12-14) 16% of the frame became 99.6%, while on the other F2 pot cells
+    fill_holes added 4-18% of what the mask held.
+    """
+
+    op_index: int
+    before_px: int
+    filled_px: int
+
+
 def validate_ops(
     ops: Sequence[Mapping[str, Any]], shape: tuple[int, ...] | None = None
 ) -> list[dict[str, Any]]:
@@ -260,9 +277,10 @@ def _dropped_by(
 
 def apply_refinements_traced(
     mask: np.ndarray, ops: Sequence[Mapping[str, Any]]
-) -> tuple[np.ndarray, list[DroppedObject]]:
-    """Apply a validated op list in order; return the new uint8 {0,255} mask
-    and every major object an op discarded along the way.
+) -> tuple[np.ndarray, list[DroppedObject], list[FloodedHoles]]:
+    """Apply a validated op list in order; return the new uint8 {0,255} mask,
+    every major object an op discarded along the way, and every fill_holes op
+    that filled more than the mask held.
 
     Raises RefineSpecError (nothing applied) or RefinementErasedMaskError (the
     result is degenerate and must not become a session).
@@ -270,11 +288,17 @@ def apply_refinements_traced(
     validated = validate_ops(ops, shape=mask.shape)
     out = np.where(mask > 0, 255, 0).astype(np.uint8)
     dropped: list[DroppedObject] = []
+    floods: list[FloodedHoles] = []
     split_by: tuple[int, str] | None = None
     n_components = analyze_mask(out).component_count
     for i, op in enumerate(validated):
         nxt = np.where(_apply_one(out, op) > 0, 255, 0).astype(np.uint8)
         dropped.extend(_dropped_by(out, nxt, i, op["op"], split_by))
+        if op["op"] == "fill_holes":
+            held = int(np.count_nonzero(out))
+            filled = int(np.count_nonzero(nxt)) - held
+            if filled > held:
+                floods.append(FloodedHoles(i, held, filled))
         n_next = analyze_mask(nxt).component_count
         if n_next > n_components:
             split_by = (i, op["op"])
@@ -294,7 +318,7 @@ def apply_refinements_traced(
             f"largest_area={after.largest_area}. Use a smaller kernel, fewer "
             f"iterations, or a smaller fill size. ({exc})"
         ) from exc
-    return out, dropped
+    return out, dropped, floods
 
 
 def apply_refinements(mask: np.ndarray, ops: Sequence[Mapping[str, Any]]) -> np.ndarray:
@@ -337,15 +361,44 @@ def dropped_object_warning(dropped: Sequence[DroppedObject]) -> Advisory | None:
     )
 
 
+def flooded_holes_warning(floods: Sequence[FloodedHoles]) -> Advisory | None:
+    """Name a fill_holes that filled background, before the coverage guard
+    calls the result an inverted polarity: the polarity was right."""
+    if not floods:
+        return None
+    parts = [
+        f"op {f.op_index} (fill_holes) filled {f.filled_px} px, "
+        f"{f.filled_px / max(f.before_px, 1):.1f}x the {f.before_px} px the mask "
+        "held before it"
+        for f in floods
+    ]
+    return Advisory(
+        code="fill_holes_flooded",
+        message=(
+            "; ".join(parts) + ". Holes in a plant are a fraction of the plant, "
+            "so this is a ring in the mask (a pot rim, a tray edge, specks along "
+            "the frame border) that enclosed background, and fill_holes filled "
+            "everything inside it. It is NOT an inverted polarity: the mask before "
+            "fill_holes is the one to look at. Drop fill_holes (closing with a "
+            "small kernel closes gaps inside leaves without reaching a rim), or "
+            "crop_image() to the plant so no rim is in the frame."
+        ),
+    )
+
+
 def refinement_warnings(
     mask: np.ndarray,
     before: MaskDiagnostics,
     after: MaskDiagnostics,
     dropped: Sequence[DroppedObject] = (),
+    floods: Sequence[FloodedHoles] = (),
 ) -> list[Advisory]:
     """Advisories for a refined mask: the shared mask guards, a change alarm,
-    and any major object an op discarded."""
+    any major object an op discarded, and any fill_holes that flooded."""
     warnings: list[Advisory] = []
+    flooded = flooded_holes_warning(floods)
+    if flooded:
+        warnings.append(flooded)
     dropped_warning = dropped_object_warning(dropped)
     if dropped_warning:
         warnings.append(dropped_warning)

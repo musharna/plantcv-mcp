@@ -6,6 +6,42 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+Three fixes from the 2026-10-24 field benchmark's leaf-count family (F2), where
+every server run counted one pot's leaves by eye and the counters could not be
+pointed at a pot.
+
+### Added
+
+- `crop_image(image_path, x, y, w, h, output_path)` writes a box of the image as
+  its own lossless PNG (next to the input under a derived name, or to a new
+  `output_path`) and returns its path. Every segmenter and both leaf counters
+  take a whole frame, and a 20-pot tray is one frame; the crop is a frame of one
+  pot, so the coverage guards and the polarity report judge the pot. The write
+  path (symlink and directory refusals, exclusive create, read roots) is now one
+  helper shared with `correct_lens_distortion`.
+- `refine()` reports `fill_holes_flooded` when a `fill_holes` op fills more
+  pixels than the mask held before it: a ring (a pot rim, specks along the frame
+  edge) enclosed background. On a real seedling's pot cell `fill_holes` turned
+  16% of the frame into 99.6% and the only warning said the polarity was
+  inverted, which it was not.
+
+### Changed
+
+- `suggest_segmentation`'s polarity report recommends the **greener** polarity
+  when that side is green (mean excess green at least 0.10) and leads by at least
+  0.05, and falls back to "covers less of the frame" otherwise. Coverage alone
+  picked the soil for every grown rosette that filled its pot (a SAM count of 2
+  for a 29-leaf plant). Each polarity now reports `excess_green`, and `basis`
+  starts with the rule that decided (`greenness`, `coverage` or `undecided`);
+  `ambiguous` is set only when neither decides. A non-green plant (purple,
+  senescent, grey images) still goes by coverage.
+- `count_leaves` (both splits) and `segment_leaves_sam` no longer refuse a mask
+  over half the frame when it is plant green (mean excess green at least 0.20);
+  they count it and say so (`plant_fills_frame`). The refusal rested on the same
+  premise as the old polarity rule, so a grown rosette cropped to its pot (56-86%
+  of the crop, 0.28-0.32) could never be counted. Background masks over half the
+  frame scored 0.123 or less on all 46 benchmark images and are still refused.
+
 ## [1.17.2] — 2026-10-26
 
 ### Fixed

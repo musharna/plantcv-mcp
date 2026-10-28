@@ -8,6 +8,8 @@ even median kernel), and the trait table that comes out of a refined session say
 how its mask was made.
 """
 
+from pathlib import Path
+
 import cv2
 import numpy as np
 import pytest
@@ -204,7 +206,7 @@ def test_dropping_a_major_object_is_named_with_the_op_that_split_it_off():
 
     mask = _plant_with_bridged_leaf()
     ops = [{"op": "opening", "ksize": 7}, {"op": "keep_largest", "n": 1}]
-    out, dropped = apply_refinements_traced(mask, ops)
+    out, dropped, _ = apply_refinements_traced(mask, ops)
     assert analyze_mask(out).component_count == 1
     assert len(dropped) == 1
     d = dropped[0]
@@ -224,7 +226,9 @@ def test_dropping_a_major_object_is_named_with_the_op_that_split_it_off():
     # nothing major and stays silent; the mask is otherwise identical.
     speck = _clean_disc()
     speck[10:13, 10:13] = 255
-    out2, dropped2 = apply_refinements_traced(speck, [{"op": "keep_largest", "n": 1}])
+    out2, dropped2, _ = apply_refinements_traced(
+        speck, [{"op": "keep_largest", "n": 1}]
+    )
     assert dropped2 == []
     assert analyze_mask(out2).component_count == 1
     assert (
@@ -236,7 +240,7 @@ def test_dropping_a_major_object_is_named_with_the_op_that_split_it_off():
 def test_apply_refinements_traced_returns_the_same_mask_as_apply_refinements():
     mask = _plant_with_bridged_leaf()
     ops = [{"op": "opening", "ksize": 7}, {"op": "keep_largest", "n": 1}]
-    out, _ = apply_refinements_traced(mask, ops)
+    out, _, _ = apply_refinements_traced(mask, ops)
     np.testing.assert_array_equal(out, apply_refinements(mask, ops))
 
 
@@ -260,7 +264,7 @@ def test_dropped_object_warning_lists_the_largest_three_and_counts_the_rest():
 def test_refine_large_change_fires_above_the_threshold():
     """Only the silent side was asserted; a deleted guard passed the suite."""
     mask = _clean_disc()
-    out, dropped = apply_refinements_traced(
+    out, dropped, _ = apply_refinements_traced(
         mask, [{"op": "dilate", "ksize": 15, "iterations": 3}]
     )
     codes = [
@@ -290,7 +294,7 @@ def test_dropped_object_attribution_is_honest_about_which_split_it_names():
         {"op": "opening", "ksize": 11},  # cuts the 9-px bridge (leaf B)
         {"op": "keep_largest", "n": 1},
     ]
-    _out, dropped = apply_refinements_traced(mask, ops)
+    _out, dropped, _ = apply_refinements_traced(mask, ops)
     assert len(dropped) == 2
     msg = dropped_object_warning(dropped).message
     assert "last op that raised the component count" in msg
@@ -315,3 +319,52 @@ def test_refinement_warnings_carry_extent_inflation():
     diag = analyze_mask(mask)
     codes = [w.code for w in refinement_warnings(mask, diag, diag)]
     assert "minor_components_inflate_extent" in codes
+
+
+# --- fill_holes inside a pot rim (field benchmark F2, 2026-10-27) ---
+
+POTCELLS = Path(__file__).parent / "fixtures" / "aberystwyth"
+
+
+def test_fill_holes_that_fills_a_whole_pot_is_named_not_called_inverted():
+    """A real seedling, about 2% of its pot cell. a/otsu splits soil from the
+    pot rim, so the 'dark' mask is the seedling plus a speckled ring round the
+    frame, and fill_holes filled the whole pot: 16% of the frame became 99.6%.
+    The coverage guard then called it an inverted polarity, which it was not.
+    The refine response has to name the mechanism. Positive control: a grown
+    rosette's own holes, refined the same way, are not called a flood."""
+    from plantcv_mcp.server import _refine_impl, _segment_impl
+
+    seedling = str(POTCELLS / "tray032_2015-12-14_potcell_r3c3.png")
+    sid = _segment_impl(seedling, "a", "otsu", "dark")["session_id"]
+    res = _refine_impl(sid, [{"op": "fill_holes"}, {"op": "keep_largest", "n": 1}])
+    assert res["before"]["mask_fraction"] < 0.25
+    assert res["after"]["mask_fraction"] > 0.95
+    codes = [w["code"] for w in res["warnings"]]
+    assert codes[0] == "fill_holes_flooded"
+    assert "implausible_coverage" in codes  # still there; the flood comes first
+    msg = res["warnings"][0]["message"]
+    assert "op 0 (fill_holes)" in msg
+    assert "NOT an inverted polarity" in msg
+    assert "crop_image()" in msg
+
+    rosette = str(POTCELLS / "tray032_2016-01-17_potcell_r1c5.png")
+    sid = _segment_impl(rosette, "a", "otsu", "dark")["session_id"]
+    res = _refine_impl(sid, [{"op": "fill_holes"}, {"op": "keep_largest", "n": 1}])
+    assert res["after"]["mask_fraction"] > res["before"]["mask_fraction"]  # it filled
+    assert "fill_holes_flooded" not in [w["code"] for w in res["warnings"]]
+
+
+def test_flood_rule_is_more_than_the_mask_held():
+    """The boundary, on a synthetic ring: a ring whose inside is larger than
+    the ring floods; a disc with a hole smaller than the disc does not."""
+    ring = np.zeros((200, 200), np.uint8)
+    cv2.circle(ring, (100, 100), 80, 255, 3)
+    _, _, floods = apply_refinements_traced(ring, [{"op": "fill_holes"}])
+    assert len(floods) == 1 and floods[0].filled_px > floods[0].before_px
+
+    holed = _clean_disc()
+    cv2.circle(holed, (100, 100), 20, 0, -1)
+    out, _, floods = apply_refinements_traced(holed, [{"op": "fill_holes"}])
+    assert (out > 0).sum() > (holed > 0).sum()  # the hole was filled
+    assert floods == []

@@ -9,6 +9,7 @@ Everything the [README](https://github.com/musharna/plantcv-mcp#readme) does not
   - [Real-world units](#real-world-units)
 - [Getting the polarity right](#getting-the-polarity-right)
 - [Refining a mask](#refining-a-mask)
+- [One plant of a tray](#one-plant-of-a-tray)
 - [Colour correction](#colour-correction)
 - [Measuring a tray](#measuring-a-tray)
 - [Morphology: leaves, stem, branch points](#morphology-leaves-stem-branch-points)
@@ -50,6 +51,7 @@ Verify with `list_methods()`.
 | `segment_thermal(path, min_c, max_c, ...)`                              | a thermal session from a °C band + grey-frame overlay                                                              |
 | `measure_thermal(session_id, ...)`                                      | max/min/mean/median °C under the mask                                                                              |
 | `zoom_image(image_path, x, y, w, h, scale)`                             | part of an image, enlarged, to look closely (not a measurement)                                                    |
+| `crop_image(image_path, x, y, w, h, output_path)`                       | the box written as its own PNG next to the input or to `output_path`; segment, count or measure one plant of a tray on it |
 | `list_methods()`                                                        | channels, methods, object types, pinned PlantCV version                                                            |
 
 ## Segmenting
@@ -357,7 +359,15 @@ And `segment` emits an `implausible_coverage` warning when the mask covers more 
 frame. Neither refuses the measurement, because a macro shot of a single leaf legitimately
 fills the frame — they make the choice visible rather than making it for you.
 
-`ambiguous` in the polarity report only compares the two polarities' coverage; it is not a
+The recommendation is the **greener** polarity when that side is green (mean excess green,
+(2G − R − B)/(R + G + B), at least 0.10) and leads the other by at least 0.05; `basis` starts
+`greenness`. Otherwise it is the polarity covering less of the frame (`basis` starts
+`coverage`). Coverage alone picked the soil for every rosette that filled its pot (the
+2026-10-24 field benchmark's leaf counts); greenness picked the plant in every annotated pot
+cell of that tray. A plant that is not green — purple, senescent, a grey image — falls to
+coverage, so check the overlay there.
+
+`ambiguous` is set only when neither rule decides; it is not a
 quality verdict. A recommendation made of specks — on a sorghum photo, `a`/otsu recommended
 'dark' with 118 components of chamber-wall texture — is flagged `noisy_segmentation`, with each
 polarity's `largest_fraction` (largest component / masked pixels) reported so you can see why.
@@ -398,6 +408,24 @@ present that an op removes entirely is reported as `refine_dropped_object`, nami
 the op and the earlier op that split it off — on a real sorghum photo `opening`
 detached a leaf and `keep_largest` threw it away, a 17% change that sat under the
 `refine_large_change` alarm and showed only in the overlay.
+
+`fill_holes` fills every background region the mask encloses, and a pot rim or a line of
+specks along the frame edge encloses the whole pot. When one `fill_holes` op fills more pixels
+than the mask held before it, `refine()` reports `fill_holes_flooded`: on a seedling's pot cell,
+`a`/otsu took the seedling plus a speckled ring round the frame, and `fill_holes` turned 16% of
+the frame into 99.6%. The coverage guard then says "inverted"; the flood warning comes first
+because the polarity was right. Drop `fill_holes`, close small gaps with `closing`, or
+`crop_image()` tighter so no rim is in the frame.
+
+## One plant of a tray
+
+Every segmenter and both leaf counters work on the whole frame. To work on one pot, find its
+box with `zoom_image`, then `crop_image(image_path, x, y, w, h)` writes that box as its own PNG
+(`<image>_crop_x<x>_y<y>_w<w>_h<h>.png` next to the input, overwritten on a re-crop; or
+`output_path`, which must be a new `.png`). Give the crop to `suggest_segmentation`, `segment`,
+`count_leaves` or `segment_leaves_sam`: the coverage guards and the polarity report then judge
+the pot, not the tray. The pixels are the image's own, so a `px_per_mm` from the full image
+applies; positions reported on the crop are crop pixels (add the box's x and y).
 
 ## Colour correction
 
@@ -570,7 +598,12 @@ What goes wrong, and what the response does about it:
   mean error on one tray), so isolate the plant (`keep_largest`, or crop) and check
   the overlay.
 - Empty and inverted (`implausible_coverage`) masks are refused by name; an empty
-  mask is never a count of zero. `min_distance` must be between 1 and the mask's own
+  mask is never a count of zero. A mask over half the frame that is plant green
+  (mean excess green at least 0.20) is counted instead, with `plant_fills_frame`:
+  that is a plant cropped to its own pot (`crop_image`), where a grown rosette
+  fills 56-86% of the crop at 0.28-0.32, while every background mask over half
+  the frame on the benchmark images scored 0.123 or less. The same holds for
+  `segment_leaves_sam` and the seeded split. `min_distance` must be between 1 and the mask's own
   extent in pixels: beyond that nothing in the mask can be that far apart, and the
   working arrays grow with the square of it (200000 asked for 1.9 TB before the
   check existed). The "twice" comparison pass is capped at the extent too, and
@@ -799,6 +832,7 @@ the committed fixtures. Blocking guards withhold numbers; advisories travel with
 | code                                                                | raised by                                              | meaning                                                                                                                                                                                  | batch    |
 | ------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
 | `implausible_coverage`                                              | any segmenter, `measure`                               | mask covers > 50% of the frame — probably the background                                                                                                                                 | blocking |
+| `plant_fills_frame`                                                 | `count_leaves`, `segment_leaves_sam`                   | the mask covers > 50% of the frame but is plant green, so it was counted rather than refused as inverted                                                                                 | advisory |
 | `empty_mask`                                                        | any segmenter                                          | nothing selected                                                                                                                                                                         | blocking |
 | `fill_erased_mask`                                                  | any segmenter                                          | thresholding found objects; `fill_size` deleted them all — names the size to use                                                                                                         | blocking |
 | `noisy_segmentation`                                                | any segmenter, `suggest`                               | ≥50 non-major components and no dominant object — background texture                                                                                                                     | blocking |
@@ -812,6 +846,7 @@ the committed fixtures. Blocking guards withhold numbers; advisories travel with
 | `nan_pixels`                                                        | thermal and spectral measurers                         | non-finite values excluded from statistics; counts given                                                                                                                                 | advisory |
 | `refine_large_change`                                               | `refine`                                               | mask changed > 25% — a different outline, not a cleanup                                                                                                                                  | —        |
 | `refine_dropped_object`                                             | `refine`                                               | an op removed a component ≥ 10% of the largest — a leaf, not a speck; names the op that split it                                                                                         | —        |
+| `fill_holes_flooded`                                                | `refine`                                               | a `fill_holes` op filled more than the mask held: a ring (pot rim, frame-edge specks) enclosed background — not an inverted polarity                                                     | —        |
 | `object_exceeds_region`                                             | `measure_regions`                                      | a cell's object is ≥ 1.25× the cell — two plants, or a misaligned grid                                                                                                                   | —        |
 | `object_claimed_by_neighbour`                                       | `measure_regions`                                      | this cell's material was assigned whole to a neighbour, or its own object is < 20% of it                                                                                                 | —        |
 | `grid_misaligned`                                                   | `measure_regions` (`auto_grid`)                        | empty cells plus exceeded cells → use `rect_grid`                                                                                                                                        | —        |
