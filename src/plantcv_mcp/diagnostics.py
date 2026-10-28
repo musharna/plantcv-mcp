@@ -174,6 +174,11 @@ def excess_green(img: np.ndarray, mask: np.ndarray) -> float | None:
 # plus plant) scores 0.123 or less.
 PLANT_GREEN = 0.2
 
+# Over this share of the frame a mask is probably the background (see
+# implausible_coverage_warning). One constant, so the counters' "is this a
+# coverage case" and "should it be forgiven" checks cannot drift apart.
+IMPLAUSIBLE_COVERAGE = 0.5
+
 
 def plant_fills_frame_advisory(
     img: np.ndarray, mask: np.ndarray, diag: MaskDiagnostics
@@ -182,7 +187,7 @@ def plant_fills_frame_advisory(
     inverted. A plant cropped to its own pot fills more than half and is not
     inverted, so a plant-green mask is counted, with this said beside the
     count; anything less green is still refused."""
-    if diag.mask_fraction <= 0.5:
+    if diag.mask_fraction <= IMPLAUSIBLE_COVERAGE:
         return None
     green = excess_green(img, mask)
     if green is None or green < PLANT_GREEN:
@@ -200,7 +205,7 @@ def plant_fills_frame_advisory(
 
 def implausible_coverage_warning(
     diag: MaskDiagnostics,
-    max_fraction: float = 0.5,
+    max_fraction: float = IMPLAUSIBLE_COVERAGE,
     remedy: str = RGB_COVERAGE_REMEDY,
 ) -> "Advisory | None":
     """Warn when the mask covers implausibly much of the frame.
