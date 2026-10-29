@@ -33,6 +33,7 @@ from .diagnostics import (
     analyze_mask,
     assert_not_degenerate,
     implausible_coverage_warning,
+    plant_fills_frame_advisory,
 )
 from .leaves import LeafCountRefusedError, describe_instances
 from .paths import check_open_fd, check_readable
@@ -352,13 +353,14 @@ def segment_leaves_sam(
     diag = analyze_mask(mask)
     assert_not_degenerate(diag)
     coverage = implausible_coverage_warning(diag)
-    if coverage:
+    filled = plant_fills_frame_advisory(img, mask, diag) if coverage else None
+    if coverage and filled is None:
         raise LeafCountRefusedError(
             f"implausible_coverage: {coverage.message} Prompts are placed on the "
             "mask, so an inverted mask prompts the background; fix the "
             "segmentation first."
         )
-    warnings: list[Advisory] = []
+    warnings: list[Advisory] = [filled] if filled else []
     if diag.major_object_count >= 2:
         warnings.append(
             Advisory(

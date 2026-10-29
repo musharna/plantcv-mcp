@@ -51,3 +51,20 @@ grid the benchmark agent drew there (cells 420 px wide, 23 px apart). The
 2016-01-17 crop spans the gap between the first two circles `auto_grid` drew.
 Crops are small because the reference, PlantCV's own `create_labels`, costs
 ROIs x contours x frame.
+
+## Whole pot cells (`*_potcell_*.png`)
+
+Two crops of one pot each, from the same dataset (CC BY 4.0, as above), taken
+exactly as the 2026-10-24 field benchmark's F2 questions name them: the cell of
+the 4x5 grid at row/col (1-based), bounds rounded. Pixels are untouched (PNG,
+lossless). They are the two ways a whole pot broke the server in the F2
+diagnosis (`benchmarks/agent_qa/field_2026-10-24/f2_counterfactual/` on the
+`bench/field-families` branch): a grown rosette fills its pot, so "the plant
+covers less of the frame" picks the soil (`tests/test_suggest.py`); a seedling
+is about 2% of its pot, so otsu splits soil from the pot rim and `fill_holes`
+fills the whole pot inside the rim (`tests/test_refine.py`).
+
+| file                                  | source image (`PSI_Tray032/tv/`)                    | cell                   | crop `y0:y1, x0:x1`  |
+| ------------------------------------- | --------------------------------------------------- | ---------------------- | -------------------- |
+| `tray032_2016-01-17_potcell_r1c5.png` | `PSI_Tray032_2016-01-17--14-07-22_top.png` (f2_10)  | row 1, col 5, 29 leaves | `70:520, 1967:2417`  |
+| `tray032_2015-12-14_potcell_r3c3.png` | `PSI_Tray032_2015-12-14--12-54-51_top.png` (f2_01)  | row 3, col 3, 6 leaves  | `968:1419, 1069:1521` |

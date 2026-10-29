@@ -140,6 +140,43 @@ def test_inverted_mask_is_refused_by_name():
     assert count_leaves(img, mask).leaf_count == 1
 
 
+def test_a_plant_cropped_to_its_pot_is_counted_not_refused():
+    """A real grown rosette in its own pot cell fills 86% of the crop. The
+    over-half-the-frame refusal assumed that means an inverted mask, so a pot
+    crop could never be counted (field benchmark F2). A plant-green mask is
+    counted and says why; a real soil mask over the line is still refused,
+    by both the automatic and the seeded split."""
+    from plantcv_mcp.leaves import split_by_seeds
+    from plantcv_mcp.refine import apply_refinements
+    from plantcv_mcp.segmentation import segment_mask
+
+    img = cv2.imread(str(FIXTURES / "tray032_2016-01-17_potcell_r1c5.png"))
+    plant = apply_refinements(
+        segment_mask(img, "a", "otsu", object_type="dark", fill_size=200),
+        [{"op": "fill_holes"}, {"op": "keep_largest", "n": 1}],
+    )
+    assert (plant > 0).mean() > 0.5  # the premise: over the old refusal line
+    res = count_leaves(img, plant)
+    assert res.leaf_count >= 1
+    assert "plant_fills_frame" in [w.code for w in res.warnings]
+
+    # A real inverted mask over the line: the seedling pot's 'light' side is
+    # its soil and rim.
+    pot = cv2.imread(str(FIXTURES / "tray032_2015-12-14_potcell_r3c3.png"))
+    soil = segment_mask(pot, "a", "otsu", object_type="light", fill_size=200)
+    assert (soil > 0).mean() > 0.5
+    with pytest.raises(LeafCountRefusedError, match="implausible_coverage"):
+        count_leaves(pot, soil)
+    ys, xs = np.nonzero(soil)
+    with pytest.raises(LeafCountRefusedError, match="implausible_coverage"):
+        split_by_seeds(pot, soil, [[int(xs[0]), int(ys[0])]])
+    ys, xs = np.nonzero(plant)
+    seeded = split_by_seeds(
+        img, plant, [[int(xs[len(xs) // 2]), int(ys[len(ys) // 2])]]
+    )
+    assert "plant_fills_frame" in [w.code for w in seeded.warnings]
+
+
 def test_min_distance_and_scale_are_validated():
     img, mask = _scene([(300, 300)])
     with pytest.raises(ValueError, match="min_distance must be >= 1"):

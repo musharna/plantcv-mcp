@@ -124,6 +124,7 @@ the Haiku and Sonnet runs:
 | `segment_hyperspectral`, `measure_spectral`   | an HSI session from an index threshold; index statistics         |
 | `segment_thermal`, `measure_thermal`          | a thermal session from a °C band; °C statistics under the mask   |
 | `zoom_image`                                  | part of an image, enlarged to look closely (not a measurement)   |
+| `crop_image`                                  | one plant of a tray written as its own image, for the other tools |
 | `list_methods`                                | channels, methods, object types, pinned PlantCV version          |
 
 Typical loop: `suggest_segmentation` → `segment` → **look at the overlay** → `segment` again

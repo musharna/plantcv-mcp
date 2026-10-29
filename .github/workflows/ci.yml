@@ -154,6 +154,7 @@ jobs:
                   "calibrate_scale_from_marker",
                   "correct_lens_distortion",
                   "count_leaves",
+                  "crop_image",
                   "list_methods",
                   "measure",
                   "measure_images",

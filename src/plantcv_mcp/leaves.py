@@ -36,6 +36,7 @@ from .diagnostics import (
     analyze_mask,
     assert_not_degenerate,
     implausible_coverage_warning,
+    plant_fills_frame_advisory,
 )
 from .imaging import render_overlay
 from .measurement import isolated_pcv_outputs
@@ -178,13 +179,14 @@ def count_leaves(
     # as a measurement of a plant, and an empty mask is a failed segmentation.
     assert_not_degenerate(diag)
     coverage = implausible_coverage_warning(diag)
-    if coverage:
+    filled = plant_fills_frame_advisory(img, mask, diag) if coverage else None
+    if coverage and filled is None:
         raise LeafCountRefusedError(
             f"implausible_coverage: {coverage.message} A watershed of the "
             "background counts background blobs as leaves; fix the segmentation "
             "first."
         )
-    warnings: list[Advisory] = []
+    warnings: list[Advisory] = [filled] if filled else []
     # measure_morphology() refuses a multi-object mask; this cannot. A rosette
     # whose petioles fall below the threshold IS several comparably sized
     # objects (measured: most plants in the Aberystwyth ground-truth masks), so
@@ -387,7 +389,8 @@ def split_by_seeds(
     diag = analyze_mask(mask)
     assert_not_degenerate(diag)
     coverage = implausible_coverage_warning(diag)
-    if coverage:
+    filled = plant_fills_frame_advisory(img, mask, diag) if coverage else None
+    if coverage and filled is None:
         raise LeafCountRefusedError(
             f"implausible_coverage: {coverage.message} Splitting the background "
             "splits nothing of the plant; fix the segmentation first."
@@ -421,6 +424,8 @@ def split_by_seeds(
             ),
         )
     ]
+    if filled:
+        warnings.append(filled)
     unassigned = int((inside & (labels_c == 0)).sum())
     if unassigned:
         warnings.append(
