@@ -6,9 +6,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-Three fixes from the 2026-10-24 field benchmark's leaf-count family (F2), where
-every server run counted one pot's leaves by eye and the counters could not be
-pointed at a pot.
+Fixes from the 2026-10-24 field benchmark's leaf-count family (F2), where every
+server run counted one pot's leaves by eye and the counters could not be pointed
+at a pot, and from the diagnosis of SAM's over-count that followed.
 
 ### Added
 
@@ -41,6 +41,21 @@ pointed at a pot.
   premise as the old polarity rule, so a grown rosette cropped to its pot (56-86%
   of the crop, 0.28-0.32) could never be counted. Background masks over half the
   frame scored 0.123 or less on all 46 benchmark images and are still refused.
+
+### Fixed
+
+- `segment_leaves_sam` no longer counts the soil between a grown rosette's
+  leaves. `refine(fill_holes)` adds those enclosed gaps to the mask, SAM outlines
+  each as a crisp object (predicted IoU 0.86-0.97), and the "on the plant" test
+  checked the filled mask, so they passed: 22 of the masks counted on five grown
+  Tray 032 plants lay on no annotated leaf. Sessions now keep the pixels
+  `segment()` took as plant through every `refine()`, and a candidate must lie
+  at least 80% on those. Every gap mask was at most 37% on them; 109 of 113
+  leaf masks were at least 83%. **The held-out figures get worse** (Tray 032
+  young −0.60 / 1.10 MAE → −1.35 / 1.45; grown +0.23 / 1.77 → −2.77 / 2.77): the
+  gaps had been cancelling an undercount of hidden and merged leaves, by an amount
+  that depended on how much soil a rosette enclosed (+3 to +6 on grown plants
+  cropped to their pots). docs/EVAL.md has the before/after table.
 
 ## [1.17.2] — 2026-10-26
 

@@ -157,3 +157,22 @@ def test_the_stored_mask_is_read_only():
         store.get(s.session_id).mask[0, 0] = 255
     # The caller's own array was copied, not captured: it stays writable.
     mask[0, 0] = 1
+
+
+def test_observed_pixels_are_the_masks_own_unless_given_and_must_match_it():
+    """`observed` is what segment() saw; refine() passes its parent's on. A
+    mismatched one would index the wrong pixels in segment_leaves_sam, so it is
+    refused, not cropped or broadcast."""
+    store = SessionStore()
+    mask = np.zeros((4, 6), np.uint8)
+    mask[1:3, 1:5] = 255
+    fresh = store.create("/img.png", mask, "a", "otsu", digest="d")
+    assert fresh.observed is fresh.mask  # a segmentation is its own observation
+    seen = np.zeros_like(mask)
+    seen[1:3, 1:3] = 255
+    child = store.create("/img.png", mask, "a", "otsu", digest="d", observed=seen)
+    assert (child.observed == seen).all() and child.observed is not seen
+    with pytest.raises(ValueError, match="read-only"):
+        child.observed[0, 0] = 255
+    with pytest.raises(ValueError, match=r"observed mask shape \(6, 4\)"):
+        store.create("/img.png", mask, "a", "otsu", digest="d", observed=seen.T)

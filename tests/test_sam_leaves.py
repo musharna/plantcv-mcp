@@ -163,6 +163,89 @@ def test_overlapping_leaves_both_survive_up_to_half_covered():
     assert int(select_instances(plant, [(a, 0.9, 0.9), (nearer, 0.9, 0.9)]).max()) == 1
 
 
+def test_a_mask_on_pixels_refine_added_is_not_a_leaf():
+    """fill_holes adds the soil a grown rosette encloses between its leaves. SAM
+    outlines each such gap as a crisp object; judged against the filled mask it
+    lay 'on the plant' and was counted (+22 masks on 5 grown Tray 032 plants).
+    Judged against the pixels segment() saw, it is not."""
+    shape = (200, 300)
+    left, right = _disc(shape, (100, 100), 40), _disc(shape, (100, 200), 40)
+    third = _disc(shape, (40, 150), 30)
+    gap = _disc(shape, (100, 150), 9) & ~left & ~right  # soil between the leaves
+    observed = left | right | third
+    plant = observed | gap  # what fill_holes hands the counter
+    candidates = [
+        (left, 0.95, 0.95),
+        (right, 0.95, 0.95),
+        (third, 0.95, 0.95),
+        (gap, 0.97, 0.98),  # SAM scores a soil gap as highly as a leaf
+    ]
+    # The defect: without the observed pixels the gap is a fourth leaf.
+    assert int(select_instances(plant, candidates).max()) == 4
+    labels = select_instances(plant, candidates, observed=observed)
+    assert int(labels.max()) == 3  # the three leaves are still kept
+    assert not labels[gap].any()
+    # A leaf mask that strays over a few filled pixels is still a leaf (~7% off;
+    # `third`, as `left` plus the gap would cross the 40% size ceiling).
+    assert (
+        int(
+            select_instances(
+                plant, [(third | gap, 0.95, 0.95)], observed=observed
+            ).max()
+        )
+        == 1
+    )
+
+
+def _ring_png(tmp_path) -> str:
+    """A rosette as a green annulus around bare soil: fill_holes fills the soil."""
+    img = np.full((240, 320, 3), (40, 70, 110), np.uint8)
+    cv2.circle(img, (160, 120), 60, (40, 160, 40), -1)
+    cv2.circle(img, (160, 120), 25, (40, 70, 110), -1)
+    path = str(tmp_path / "ring.png")
+    cv2.imwrite(path, img)
+    return path
+
+
+def _quadrants_and_centre(model, rgb, plant):
+    """A stand-in for `_candidates`: the ring's four quadrants as leaves, and the
+    filled centre as the object SAM finds there."""
+    ys, xs = np.nonzero(plant)
+    cy, cx = ys.mean(), xs.mean()
+    yy, xx = np.ogrid[: plant.shape[0], : plant.shape[1]]
+    r = np.hypot(yy - cy, xx - cx)
+    ring = plant & (r >= 27)
+    out = [
+        (ring & (yy < cy) & (xx < cx), 0.95, 0.95),
+        (ring & (yy < cy) & (xx >= cx), 0.95, 0.95),
+        (ring & (yy >= cy) & (xx < cx), 0.95, 0.95),
+        (ring & (yy >= cy) & (xx >= cx), 0.95, 0.95),
+        (plant & (r < 23), 0.97, 0.98),
+    ]
+    return out
+
+
+def test_filled_soil_is_not_counted_through_chained_refinements(
+    tmp_path, monkeypatch, no_model
+):
+    from plantcv_mcp.server import _refine_impl, _store
+
+    checkpoint, _ = no_model
+    monkeypatch.setattr(sam_leaves, "_candidates", _quadrants_and_centre)
+    seg = _segment_impl(_ring_png(tmp_path), "a", "otsu")
+    filled = _refine_impl(seg["session_id"], [{"op": "fill_holes"}])["session_id"]
+    # The premise: fill_holes really did put the soil centre into the mask.
+    assert _store.get(filled).mask[120, 160] > 0
+    assert _store.get(seg["session_id"]).mask[120, 160] == 0
+    out = _segment_leaves_sam_impl(filled, checkpoint_path=checkpoint)
+    assert out["leaf_count"] == 4 and out["candidate_masks"] == 5
+    # A second refinement still knows which pixels segment() saw.
+    again = _refine_impl(filled, [{"op": "keep_largest", "n": 1}])["session_id"]
+    assert (
+        _segment_leaves_sam_impl(again, checkpoint_path=checkpoint)["leaf_count"] == 4
+    )
+
+
 def _pin(monkeypatch, payload: bytes) -> None:
     monkeypatch.setattr(
         sam_leaves, "CHECKPOINT_SHA256", hashlib.sha256(payload).hexdigest()
