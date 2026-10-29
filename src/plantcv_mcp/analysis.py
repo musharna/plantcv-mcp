@@ -140,8 +140,11 @@ def leaves_sam(
     checkpoint: str,
     device: str,
     px_per_mm: float | None,
+    observed: np.ndarray | None = None,
 ) -> SamLeavesResult:
-    return segment_leaves_sam(img, mask, checkpoint, device=device, px_per_mm=px_per_mm)
+    return segment_leaves_sam(
+        img, mask, checkpoint, device=device, px_per_mm=px_per_mm, observed=observed
+    )
 
 
 def morphology(

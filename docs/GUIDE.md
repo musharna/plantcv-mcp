@@ -667,10 +667,17 @@ Budget about 20 s per plant on a 6-thread CPU and about 4 GB of memory.
   carries `low_instance_coverage`.
 - **What is kept.** Prompts are a 32×32 grid over the plant's crop, kept where they
   fall on the mask. A candidate is kept when SAM scores it at least 0.80 (predicted
-  IoU) and 0.85 (stability), at least 80% of it is on the mask, and it is between 0.2%
-  and 40% of the plant's area; smaller masks win, and a mask more than half covered by
-  kept ones is dropped. None of this is tunable per call: the constants are what was
-  measured.
+  IoU) and 0.85 (stability), at least 80% of it is on pixels `segment()` itself took as
+  plant, and it is between 0.2% and 40% of the plant's area; smaller masks win, and a
+  mask more than half covered by kept ones is dropped. None of this is tunable per
+  call: the constants are what was measured.
+- **Filled gaps are not leaves.** A grown rosette encloses patches of soil between its
+  leaves; `refine(fill_holes)` (or `closing`, `dilate`) adds them to the mask, and SAM
+  outlines each as a crisp object. The session remembers which pixels `segment()` saw,
+  through any chain of `refine()` calls, and a candidate lying on added pixels is not
+  kept. Judged against the filled mask instead, these gaps were 22 of the masks counted
+  on five grown Tray 032 plants (every one at most 37% on observed pixels; leaf masks
+  were at least 83% on them in 109 of 113 cases).
 - Isolate one plant first, as for `count_leaves()`: the area limits are fractions of
   the whole mask. Several comparable objects are counted together and flagged
   `multi_object_mask`. Empty and inverted masks are refused by name, and a result

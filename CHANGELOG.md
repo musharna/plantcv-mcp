@@ -42,6 +42,17 @@ pointed at a pot.
   of the crop, 0.28-0.32) could never be counted. Background masks over half the
   frame scored 0.123 or less on all 46 benchmark images and are still refused.
 
+### Fixed
+
+- `segment_leaves_sam` no longer counts the soil between a grown rosette's
+  leaves. `refine(fill_holes)` adds those enclosed gaps to the mask, SAM outlines
+  each as a crisp object (predicted IoU 0.86-0.97), and the "on the plant" test
+  checked the filled mask, so they passed: 22 of the masks counted on five grown
+  Tray 032 plants lay on no annotated leaf. Sessions now keep the pixels
+  `segment()` took as plant through every `refine()`, and a candidate must lie
+  at least 80% on those. Every gap mask was at most 37% on them; 109 of 113
+  leaf masks were at least 83%.
+
 ## [1.17.2] — 2026-10-26
 
 ### Fixed

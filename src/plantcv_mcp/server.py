@@ -609,6 +609,7 @@ def _refine_impl(session_id: str, ops: list[dict]) -> dict:
         card_excluded_px=session.card_excluded_px + regrown,
         lineage=[*session.lineage, *validated],
         parent_id=session.session_id,
+        observed=session.observed,
     )
 
     def _summary(d) -> dict:
@@ -827,7 +828,9 @@ def _segment_leaves_sam_impl(
     require_sam()
     img = _load_session_image(session)
     checkpoint = resolve_checkpoint(checkpoint_path, download_checkpoint)
-    res = dispatch("leaves_sam", img, session.mask, checkpoint, device, px_per_mm)
+    res = dispatch(
+        "leaves_sam", img, session.mask, checkpoint, device, px_per_mm, session.observed
+    )
     carried = [
         w
         for w in mask_warnings(session.mask, analyze_mask(session.mask))
@@ -2092,7 +2095,9 @@ def build_server() -> MCPServer:
         overlay with every instance outlined and numbered, as count_leaves()
         does. The model is prompted on a 32x32 point grid restricted to the
         mask; masks are kept when leaf-sized (0.2%-40% of the plant), mostly on
-        the mask, and not already covered by smaller kept masks.
+        pixels segment() itself took as plant (not on soil gaps that
+        refine's fill_holes or closing added), and not already covered by
+        smaller kept masks.
 
         OPTIONAL: needs `pip install "plantcv-mcp[sam]"` (torch, torchvision,
         segment-anything). Without it this refuses with SamNotInstalledError;
