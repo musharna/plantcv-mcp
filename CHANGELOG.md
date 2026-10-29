@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.18.0] — 2026-10-29
+
 Fixes from the 2026-10-24 field benchmark's leaf-count family (F2), where every
 server run counted one pot's leaves by eye and the counters could not be pointed
 at a pot, and from the diagnosis of SAM's over-count that followed.
@@ -56,6 +58,14 @@ at a pot, and from the diagnosis of SAM's over-count that followed.
   gaps had been cancelling an undercount of hidden and merged leaves, by an amount
   that depended on how much soil a rosette enclosed (+3 to +6 on grown plants
   cropped to their pots). docs/EVAL.md has the before/after table.
+
+### Security
+
+- `uv.lock` pins filelock 4.2.4 (was 4.0.1), msgpack 1.2.4 (was 1.2.1),
+  setuptools 84.2.1 (was 84.0.0) and tornado 6.6 (was 6.5.9), clearing the 19
+  open Dependabot advisories against the lock (2 high: filelock
+  GHSA-v4x8-3wr5-3wq8, msgpack GHSA-j586-36cw-2gc2). The lock is what checkouts
+  and CI install; a `uvx` install resolves its own.
 
 ## [1.17.2] — 2026-10-26
 
