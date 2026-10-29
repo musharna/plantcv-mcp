@@ -162,7 +162,8 @@ bytes) is the hash of the file fetched from that URL on 2026-09-19. It is loaded
 **Method.** The image is cropped to the mask's bounding box plus a margin, a 32×32
 grid of point prompts is laid over the crop and only the points on the mask are
 kept, and SAM's candidate masks are filtered: predicted IoU ≥ 0.80 and stability
-≥ 0.85, at least 80% on the plant mask, between 0.2% and 40% of the plant's area,
+≥ 0.85, at least 80% on the pixels `segment()` took as plant (not on pixels a
+`refine()` added; since 2026-10-29, below), between 0.2% and 40% of the plant's area,
 then smallest first, dropping a mask once more than half of it is already covered.
 
 **What was chosen on which tray.** Every constant was chosen on Tray 031. The grid
@@ -180,7 +181,8 @@ The three differ by less than a quarter of a leaf on 14 plants, and the young pl
 rank them the other way. The margin is not a sensitive choice and the table should not
 be read as showing that 0.10 is better.
 
-**Tray 032 was then run once through the finished tool**, with nothing changed
+**Tray 032 was then run once through the finished tool** (as released up to 1.17.2;
+the 2026-10-29 change below moved these figures), with nothing changed
 afterwards. SAM's raw masks on Tray 032 had been scored once before, with the same
 filter and no crop-margin step (young −0.75 / 0.95 / 10, grown −0.38 / 2.08 / 1), to
 decide whether the tool was worth building; no constant was chosen from that run. Both
@@ -211,6 +213,36 @@ sees. `mask_coverage` (the share of the plant mask that received an instance) ra
 `low_instance_coverage` advisory (under 0.50) did not fire on this dataset; it is
 tested with a stubbed model. One dataset, one species, one camera: the figures say
 nothing about other plants.
+
+**2026-10-29: filled soil is no longer counted, and the counts fall.** The pinned path
+runs `refine(fill_holes)`, which adds the soil a grown rosette encloses between its
+leaves. SAM outlines each gap as a crisp object (predicted IoU 0.86–0.97), and the
+filter judged "on the plant" against the filled mask, so the gaps were kept. Matched
+leaf by leaf against the annotation on five grown Tray 032 plants from other dates (the
+2026-10-24 field benchmark's F2 plants, annotation box, this same path), 22 kept masks
+lay on no annotated leaf; every one was at most 37% on pixels `segment()` had taken as
+plant, and 109 of 113 masks on annotated leaves were at least 83%. The filter now
+judges against those pixels (kept by the session through every `refine()`), with the
+same 0.80, so no constant was chosen. Tray 032 re-run, old and new rule on the same
+sessions (the old rule reproduced the table above exactly on the 13 grown plants):
+
+| Tray 032 (held out)      | rule                         | mean error | MAE  | exact |
+| ------------------------ | ---------------------------- | ---------- | ---- | ----- |
+| 20 young, 8–16 lvs       | filled mask (up to 1.17.2)   | −0.60      | 1.10 | 6/20  |
+|                          | `segment()`'s pixels (now)   | −1.35      | 1.45 | 5/20  |
+| 13 grown, 18–25 lvs      | filled mask (up to 1.17.2)   | +0.23      | 1.77 | 2/13  |
+|                          | `segment()`'s pixels (now)   | −2.77      | 2.77 | 1/13  |
+
+Read plainly: worse on this tray, and shipped anyway. The near-zero grown-plant bias was
+two errors cancelling: soil counted as leaves, against leaves hidden under others and
+small central leaves sharing one mask, which no setting of this filter recovers. The
+new rule lowered every one of the 13 grown counts (by 1 to 5) and now undercounts every
+grown plant but one, which it gets exact. The cancellation depended on how much soil a
+rosette enclosed: on the five F2 plants the old rule over-counted by +3 to +6 when
+each was cropped to its pot. Two of the 33 plants here (one per date) are among the
+diagnosis plants; nothing was tuned on them. Tray 031 was not re-run (its two dates are
+not recorded). `scripts/eval_leaf_count_sam.py` runs this path; the old rule is
+`segment_leaves_sam(..., observed=None)`.
 
 **Dataset.** Aberystwyth Leaf Evaluation Dataset (Bell and Dee, 2016,
 <https://doi.org/10.5281/zenodo.168158>), CC BY 4.0, as above.

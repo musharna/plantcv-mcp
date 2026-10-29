@@ -6,9 +6,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-Three fixes from the 2026-10-24 field benchmark's leaf-count family (F2), where
-every server run counted one pot's leaves by eye and the counters could not be
-pointed at a pot.
+Fixes from the 2026-10-24 field benchmark's leaf-count family (F2), where every
+server run counted one pot's leaves by eye and the counters could not be pointed
+at a pot, and from the diagnosis of SAM's over-count that followed.
 
 ### Added
 
@@ -51,7 +51,11 @@ pointed at a pot.
   Tray 032 plants lay on no annotated leaf. Sessions now keep the pixels
   `segment()` took as plant through every `refine()`, and a candidate must lie
   at least 80% on those. Every gap mask was at most 37% on them; 109 of 113
-  leaf masks were at least 83%.
+  leaf masks were at least 83%. **The held-out figures get worse** (Tray 032
+  young −0.60 / 1.10 MAE → −1.35 / 1.45; grown +0.23 / 1.77 → −2.77 / 2.77): the
+  gaps had been cancelling an undercount of hidden and merged leaves, by an amount
+  that depended on how much soil a rosette enclosed (+3 to +6 on grown plants
+  cropped to their pots). docs/EVAL.md has the before/after table.
 
 ## [1.17.2] — 2026-10-26
 

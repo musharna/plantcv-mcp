@@ -653,13 +653,18 @@ and is not available is `SamDeviceError`, not a quiet run on the CPU.
 | Tray 032 (held out)              | method               | mean error | mean abs. error | exact | s/plant, CPU |
 | -------------------------------- | -------------------- | ---------- | --------------- | ----- | ------------ |
 | 20 young rosettes (8–16 leaves)  | `count_leaves`       | −3.2       | 3.2             | 0/20  | under 0.1    |
-|                                  | `segment_leaves_sam` | −0.6       | 1.1             | 6/20  | 21           |
+|                                  | `segment_leaves_sam` | −1.4       | 1.5             | 5/20  | 21           |
 | 13 grown rosettes (18–25 leaves) | `count_leaves`       | −5.4       | 7.9             | 0/13  | under 0.1    |
-|                                  | `segment_leaves_sam` | +0.2       | 1.8             | 2/13  | 19           |
+|                                  | `segment_leaves_sam` | −2.8       | 2.8             | 1/13  | 19           |
 
 It is closer on both, and still an estimate: exact on fewer than a third of plants, on
-one dataset of one species. The model was not trained on leaves and is not fine-tuned.
-Budget about 20 s per plant on a 6-thread CPU and about 4 GB of memory.
+one dataset of one species. It **undercounts**: the hand counts include leaves mostly
+hidden under others, and small central leaves often share one mask. Up to 1.17.2 the
+grown-plant figure was +0.2 / 1.8 because soil gaps counted as leaves cancelled that
+undercount; how much they cancelled depended on how much soil a rosette enclosed (+3
+to +6 leaves on grown plants cropped to their pots). The model was not trained on
+leaves and is not fine-tuned. Budget about 20 s per plant on a 6-thread CPU and about
+4 GB of memory.
 
 - **Read `mask_coverage` and the overlay.** Leaves that got no leaf-sized mask from the
   model are not in the count. `mask_coverage` is the share of the plant mask that
