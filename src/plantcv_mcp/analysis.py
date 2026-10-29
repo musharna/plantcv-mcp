@@ -26,7 +26,7 @@ from .hyperspectral import (
 from .leaves import LeafInstancesResult, count_leaves, split_by_seeds
 from .measurement import measure_traits
 from .morphology import MorphologyResult, measure_morphology
-from .refine import DroppedObject, apply_refinements_traced
+from .refine import DroppedObject, FloodedHoles, apply_refinements_traced
 from .regions import (
     build_regions,
     grid_misalignment_warning,
@@ -164,7 +164,9 @@ def batch(image_paths: list[str], **recipe: Any) -> dict:
     return measure_batch(image_paths, **recipe)
 
 
-def refine(mask: np.ndarray, ops: list[dict]) -> tuple[np.ndarray, list[DroppedObject]]:
+def refine(
+    mask: np.ndarray, ops: list[dict]
+) -> tuple[np.ndarray, list[DroppedObject], list[FloodedHoles]]:
     return apply_refinements_traced(mask, ops)
 
 

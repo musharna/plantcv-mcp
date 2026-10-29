@@ -225,6 +225,7 @@ async def test_server_registers_exactly_the_expected_tools():
         "segment_thermal",
         "measure_thermal",
         "zoom_image",
+        "crop_image",
     }
 
 

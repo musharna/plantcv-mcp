@@ -477,6 +477,27 @@ def test_empty_and_inverted_masks_are_refused_before_the_model_loads(
     assert [w.code for w in res.warnings] == []
 
 
+def test_a_green_mask_filling_the_frame_is_prompted_not_refused(monkeypatch, no_model):
+    """A plant cropped to its own pot fills most of the crop. Grey or soil
+    filling the frame is still refused (the test above); plant-green is
+    prompted, and the result says why it was not refused."""
+    checkpoint, loads = no_model
+    monkeypatch.setattr(sam_leaves, "_candidates", _strips(3))
+    img = np.full((200, 300, 3), (40, 70, 110), np.uint8)  # soil
+    plant = np.zeros((200, 300), np.uint8)
+    plant[10:190, 15:285] = 255  # 81% of the frame
+    img[plant > 0] = (40, 160, 40)
+    res = sam_leaves.segment_leaves_sam(img, plant, checkpoint)
+    assert res.leaf_count == 3 and loads == ["cpu"]
+    assert "plant_fills_frame" in [w.code for w in res.warnings]
+    from plantcv_mcp.leaves import LeafCountRefusedError
+
+    # The same mask over soil-coloured pixels: as large, not green, refused.
+    soil = np.full((200, 300, 3), (40, 70, 110), np.uint8)
+    with pytest.raises(LeafCountRefusedError, match="implausible_coverage"):
+        sam_leaves.segment_leaves_sam(soil, plant, checkpoint)
+
+
 def test_several_objects_and_a_clipped_mask_carry_their_advisories(
     tmp_path, monkeypatch, no_model
 ):
