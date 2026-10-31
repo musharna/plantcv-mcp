@@ -332,6 +332,24 @@ def leaks(events: list[dict[str, Any]]) -> list[str]:
     ]
 
 
+def text_mentions(events: list[dict[str, Any]], reply: str) -> list[str]:
+    """Source markers in the model's own words: its text blocks and its reply.
+    Report-only. Naming the dataset is not fetching it, so this never decides
+    validity (the leak scan above does, on tool traffic, as the PREREG fixed);
+    it is the per-run signal that the model may be recalling public data."""
+    text = "\n".join(
+        [
+            b.get("text", "")
+            for e in events
+            if e.get("type") == "assistant"
+            for b in e["message"].get("content", [])
+            if b.get("type") == "text"
+        ]
+        + [reply]
+    ).lower()
+    return [m for m in SOURCE_LEAK_MARKERS if m in text]
+
+
 def assess(arm: str, stdout: str, rc: int | str) -> dict[str, Any]:
     """Everything about one attempt except its score, from its transcript, by
     one rule for every arm. Invalid: exit not 0 (timeouts included); no init
@@ -383,6 +401,7 @@ def assess(arm: str, stdout: str, rc: int | str) -> dict[str, Any]:
             m in json.dumps(u.get("input", {})) for u in uses for m in KEY_MARKERS
         ),
         "leaks": found,
+        "text_mentions": text_mentions(events, result.get("result") or ""),
         "valid": not why,
         "invalid_reason": "; ".join(why) or None,
         "cost_usd": result.get("total_cost_usd"),

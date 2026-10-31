@@ -187,12 +187,6 @@ class Grid:
         xb, yb = self.bounds()
         return (xb[c] + xb[c + 1]) / 2, (yb[r] + yb[r + 1]) / 2
 
-    def cell_of(self, x: float, y: float) -> tuple[int, int] | None:
-        xb, yb = self.bounds()
-        c = int(np.searchsorted(xb, x) - 1)
-        r = int(np.searchsorted(yb, y) - 1)
-        return (r, c) if 0 <= r < ROWS and 0 <= c < COLS else None
-
 
 def grid(img: np.ndarray) -> Grid:
     """The internal gaps: peaks of the cream fraction near the expected

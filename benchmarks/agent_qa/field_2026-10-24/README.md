@@ -78,6 +78,12 @@ rosettes vary little.
   SciPy labelling.
 - **Leaks:** the alt arm has no web tools in this set (`"alt_web": false`).
   Zenodo, CVPPP and dataset file names are leak markers in every set.
+- **Recall (added 2026-10-31, report-only):** the leak scan reads tool traffic, so a
+  model that only names the dataset in its own text or reply is not caught by it.
+  Each run now also records `text_mentions`, the same markers in the model's own
+  words; it never changes validity, which the PREREG fixed. Scanned afterwards, the
+  50 saved runs of this set (pilot and the 10-26 F1 re-run) contain none. 47 of them
+  have text to scan, and a marker planted into one of them is found.
 
 ## Files
 

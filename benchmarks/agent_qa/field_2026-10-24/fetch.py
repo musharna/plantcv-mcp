@@ -80,7 +80,7 @@ class RangeFile(io.RawIOBase):
         # a wrong status or length is not: it means a different file.
         for attempt in range(3):
             try:
-                with urllib.request.urlopen(req, timeout=300) as r:  # nosec B310: fixed https Zenodo URL, traced: RECORD constant
+                with urllib.request.urlopen(req, timeout=300) as r:  # nosec B310 - fixed https Zenodo URL, traced: RECORD constant
                     if r.status != 206:
                         raise RuntimeError(
                             f"{self.url}: HTTP {r.status}, want 206 (range read)"
@@ -103,7 +103,7 @@ class RangeFile(io.RawIOBase):
 def open_archive(name: str) -> zipfile.ZipFile:
     size, _ = ARCHIVES[name]
     head = urllib.request.Request(RECORD.format(name), method="HEAD")
-    with urllib.request.urlopen(head, timeout=60) as r:  # nosec B310: fixed https Zenodo URL, traced: RECORD constant
+    with urllib.request.urlopen(head, timeout=60) as r:  # nosec B310 - fixed https Zenodo URL, traced: RECORD constant
         got = int(r.headers["Content-Length"])
     if got != size:
         raise RuntimeError(f"{name}: Zenodo serves {got} bytes, the pin is {size}")

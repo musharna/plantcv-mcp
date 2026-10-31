@@ -219,6 +219,26 @@ def test_dataset_urls_are_leak_markers_but_a_pixel_count_is_not(field_set) -> No
         assert not got["valid"] and got["invalid_reason"].startswith("leak"), leak
 
 
+def test_naming_the_dataset_in_text_is_reported_but_does_not_invalidate(
+    field_set,
+) -> None:
+    """The leak scan (frozen in the PREREG) reads tool inputs and outputs: a run
+    that FETCHED the source is invalid. A model that only NAMES it, in its own
+    text or reply, may be recalling public data; that is reported per run as
+    text_mentions, never used for validity (review of #173)."""
+    calls = [("Read", {"file_path": "tray.png"})]
+    clean = run.assess("alt", _transcript(["Bash", "Read"], calls), 0)
+    assert clean["valid"] and clean["leaks"] == [] and clean["text_mentions"] == []
+    events = [json.loads(x) for x in _transcript(
+        ["Bash", "Read"], calls, reply="From the Aberystwyth set on Zenodo. ANSWER: 7"
+    ).splitlines()]  # fmt: skip
+    events.insert(1, {"type": "assistant", "message": {"content": [
+        {"type": "text", "text": "This looks like a CVPPP tray."}]}})  # fmt: skip
+    got = run.assess("alt", "\n".join(json.dumps(e) for e in events), 0)
+    assert got["valid"] and got["leaks"] == []
+    assert got["text_mentions"] == ["zenodo", "aberystwyth", "cvppp"]
+
+
 def _transcript(tools, calls=(), results=(), reply="ANSWER: 7") -> str:
     events = [{"type": "system", "subtype": "init", "tools": tools, "mcp_servers": []}]
     for name, inp in calls:
