@@ -117,3 +117,96 @@ uv run python benchmarks/agent_qa/run.py \
 - The pilot's two wrong mcp answers came from the colour threshold and from
   `calibrate_scale_from_marker` on rim crops, which this release does not touch.
   If they stay wrong, that is the expected result, not a new finding.
+
+## Amendment, 2026-10-31: F1 confirmatory on tray 031
+
+Written, committed and pushed before the key is drawn. Nothing below has been
+run, and no tray 031 question exists yet.
+
+**Why.** F1's pilot is the one family here with a gap: the 1.17.2 re-run was
+right on 10 of 10 against the alt arm's 6 of 10 (paired 4:0, p = 0.125), which
+n = 10 cannot confirm. The 10-26 amendment said no confirmatory run could
+follow, because tray 031 was excluded. That exclusion was for leaf counting:
+every choice made on tray 031 was a `count_leaves` or `segment_leaves_sam`
+constant (docs/EVAL.md, "Tray 031 was used to look at the method" and "What was
+chosen on which tray"). No segmentation, area or calibration choice was made on
+it. So tray 031 serves F1 and never F2, and this reverses the 10-26 sentence for
+F1 only. The reversal comes after the pilot result was seen, and is stated here
+as such.
+
+**Data.** Tray 031 of the same dataset: 43 hand-annotated images (the archive's
+`gt/` listing; trays 033/034 have none). Fetched with
+`fetch.py --tray 031` to `~/plantcv-mcp-artifacts/field_2026-10-31_f1confirm/`.
+The harvest sheet and the 23 checkerboards are byte-identical to the pilot's.
+Looked at before this was written, with no question drawn (`build.py --n 0`):
+706 annotated plants, 608 eligible (all 98 exclusions are touching neighbours),
+41 of 43 images with an eligible plant, pot-rim scale 7.433 px/mm (tray 032:
+7.429), and the grid found on every image.
+
+**Set.** `field_2026-10-31_f1confirm/questions.json`, built by the pilot's
+`build.py` with only the flags changed:
+
+```
+uv run --with openpyxl==3.1.5 python benchmarks/agent_qa/field_2026-10-24/build.py \
+  --tray 031 --set field_2026-10-31_f1confirm --families F1 \
+  --seed-f1 20261031 --n 30 --id-prefix f1c --built 2026-10-31
+```
+
+- n = 30, from 30 distinct images, one eligible plant each, seed 20261031.
+- Truth, windows and question text are the pilot's code, unchanged. With no
+  flags `build.py` rebuilds the pilot's `questions.json` and `build_report.json`
+  byte for byte (checked before this was written).
+- The key's sha256 is committed before any arm runs.
+
+**Run.** Both arms on all 30, 1 rep, `claude-sonnet-5-5`, two workers. Prompt,
+alt prompt note, 900 s timeout, validity rule and leak scan are the pilot's.
+The alt arm has Bash and Read only, web off. The mcp arm runs the current
+release, 1.18.1 at its tag commit, with the pilot's dependency pin (1.18.1
+resolves under it: NumPy 2.4.6, scikit-image 0.26.0, as in the alt venv).
+
+```
+AGENTQA_ARTIFACTS=~/plantcv-mcp-artifacts/agent_qa/f1confirm-2026-10-31 \
+uv run python benchmarks/agent_qa/run.py \
+  --questions benchmarks/agent_qa/field_2026-10-31_f1confirm/questions.json \
+  --results benchmarks/agent_qa/field_2026-10-31_f1confirm/results.jsonl \
+  --arms alt,mcp --reps 1 --model claude-sonnet-5-5 --workers 2 \
+  --server-spec git+https://github.com/musharna/plantcv-mcp@287a049f9684b7dcd2ba5c174b8d61feb9f1d6f6 \
+  --exclude-newer 2026-10-17
+```
+
+A run lost to an API failure (`api_failure` true) is run again; no other run
+is repeated. Expected cost about $5.50 (pilot rates: alt $0.05, mcp $0.13 a
+question); the shared spend gate stops the sweep at the launch cap.
+
+**Decision rule, fixed now.**
+
+- A question is right only if both numbers fall in their windows (the pilot's
+  scorer). An invalid run is not right.
+- Pair the arms by question. With m = right only for mcp and a = right only for
+  alt, the result is the two-sided exact sign test on m against a.
+- **CONFIRMED** if m > a and p < 0.05. With n = 30 that needs, for example,
+  6:0, 8:1 or 10:2.
+- **NOT CONFIRMED** otherwise. If a > m with p < 0.05, the alt arm wins and is
+  reported as such.
+- Power, computed before the draw from the pilot's rates: 0.83 to 0.99
+  (0.56 to 0.87 at n = 20, which is why n = 30).
+
+**Also reported, not deciding.**
+
+- Right of 30 per arm; px-right and mm²-right separately.
+- The test with invalid pairs left out.
+- Timeouts, cost and seconds per arm.
+- `text_mentions` per run (report-only, as in the README).
+
+**Prediction.** mcp right on at least 27 of 30, alt on about 18 (the pilot's
+rates). This is a guess, not part of the rule.
+
+**What it can and cannot say.**
+
+- It confirms, or not, that the current server beats Bash with PlantCV on fresh
+  draws of this task on a tray the pilot did not use. It does not compare
+  1.17.2 with 1.18.1.
+- Same dataset, camera and lab as the pilot: a held-out tray, not a held-out
+  dataset.
+- The dataset is public. A model that recalls it could answer from memory;
+  the leak scan and `text_mentions` report any sign of that.
