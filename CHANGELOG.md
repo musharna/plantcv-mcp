@@ -6,6 +6,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Documentation
+
+- docs/EVAL.md adds SAM 2.1 (Hiera-L) to the grown-rosette undercount screen: it
+  counts fewer leaves than ViT-B (91 of 116 against 109) and offers a usable mask for
+  none of the 17 hard centre leaves, so it is not a fix and the tool stays on ViT-B.
+
 ## [1.18.1] — 2026-10-31
 
 ### Fixed
