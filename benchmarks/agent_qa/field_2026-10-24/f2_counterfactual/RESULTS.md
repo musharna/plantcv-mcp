@@ -54,3 +54,20 @@ worth fixing for users; neither would flip F2:
 1. no tool restricts segmentation or a leaf count to one region of a tray;
 2. `polarity_report` assumes the plant is the smaller side, which fails on a crop
    the plant fills.
+
+## Since then (added 2026-10-31)
+
+Both seams were fixed in 1.18.0 (#163): `crop_image` cuts a session to a box, and the
+polarity rule now prefers the greener side instead of the smaller one. The SAM
+over-count above was soil that `fill_holes` encloses in a grown rosette, counted as
+leaves; 1.18.0 (#168) stopped counting it. Path A re-run on 1.18.0 for the five grown
+plants only (the young five were not re-run):
+
+| path A, `segment_leaves_sam`, f2_05 f2_06 f2_08 f2_09 f2_10 | counts         | exact | \|DiC\| ≤ 1 | DiC  |
+| ------------------------------------------------------------ | -------------- | ----- | ----------- | ---- |
+| 1.17.2 (above)                                               | 27 21 26 28 33 | 0/5   | 0/5         | +3.8 |
+| 1.18.0                                                       | 21 16 22 21 29 | 2/5   | 3/5         | −1.4 |
+
+Truth is 23 16 23 25 29. The remaining error is an undercount of the small leaves
+packed at the rosette centre; docs/EVAL.md (2026-10-29 and 2026-10-31) has the trace.
+No agent arm was re-run, so the verdict above stands as a pilot result.
