@@ -276,8 +276,9 @@ for split leaves, the same cancellation as before 2026-10-29, and MAE does not i
 Before these ran, the bar for a held-out evaluation was set at a usable mask (SAM's
 own thresholds, IoU ≥ 0.5) for at least 9 of those 17 leaves with no worse MAE;
 ViT-L gave 3 and ViT-H 4. SAM 2.1 (Meta's `sam2` at commit 2b90b9f, given the same
-prompts and settings) gave none and missed 26 leaves: it offers about half as many
-masks. With its score filter switched off, a leaf-sized mask exists for 7 of the 17,
+prompts and settings) gave none and missed 26 leaves: before the counting rule, only
+193 of its candidate masks pass the score thresholds across the five plants, against
+ViT-B's 383. With its score filter switched off, a leaf-sized mask exists for 7 of the 17,
 but SAM 2.1 itself scores those masks 0.04–0.72 predicted IoU, below the 0.80 floor,
 so no threshold would have reached 9. These are diagnosis plants, so the table is a screen, not an
 evaluation, and the tool stays on ViT-B.
