@@ -162,7 +162,8 @@ bytes) is the hash of the file fetched from that URL on 2026-09-19. It is loaded
 **Method.** The image is cropped to the mask's bounding box plus a margin, a 32×32
 grid of point prompts is laid over the crop and only the points on the mask are
 kept, and SAM's candidate masks are filtered: predicted IoU ≥ 0.80 and stability
-≥ 0.85, at least 80% on the plant mask, between 0.2% and 40% of the plant's area,
+≥ 0.85, at least 80% on the pixels `segment()` took as plant (not on pixels a
+`refine()` added; since 2026-10-29, below), between 0.2% and 40% of the plant's area,
 then smallest first, dropping a mask once more than half of it is already covered.
 
 **What was chosen on which tray.** Every constant was chosen on Tray 031. The grid
@@ -180,7 +181,8 @@ The three differ by less than a quarter of a leaf on 14 plants, and the young pl
 rank them the other way. The margin is not a sensitive choice and the table should not
 be read as showing that 0.10 is better.
 
-**Tray 032 was then run once through the finished tool**, with nothing changed
+**Tray 032 was then run once through the finished tool** (as released up to 1.17.2;
+the 2026-10-29 change below moved these figures), with nothing changed
 afterwards. SAM's raw masks on Tray 032 had been scored once before, with the same
 filter and no crop-margin step (young −0.75 / 0.95 / 10, grown −0.38 / 2.08 / 1), to
 decide whether the tool was worth building; no constant was chosen from that run. Both
@@ -211,6 +213,69 @@ sees. `mask_coverage` (the share of the plant mask that received an instance) ra
 `low_instance_coverage` advisory (under 0.50) did not fire on this dataset; it is
 tested with a stubbed model. One dataset, one species, one camera: the figures say
 nothing about other plants.
+
+**2026-10-29: filled soil is no longer counted, and the counts fall.** The pinned path
+runs `refine(fill_holes)`, which adds the soil a grown rosette encloses between its
+leaves. SAM outlines each gap as a crisp object (predicted IoU 0.86–0.97), and the
+filter judged "on the plant" against the filled mask, so the gaps were kept. Matched
+leaf by leaf against the annotation on five grown Tray 032 plants from other dates (the
+2026-10-24 field benchmark's F2 plants, annotation box, this same path), 22 kept masks
+lay on no annotated leaf; every one was at most 37% on pixels `segment()` had taken as
+plant, and 109 of 113 masks on annotated leaves were at least 83%. The filter now
+judges against those pixels (kept by the session through every `refine()`), with the
+same 0.80, so no constant was chosen. Tray 032 re-run, old and new rule on the same
+sessions (the old rule reproduced the table above exactly on the 13 grown plants):
+
+| Tray 032 (held out)      | rule                         | mean error | MAE  | exact |
+| ------------------------ | ---------------------------- | ---------- | ---- | ----- |
+| 20 young, 8–16 lvs       | filled mask (up to 1.17.2)   | −0.60      | 1.10 | 6/20  |
+|                          | `segment()`'s pixels (now)   | −1.35      | 1.45 | 5/20  |
+| 13 grown, 18–25 lvs      | filled mask (up to 1.17.2)   | +0.23      | 1.77 | 2/13  |
+|                          | `segment()`'s pixels (now)   | −2.77      | 2.77 | 1/13  |
+
+Read plainly: worse on this tray, and shipped anyway. The near-zero grown-plant bias was
+two errors cancelling: soil counted as leaves, against leaves hidden under others and
+small central leaves sharing one mask, which no setting of this filter recovers. The
+new rule lowered every one of the 13 grown counts (by 1 to 5) and now undercounts every
+grown plant but one, which it gets exact. The cancellation depended on how much soil a
+rosette enclosed: on the five F2 plants the old rule over-counted by +3 to +6 when
+each was cropped to its pot. Two of the 33 plants here (one per date) are among the
+diagnosis plants; nothing was tuned on them. Tray 031 was not re-run (its two dates are
+not recorded). `scripts/eval_leaf_count_sam.py` runs this path; the old rule is
+`segment_leaves_sam(..., observed=None)`.
+
+**2026-10-31: where the remaining undercount comes from, and what did not fix it.** On
+the same five F2 plants (116 annotated leaves; the tool counts 109), every missed leaf
+and every extra instance was traced to the step that lost or made it, and the trace
+reproduced the tool's count on all five. 16 leaves are missed (17 if a leaf counts as
+found only when a whole kept mask lies mostly on it) and 9 instances are extra. The
+plant mask is not the cause: all but one missed leaf lie at least 99% inside it, and
+that one 91%. In the three largest plants, 3–4 missed leaves sit together in one
+uncovered region at the rosette centre, where SAM offers only masks of the whole
+cluster, and those lose to the leaves already kept. Most of the others lie under a
+neighbour's mask. The extra instances are leaves kept as two pieces. SAM's scores did
+not tell a mask of one whole leaf from a mask of two real neighbours, and a cut on the
+darker seam between real neighbours would have fixed as many splits as it created
+merges.
+
+Three changes were screened on these five plants, with the counting rule unchanged:
+
+| five grown F2 plants                  | count (truth 116) | mean / MAE per plant | missed | extra | CPU time |
+| ------------------------------------- | ----------------- | -------------------- | ------ | ----- | -------- |
+| ViT-B (as shipped)                    | 109               | −1.4 / 1.4           | 16     | 9     | 1×       |
+| ViT-B, second pass on uncovered parts | 111               | −1.0 / 1.0           | 15     | 10    | —        |
+| ViT-L (`sam_vit_l_0b3195.pth`)        | 115               | −0.2 / 1.4           | 13     | 12    | 2.3×     |
+| ViT-H (`sam_vit_h_4b8939.pth`)        | 118               | +0.4 / 1.6           | 13     | 15    | 2.9×     |
+
+Read plainly: none fixes it. The second pass (each uncovered region re-cropped, zoomed
+2.1–2.6×, and prompted on its own) still got no leaf-sized mask for most centre leaves, and
+its lower MAE is one recovered leaf plus one false split that landed on a plant that
+was one short. The larger checkpoints move the mean towards zero only by trading misses
+for split leaves, the same cancellation as before 2026-10-29, and MAE does not improve.
+Before these ran, the bar for a held-out evaluation was set at a usable mask (SAM's
+own thresholds, IoU ≥ 0.5) for at least 9 of those 17 leaves with no worse MAE;
+ViT-L gave 3 and ViT-H 4. These are diagnosis plants, so the table is a screen, not an
+evaluation, and the tool stays on ViT-B.
 
 **Dataset.** Aberystwyth Leaf Evaluation Dataset (Bell and Dee, 2016,
 <https://doi.org/10.5281/zenodo.168158>), CC BY 4.0, as above.

@@ -139,8 +139,42 @@ def test_counts_on_the_two_real_rosettes_over_the_mcp_layer(checkpoint):
 
 # Measured 2026-09-19 (torch 2.14.0+cpu, segment-anything 1.0) through this same
 # path; the annotations say 11 and 25. They pin the pipeline, not its accuracy.
-YOUNG_COUNT = 9
-GROWN_COUNT = 28
+# 9 and 28 until 2026-10-29, when candidates on soil that fill_holes added stopped
+# counting: one such mask on the young plant, four on the grown one (the test below).
+YOUNG_COUNT = 8
+GROWN_COUNT = 24
+
+
+def test_no_counted_leaf_lies_on_soil_that_fill_holes_added(checkpoint):
+    """The grown fixture encloses soil between its leaves; fill_holes adds it and
+    SAM outlines it. Same session, same model: judged against the filled mask
+    (the old rule) some counted instances lie mostly on added pixels, judged
+    against the pixels segment() saw none do, and the count drops by exactly
+    those."""
+    from plantcv_mcp.server import _store
+
+    set_isolation(False)
+    try:
+        img = cv2.imread(str(GROWN))
+        session = _store.get(_session(GROWN))
+        seen = session.observed > 0
+        assert int(((session.mask > 0) & ~seen).sum()) > 1000  # fill_holes added soil
+        fixed = sam_leaves.segment_leaves_sam(
+            img, session.mask, checkpoint, observed=session.observed
+        )
+        old = sam_leaves.segment_leaves_sam(img, session.mask, checkpoint)
+    finally:
+        set_isolation(None)
+
+    def on_seen(res):
+        return [
+            float(seen[res.labels == i].mean()) for i in range(1, res.leaf_count + 1)
+        ]
+
+    on_soil = sum(share < 0.5 for share in on_seen(old))
+    assert on_soil >= 1  # the fixture does exercise the defect
+    assert min(on_seen(fixed)) >= 0.5
+    assert fixed.leaf_count == old.leaf_count - on_soil == GROWN_COUNT
 
 
 def test_instances_lie_on_the_mask_and_the_overlay_shows_them(checkpoint):
@@ -150,8 +184,12 @@ def test_instances_lie_on_the_mask_and_the_overlay_shows_them(checkpoint):
         sid = _session(YOUNG)
         from plantcv_mcp.server import _store
 
-        mask = _store.get(sid).mask
-        res = sam_leaves.segment_leaves_sam(img, mask, checkpoint)
+        session = _store.get(sid)
+        mask = session.mask
+        # as the server calls it: with the pixels segment() saw
+        res = sam_leaves.segment_leaves_sam(
+            img, mask, checkpoint, observed=session.observed
+        )
     finally:
         set_isolation(None)
     assert res.labels.shape == mask.shape

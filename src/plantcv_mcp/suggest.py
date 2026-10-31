@@ -3,7 +3,13 @@
 import numpy as np
 from plantcv import plantcv as pcv
 
-from .diagnostics import Advisory, analyze_mask, is_noisy, largest_fraction
+from .diagnostics import (
+    Advisory,
+    analyze_mask,
+    excess_green,
+    is_noisy,
+    largest_fraction,
+)
 from .segmentation import OBJECT_TYPES, segment_mask, to_gray
 
 
@@ -46,6 +52,22 @@ def noisy_segmentation_warning(polarity: str, stats: dict) -> Advisory | None:
     )
 
 
+# Greenness decides the polarity when the greener side is itself green
+# (mean excess green at least GREEN_FLOOR) and leads the other by at least
+# GREENNESS_MARGIN. Calibrated 2026-10-28 with otsu on channels a, b, s, v, l.
+# On Aberystwyth tray 032 (450 px pot cells around every annotated plant on
+# three dates), in every case where one side matched the annotation it was
+# the greener side, by 0.154 to 0.256, at 0.144 or more; less coverage missed
+# the 3 grown rosettes that fill their pot. On the 46 synthetic benchmark
+# images, in the 25 cases where one side's area was within 25% of the true
+# plant area, the plant side scored 0.194 or more whenever it was green; the
+# greener side was wrong only twice, both by under 0.035. The floor is what
+# keeps a purple or red plant on a grey background (grey scores 0) with the
+# coverage rule instead of handing the grey to it as "greener".
+GREENNESS_MARGIN = 0.05
+GREEN_FLOOR = 0.1
+
+
 def polarity_report(
     img: np.ndarray,
     channel: str,
@@ -60,11 +82,16 @@ def polarity_report(
     plausible and correctly united. The server refuses to guess it, so this
     measures both and hands back the numbers.
 
-    'recommended' assumes the subject occupies LESS of the frame than its
-    background, which is true of plant photography but not of a macro shot that
-    fills the frame. When the two polarities are within `ambiguity_margin` the
-    assumption cannot discriminate, so `ambiguous` is set and the caller is told
-    to look at the overlay rather than trust the recommendation.
+    'recommended' is the GREENER polarity when that side is green (mean
+    excess green at least GREEN_FLOOR) and leads the other by at least
+    GREENNESS_MARGIN. Otherwise it is the polarity that
+    covers LESS of the frame, which holds for a small plant on a big
+    background but picked the soil on every rosette that filled its pot
+    (field benchmark F2, 2026-10-27). A plant that is not green (purple,
+    senescent, a fluorescence or grey image) falls to the coverage rule, and
+    `basis` says which rule decided. When neither decides (no greenness gap
+    and coverages within `ambiguity_margin`), `ambiguous` is set and the
+    caller is told to look at the overlay.
     """
     per_polarity = {}
     for object_type in OBJECT_TYPES:
@@ -77,11 +104,22 @@ def polarity_report(
             "component_count": diag.component_count,
             "major_object_count": diag.major_object_count,
             "largest_fraction": largest_fraction(diag),
+            "excess_green": excess_green(img, mask),
         }
 
     fractions = {k: v["mask_fraction"] for k, v in per_polarity.items()}
-    recommended = min(fractions, key=lambda k: fractions[k])
-    ambiguous = abs(fractions["dark"] - fractions["light"]) < ambiguity_margin
+    greens = {k: v["excess_green"] for k, v in per_polarity.items()}
+    by_green = (
+        None not in greens.values()
+        and max(greens.values()) >= GREEN_FLOOR
+        and abs(greens["dark"] - greens["light"]) >= GREENNESS_MARGIN
+    )
+    if by_green:
+        recommended = max(greens, key=lambda k: greens[k])
+        ambiguous = False
+    else:
+        recommended = min(fractions, key=lambda k: fractions[k])
+        ambiguous = abs(fractions["dark"] - fractions["light"]) < ambiguity_margin
 
     report = dict(per_polarity)
     report["recommended"] = recommended
@@ -107,14 +145,25 @@ def polarity_report(
     if noisy:
         advisories.append(noisy)
     report["warnings"] = [{"code": w.code, "message": w.message} for w in advisories]
-    report["basis"] = (
-        "The polarity covering less of the frame is assumed to be the plant. "
-        "Check the overlay before trusting this on a subject that fills the frame."
-        if not ambiguous
-        else (
-            "Both polarities cover a similar share of the frame, so this cannot "
-            "be decided by coverage. Inspect the overlay from segment() under "
-            "each object_type."
+    if by_green:
+        report["basis"] = (
+            f"greenness: the '{recommended}' mask is the greener one (mean excess "
+            f"green {greens[recommended]:+.3f} against "
+            f"{greens['light' if recommended == 'dark' else 'dark']:+.3f}), so it "
+            "is taken to be the plant whatever share of the frame it covers. "
+            "Check the overlay if the subject is not green."
         )
-    )
+    elif not ambiguous:
+        report["basis"] = (
+            "coverage: neither mask is clearly the green one (or one is empty), "
+            "so the polarity covering less of the frame is assumed to be the "
+            "plant. Check the overlay before trusting this on a subject that "
+            "fills the frame."
+        )
+    else:
+        report["basis"] = (
+            "undecided: neither mask is clearly the green one, and they cover a "
+            "similar share of the frame, so neither rule can decide. Inspect the "
+            "overlay from segment() under each object_type."
+        )
     return report

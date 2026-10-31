@@ -6,6 +6,116 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.18.1] — 2026-10-31
+
+### Fixed
+
+- `refine.validate_ops` refuses an `ops` that is not a list (a number, a bool, a
+  string, or one op object not wrapped in a list) with `RefineSpecError`. A truthy
+  scalar escaped as a raw `TypeError` (#155, found by fuzzing). Library callers
+  only: the `refine` tool's argument schema already refused these.
+
+### Documentation
+
+- docs/EVAL.md traces `segment_leaves_sam`'s remaining undercount on grown rosettes:
+  most missed leaves are the small ones packed at the centre, where Segment Anything
+  offers only masks of the whole cluster. A second pass zoomed on the uncovered parts
+  and the larger ViT-L and ViT-H checkpoints were screened and did not fix it, so the
+  tool stays on ViT-B.
+
+### Changed
+
+- `uv.lock` moves mcp to 2.3.0, pydantic to 2.14.1, torch to 2.14.1, torchvision to
+  0.29.2 and ruff to 0.17.2 (#136), and CI's actions to their latest minor versions
+  (#130). The lock is what checkouts and CI install; a `uvx` install resolves its own.
+
+## [1.18.0] — 2026-10-29
+
+Fixes from the 2026-10-24 field benchmark's leaf-count family (F2), where every
+server run counted one pot's leaves by eye and the counters could not be pointed
+at a pot, and from the diagnosis of SAM's over-count that followed.
+
+### Added
+
+- `crop_image(image_path, x, y, w, h, output_path)` writes a box of the image as
+  its own lossless PNG (next to the input under a derived name, or to a new
+  `output_path`) and returns its path. Every segmenter and both leaf counters
+  take a whole frame, and a 20-pot tray is one frame; the crop is a frame of one
+  pot, so the coverage guards and the polarity report judge the pot. The write
+  path (symlink and directory refusals, exclusive create, read roots) is now one
+  helper shared with `correct_lens_distortion`.
+- `refine()` reports `fill_holes_flooded` when a `fill_holes` op fills more
+  pixels than the mask held before it: a ring (a pot rim, specks along the frame
+  edge) enclosed background. On a real seedling's pot cell `fill_holes` turned
+  16% of the frame into 99.6% and the only warning said the polarity was
+  inverted, which it was not.
+
+### Changed
+
+- `suggest_segmentation`'s polarity report recommends the **greener** polarity
+  when that side is green (mean excess green at least 0.10) and leads by at least
+  0.05, and falls back to "covers less of the frame" otherwise. Coverage alone
+  picked the soil for every grown rosette that filled its pot (a SAM count of 2
+  for a 29-leaf plant). Each polarity now reports `excess_green`, and `basis`
+  starts with the rule that decided (`greenness`, `coverage` or `undecided`);
+  `ambiguous` is set only when neither decides. A non-green plant (purple,
+  senescent, grey images) still goes by coverage.
+- `count_leaves` (both splits) and `segment_leaves_sam` no longer refuse a mask
+  over half the frame when it is plant green (mean excess green at least 0.20);
+  they count it and say so (`plant_fills_frame`). The refusal rested on the same
+  premise as the old polarity rule, so a grown rosette cropped to its pot (56-86%
+  of the crop, 0.28-0.32) could never be counted. Background masks over half the
+  frame scored 0.123 or less on all 46 benchmark images and are still refused.
+
+### Fixed
+
+- `segment_leaves_sam` no longer counts the soil between a grown rosette's
+  leaves. `refine(fill_holes)` adds those enclosed gaps to the mask, SAM outlines
+  each as a crisp object (predicted IoU 0.86-0.97), and the "on the plant" test
+  checked the filled mask, so they passed: 22 of the masks counted on five grown
+  Tray 032 plants lay on no annotated leaf. Sessions now keep the pixels
+  `segment()` took as plant through every `refine()`, and a candidate must lie
+  at least 80% on those. Every gap mask was at most 37% on them; 109 of 113
+  leaf masks were at least 83%. **The held-out figures get worse** (Tray 032
+  young −0.60 / 1.10 MAE → −1.35 / 1.45; grown +0.23 / 1.77 → −2.77 / 2.77): the
+  gaps had been cancelling an undercount of hidden and merged leaves, by an amount
+  that depended on how much soil a rosette enclosed (+3 to +6 on grown plants
+  cropped to their pots). docs/EVAL.md has the before/after table.
+
+### Security
+
+- `uv.lock` pins filelock 4.2.4 (was 4.0.1), msgpack 1.2.4 (was 1.2.1),
+  setuptools 84.2.1 (was 84.0.0) and tornado 6.6 (was 6.5.9), clearing the 19
+  open Dependabot advisories against the lock (2 high: filelock
+  GHSA-v4x8-3wr5-3wq8, msgpack GHSA-j586-36cw-2gc2). The lock is what checkouts
+  and CI install; a `uvx` install resolves its own.
+
+## [1.17.2] — 2026-10-26
+
+### Fixed
+
+- `measure_regions` no longer times out on field trays. PlantCV's
+  `create_labels(roi_type="partial")` filled a full frame once per ROI per
+  contour, so a 4x5 grid on a 2560x1920 tray with 6.2k-6.6k mask contours took
+  over 900 s per call (all 4 timeouts of the 2026-10-24 field benchmark). The
+  labels are now computed per contour tree inside its bounding box
+  (`labels.py`), a few seconds on the same masks, and are tested pixel-identical
+  to PlantCV's on synthetic masks and real tray masks. A new work-count
+  workload (`measure_regions_fragmented`) goes red if the per-contour passes
+  come back.
+- `measure` (whole-mask traits) used the same PlantCV labeller with one
+  full-frame ROI, so its cost was contours x frame: 12 s on a field tray with
+  1.3k contours and 17 s with 2.9k. It now uses the same labeller as
+  `measure_regions`, about 2.0-2.5 s on those trays, with identical traits
+  (size and colour, histograms included). A test refuses any new
+  `pcv.create_labels` call site, and the `measure_fragmented` work count goes
+  red if the per-contour passes come back.
+
+### Security
+
+- `uv.lock` pins opentelemetry-api 1.45.1 (was 1.44.0) for CVE-2026-114603, fixed in
+  1.45.1. The lock is what checkouts and CI install; a `uvx` install resolves its own.
+
 ## [1.17.1] — 2026-10-20
 
 ### Fixed

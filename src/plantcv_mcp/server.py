@@ -21,6 +21,7 @@ import math
 import os
 import threading
 from collections import OrderedDict
+from collections.abc import Callable
 from typing import Any, NotRequired
 
 import cv2
@@ -152,7 +153,9 @@ If no single channel captures the whole plant (yellowed beside green leaves),
 segment() with `rules` joined by `combine` instead of adding masks by hand:
 several channels' thresholds, or explicit value ranges, OR-ed or AND-ed.
 zoom_image() enlarges part of the image when the whole frame is too small to
-read, e.g. to count overlapping leaves.
+read, e.g. to count overlapping leaves. To segment, measure or count leaves in
+ONE plant of a tray, crop_image() its box and give every other tool the crop:
+they all work on the whole frame.
 
 If the overlay is nearly right — a hole in the leaf, specks on the background, a
 second object that is not the plant — use refine() instead of hunting for a
@@ -561,7 +564,7 @@ def _refine_impl(session_id: str, ops: list[dict]) -> dict:
     # all-or-nothing, before anything runs; kernel reach checked against the mask
     validated = validate_ops(ops, shape=session.mask.shape)
     # refuses a degenerate result; reports every major object an op threw away
-    mask, dropped = dispatch("refine", session.mask, validated)
+    mask, dropped, floods = dispatch("refine", session.mask, validated)
     regrown = 0
     if session.card_region is not None:
         # The stored mask had the card cut out; a dilation, closing or
@@ -577,7 +580,7 @@ def _refine_impl(session_id: str, ops: list[dict]) -> dict:
             )
     before = analyze_mask(session.mask)
     after = analyze_mask(mask)
-    warnings = refinement_warnings(mask, before, after, dropped)
+    warnings = refinement_warnings(mask, before, after, dropped, floods)
     if regrown:
         note = color_card_excluded_advisory(
             regrown,
@@ -606,6 +609,7 @@ def _refine_impl(session_id: str, ops: list[dict]) -> dict:
         card_excluded_px=session.card_excluded_px + regrown,
         lineage=[*session.lineage, *validated],
         parent_id=session.session_id,
+        observed=session.observed,
     )
 
     def _summary(d) -> dict:
@@ -715,6 +719,25 @@ ZOOM_MAX_EDGE = 1024
 ZOOM_MAX_SCALE = 8
 
 
+def _require_box(x: int, y: int, w: int, h: int) -> None:
+    """Shape of a box (x, y, w, h), checked before any pixel is read."""
+    for name, value in (("x", x), ("y", y)):
+        require_int(name, value, lo=0)
+    for name, value in (("w", w), ("h", h)):
+        require_int(name, value, lo=1)
+
+
+def _clip_box(img: np.ndarray, x: int, y: int, w: int, h: int) -> tuple[int, int]:
+    """The box's far corner (x1, y1), clipped to the image; a box that starts
+    outside the image is refused rather than clipped to nothing."""
+    H, W = img.shape[:2]
+    if x >= W or y >= H:
+        raise ParameterRangeError(
+            f"the box starts at ({x}, {y}), outside the {W}x{H} image."
+        )
+    return min(x + w, W), min(y + h, H)
+
+
 def _zoom_impl(
     image_path: str, x: int, y: int, w: int, h: int, scale: int | None = None
 ) -> dict:
@@ -722,19 +745,11 @@ def _zoom_impl(
     at its own resolution and nothing in this server's arm can crop: in the
     2026-10-17 agent benchmark code with Bash enlarged the plant before
     counting leaves in 21 of 24 runs, and the server arm never could."""
-    for name, value in (("x", x), ("y", y)):
-        require_int(name, value, lo=0)
-    for name, value in (("w", w), ("h", h)):
-        require_int(name, value, lo=1)
+    _require_box(x, y, w, h)
     if scale is not None:
         require_int("scale", scale, lo=1, hi=ZOOM_MAX_SCALE)
     img = load_image(check_readable(image_path))
-    H, W = img.shape[:2]
-    if x >= W or y >= H:
-        raise ParameterRangeError(
-            f"the box starts at ({x}, {y}), outside the {W}x{H} image."
-        )
-    x1, y1 = min(x + w, W), min(y + h, H)
+    x1, y1 = _clip_box(img, x, y, w, h)
     crop = img[y:y1, x:x1]
     fit = max(1, ZOOM_MAX_EDGE // max(crop.shape[:2]))
     k = min(scale or fit, fit, ZOOM_MAX_SCALE)
@@ -751,8 +766,52 @@ def _zoom_impl(
         "clipped": (x1 - x, y1 - y) != (w, h),
         "scale": round(k * extra, 4),
         "note": "A picture to look at, not a measurement: image pixel = "
-        "(zoomed pixel / scale) + box origin.",
+        "(zoomed pixel / scale) + box origin. To segment, measure or count "
+        "leaves in this box, crop_image() it and work on that file.",
         "_png": encode_png(big),
+    }
+
+
+def _crop_impl(
+    image_path: str, x: int, y: int, w: int, h: int, output_path: str | None = None
+) -> dict:
+    """The box (x, y, w, h) of the image written as its own file, at the
+    image's own resolution, for every other tool to work on.
+
+    No tool took a region. In the 2026-10-24 field benchmark (F2, leaf counts
+    of one plant in a 20-pot tray) every server run counted by eye from
+    zoom_image's picture, because count_leaves and segment_leaves_sam work on
+    a whole-frame mask and the frame held 20 plants. A crop is a frame, so
+    segment, the coverage guards, the polarity report and both counters all
+    see one pot with no new parameter on any of them.
+    """
+    _require_box(x, y, w, h)
+    if output_path is not None and os.path.splitext(output_path)[1].lower() != ".png":
+        raise ValueError(
+            f"output_path {output_path!r} must end in .png: the crop is "
+            "written lossless, so the pixels measured are the image's own."
+        )
+    real_image = check_readable(image_path)
+    img = load_image(real_image)
+    x1, y1 = _clip_box(img, x, y, w, h)
+    crop = np.ascontiguousarray(img[y:y1, x:x1])
+    cw, ch = x1 - x, y1 - y
+    out = _write_new_image(
+        crop,
+        derived=f"{os.path.splitext(real_image)[0]}_crop_x{x}_y{y}_w{cw}_h{ch}.png",
+        output_path=output_path,
+        derived_label="<image>_crop_x<x>_y<y>_w<w>_h<h>.png",
+    )
+    preview, scale = downscale(crop)
+    return {
+        "cropped_image_path": out,
+        "box": [x, y, cw, ch],
+        "clipped": (cw, ch) != (w, h),
+        "note": "Same pixels, same scale: px_per_mm calibrated on the full "
+        "image applies unchanged. Positions in results on the crop are crop "
+        "pixels; image pixel = crop pixel + (box x, box y).",
+        "overlay_scale": scale,
+        "_png": encode_png(preview),
     }
 
 
@@ -769,7 +828,9 @@ def _segment_leaves_sam_impl(
     require_sam()
     img = _load_session_image(session)
     checkpoint = resolve_checkpoint(checkpoint_path, download_checkpoint)
-    res = dispatch("leaves_sam", img, session.mask, checkpoint, device, px_per_mm)
+    res = dispatch(
+        "leaves_sam", img, session.mask, checkpoint, device, px_per_mm, session.observed
+    )
     carried = [
         w
         for w in mask_warnings(session.mask, analyze_mask(session.mask))
@@ -1523,6 +1584,56 @@ def _refuse_writing_into_the_boards(target: str, real_dir: str, named: str) -> N
         )
 
 
+def _write_new_image(
+    img: np.ndarray,
+    *,
+    derived: str,
+    output_path: str | None,
+    derived_label: str,
+    guard: Callable[[str], None] | None = None,
+) -> str:
+    """Write a derived image and return the path written.
+
+    With no output_path the derived name, next to the (already checked) input,
+    is the tool's own to overwrite; write_image refuses to follow a symlink
+    squatting on it. A user-supplied path pointing at an existing file is not
+    ours to replace; O_EXCL makes the refusal atomic rather than a check-then-
+    write race. `guard` runs on the path actually about to be written, after
+    the last resolution of the caller's name, so no window is left that
+    write_image does not itself close (panel of 1.12.0).
+    """
+    if output_path is None:
+        if guard is not None:
+            guard(derived)
+        write_image(derived, img)
+        return derived
+    # The NAME the caller gave is judged before it is resolved: a dangling
+    # symlink there used to be followed and its target created (panel of 1.9.0).
+    if os.path.islink(output_path):
+        raise OSError(
+            f"output_path {output_path!r} is a symlink; images are written "
+            "only to real files, so nothing was written. Remove the link "
+            "or pass a different output_path."
+        )
+    if os.path.isdir(output_path):
+        raise OSError(
+            f"output_path {output_path!r} is a directory; pass the path of "
+            "the file to create (it must not exist yet)."
+        )
+    out = check_readable(output_path)
+    if guard is not None:
+        guard(out)
+    try:
+        write_image(out, img, exclusive=True)
+    except FileExistsError as exc:
+        raise FileExistsError(
+            f"output_path {output_path!r} already exists. Pass a new path, "
+            "or omit output_path to write (and overwrite) the derived "
+            f"{derived_label} next to the input."
+        ) from exc
+    return out
+
+
 def _correct_lens_impl(
     image_path: str,
     checkerboard_dir: str,
@@ -1566,47 +1677,23 @@ def _correct_lens_impl(
     calib = _lens_calibration(real_dir, row_corners, col_corners)
     corrected, info = undistort_image(img, calib)
 
-    if output_path is None:
-        # The derived name is this tool's own to overwrite (re-running with a
-        # better calibration is the normal workflow); write_image refuses to
-        # follow a symlink squatting on it.
-        out = os.path.splitext(real_image)[0] + "_undistorted.png"
-        _refuse_writing_into_the_boards(out, real_dir, checkerboard_dir)
-        write_image(out, corrected)
-    else:
-        # A user-supplied path pointing at an existing file is not ours to
-        # replace; O_EXCL makes the refusal atomic rather than a check-then-
-        # write race. The NAME the caller gave is judged before it is
-        # resolved: a dangling symlink there used to be followed and its
-        # target created (panel of 1.9.0).
-        if os.path.islink(output_path):
-            raise OSError(
-                f"output_path {output_path!r} is a symlink; images are written "
-                "only to real files, so nothing was written. Remove the link "
-                "or pass a different output_path."
-            )
-        if os.path.isdir(output_path):
-            raise OSError(
-                f"output_path {output_path!r} is a directory; pass the path of "
-                "the file to create (it must not exist yet)."
-            )
-        out = check_readable(output_path)
-        # The BINDING check, on the path that is actually about to be written.
-        # check_readable above is a SECOND resolution of the caller's name, and
-        # the early refusal judged the first: between them the calibration runs,
-        # and a parent symlink retargeted in that window used to land the
-        # correction in the calibration directory with the guard silent
-        # (reproduced, panel of 1.12.0). Judged here, there is no window left
-        # that write_image does not itself close.
-        _refuse_writing_into_the_boards(out, real_dir, checkerboard_dir)
-        try:
-            write_image(out, corrected, exclusive=True)
-        except FileExistsError as exc:
-            raise FileExistsError(
-                f"output_path {output_path!r} already exists. Pass a new path, "
-                "or omit output_path to write (and overwrite) the derived "
-                "<image>_undistorted.png next to the input."
-            ) from exc
+    # The derived name is this tool's own to overwrite (re-running with a
+    # better calibration is the normal workflow). The board guard is the
+    # BINDING check, run on the path actually about to be written: for an
+    # output_path, check_readable inside the writer is a SECOND resolution of
+    # the caller's name, and the early refusal above judged the first; between
+    # them the calibration runs, and a parent symlink retargeted in that window
+    # used to land the correction in the calibration directory with the guard
+    # silent (reproduced, panel of 1.12.0).
+    out = _write_new_image(
+        corrected,
+        derived=os.path.splitext(real_image)[0] + "_undistorted.png",
+        output_path=output_path,
+        derived_label="<image>_undistorted.png",
+        guard=lambda path: _refuse_writing_into_the_boards(
+            path, real_dir, checkerboard_dir
+        ),
+    )
 
     warnings = _lens_advisories(calib, info, out)
     preview, scale = downscale(corrected)
@@ -2008,7 +2095,9 @@ def build_server() -> MCPServer:
         overlay with every instance outlined and numbered, as count_leaves()
         does. The model is prompted on a 32x32 point grid restricted to the
         mask; masks are kept when leaf-sized (0.2%-40% of the plant), mostly on
-        the mask, and not already covered by smaller kept masks.
+        pixels segment() itself took as plant (not on soil gaps that
+        refine's fill_holes or closing added), and not already covered by
+        smaller kept masks.
 
         OPTIONAL: needs `pip install "plantcv-mcp[sam]"` (torch, torchvision,
         segment-anything). Without it this refuses with SamNotInstalledError;
@@ -2100,8 +2189,9 @@ def build_server() -> MCPServer:
             "warnings": [{"code": a.code, "message": a.message} for a in est.warnings],
         }
 
-    # The one tool that writes: a corrected copy of the input image, under a
-    # derived name it owns (an explicit output_path refuses to overwrite).
+    # The two tools that write: a corrected or cropped copy of the input image,
+    # under a derived name each owns (an explicit output_path refuses to
+    # overwrite).
     WRITES_A_FILE = ToolAnnotations(
         read_only_hint=False,
         destructive_hint=False,
@@ -2147,6 +2237,34 @@ def build_server() -> MCPServer:
             col_corners=col_corners,
             output_path=output_path,
         )
+        png = result.pop("_png")
+        return [json.dumps(result), Image(data=png, format="png")]
+
+    @mcp.tool(
+        title="Crop an image to one plant (writes the crop)",
+        annotations=WRITES_A_FILE,
+    )
+    @_loud
+    def crop_image(
+        image_path: str,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        output_path: str | None = None,
+    ) -> list:
+        """Write the box (x, y, w, h) of the image, in full-frame pixels, as
+        its own PNG next to the input (<image>_crop_x.._y.._w.._h...png, or
+        output_path, refused if it exists) and return its path plus a preview.
+        Use it to work on ONE plant of a tray: suggest_segmentation, segment,
+        count_leaves and segment_leaves_sam all take the whole frame, so give
+        them the crop. Find the box with zoom_image first. The crop keeps the
+        image's own pixels, so a px_per_mm from the full image still applies;
+        a box past the frame's edge is clipped and says so. Keep the box to
+        the plant and a little soil: a pot rim inside it can close into a ring
+        that fill_holes fills (`fill_holes_flooded` from refine()).
+        """
+        result = _crop_impl(image_path, x, y, w, h, output_path=output_path)
         png = result.pop("_png")
         return [json.dumps(result), Image(data=png, format="png")]
 

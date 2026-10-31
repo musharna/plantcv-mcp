@@ -33,6 +33,7 @@ from .diagnostics import (
     analyze_mask,
     assert_not_degenerate,
     implausible_coverage_warning,
+    plant_fills_frame_advisory,
 )
 from .leaves import LeafCountRefusedError, describe_instances
 from .paths import check_open_fd, check_readable
@@ -64,7 +65,7 @@ CROP_MARGIN_FRACTION = 0.10
 # Mask generator thresholds (SAM's own quality scores), then the post-filter:
 PRED_IOU_MIN = 0.80
 STABILITY_MIN = 0.85
-INSIDE_MIN = 0.80  # a candidate must lie at least this much on the plant mask
+INSIDE_MIN = 0.80  # a candidate must lie at least this much on observed plant
 MIN_AREA_FRACTION = 0.002  # of the plant mask: smaller is speckle
 MAX_AREA_FRACTION = 0.40  # larger is several leaves or the whole rosette
 OVERLAP_MAX = 0.50  # with masks already kept, taken smallest first
@@ -272,17 +273,25 @@ def load_model(checkpoint: str, device: str) -> Any:
 
 
 def select_instances(
-    plant: np.ndarray, candidates: list[tuple[np.ndarray, float, float]]
+    plant: np.ndarray,
+    candidates: list[tuple[np.ndarray, float, float]],
+    observed: np.ndarray | None = None,
 ) -> np.ndarray:
     """Label image from SAM candidates `(mask, predicted_iou, stability)`.
 
-    Kept: scores at or above the thresholds, at least INSIDE_MIN on the plant,
-    area within [MIN_AREA_FRACTION, MAX_AREA_FRACTION] of the plant. Survivors
+    Kept: scores at or above the thresholds, at least INSIDE_MIN on `observed`
+    (the plant pixels segment() saw; the plant mask itself if not given), area
+    within [MIN_AREA_FRACTION, MAX_AREA_FRACTION] of the plant. Survivors
     are taken smallest first, and one is dropped when more than OVERLAP_MAX of
     it is already covered — so a mask spanning two leaves loses to the two
     leaves. A kept mask labels only the pixels no earlier one took.
     """
     area = int(plant.sum())
+    # Not the filled mask: the soil between a grown rosette's leaves, filled by
+    # refine(fill_holes), is a crisp object to SAM and lay wholly "on" the mask.
+    # On Tray 032's grown plants every such gap was <=37% on observed pixels and
+    # 109 of 113 leaf masks were >=83%.
+    seen = plant if observed is None else plant & observed
     kept: list[tuple[int, np.ndarray]] = []
     for mask, predicted_iou, stability in candidates:
         if predicted_iou < PRED_IOU_MIN or stability < STABILITY_MIN:
@@ -290,7 +299,7 @@ def select_instances(
         total = int(mask.sum())
         on_plant = mask & plant
         size = int(on_plant.sum())
-        if total == 0 or size / total < INSIDE_MIN:
+        if total == 0 or int((mask & seen).sum()) / total < INSIDE_MIN:
             continue
         if size < MIN_AREA_FRACTION * area or size > MAX_AREA_FRACTION * area:
             continue
@@ -346,19 +355,21 @@ def segment_leaves_sam(
     checkpoint: str,
     device: str = "cpu",
     px_per_mm: float | None = None,
+    observed: np.ndarray | None = None,
 ) -> SamLeavesResult:
     if px_per_mm is not None and (px_per_mm <= 0 or not math.isfinite(px_per_mm)):
         raise ValueError(f"px_per_mm must be a positive finite number, got {px_per_mm}")
     diag = analyze_mask(mask)
     assert_not_degenerate(diag)
     coverage = implausible_coverage_warning(diag)
-    if coverage:
+    filled = plant_fills_frame_advisory(img, mask, diag) if coverage else None
+    if coverage and filled is None:
         raise LeafCountRefusedError(
             f"implausible_coverage: {coverage.message} Prompts are placed on the "
             "mask, so an inverted mask prompts the background; fix the "
             "segmentation first."
         )
-    warnings: list[Advisory] = []
+    warnings: list[Advisory] = [filled] if filled else []
     if diag.major_object_count >= 2:
         warnings.append(
             Advisory(
@@ -388,10 +399,11 @@ def segment_leaves_sam(
         min(int(xs.max()) + 1 + margin, mask.shape[1]),
     )
     plant = mask255[y0:y1, x0:x1] > 0
+    seen = None if observed is None else observed[y0:y1, x0:x1] > 0
     rgb = cv2.cvtColor(np.ascontiguousarray(img[y0:y1, x0:x1]), cv2.COLOR_BGR2RGB)
 
     candidates = _candidates(model, rgb, plant)
-    labels_c = select_instances(plant, candidates)
+    labels_c = select_instances(plant, candidates, seen)
     n = int(labels_c.max())
     if n == 0:
         raise LeafCountRefusedError(

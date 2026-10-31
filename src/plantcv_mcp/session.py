@@ -44,6 +44,12 @@ class Session:
     # trait table so a stored result can say what produced its mask.
     lineage: list[dict] = field(default_factory=list)
     parent_id: str | None = None
+    # The pixels segment() itself took as object, carried unchanged through
+    # refine(). fill_holes, closing and dilation add pixels nobody saw as plant:
+    # the soil a grown rosette encloses between its leaves. segment_leaves_sam()
+    # judges each candidate against these, or it counts those gaps as leaves.
+    # None only on a session made without one; the mask then stands for itself.
+    observed: np.ndarray | None = None
     # Modality. "rgb" sessions come from segment()/refine(); "hsi" and
     # "thermal" from their own segmenters. Tools refuse the wrong kind by name.
     kind: str = "rgb"
@@ -80,6 +86,7 @@ class SessionStore:
         extra: dict | None = None,
         card_region: list[list[int]] | None = None,
         card_excluded_px: int = 0,
+        observed: np.ndarray | None = None,
     ) -> Session:
         if not digest:
             raise ValueError(
@@ -91,6 +98,16 @@ class SessionStore:
         # corrupt every later measurement of the session. Refuse writes at the
         # array itself instead of trusting every future call site.
         stored_mask.setflags(write=False)
+        if observed is None:
+            seen = stored_mask  # a fresh segmentation is its own observation
+        else:
+            if observed.shape != stored_mask.shape:
+                raise ValueError(
+                    f"observed mask shape {observed.shape} is not the mask's "
+                    f"{stored_mask.shape}"
+                )
+            seen = np.array(observed, copy=True)
+            seen.setflags(write=False)
         session = Session(
             session_id=str(uuid.uuid4()),
             image_path=image_path,
@@ -106,6 +123,7 @@ class SessionStore:
             parent_id=parent_id,
             kind=kind,
             extra=dict(extra or {}),
+            observed=seen,
         )
         with self._lock:
             self._sessions[session.session_id] = session

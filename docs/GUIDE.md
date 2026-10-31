@@ -9,6 +9,7 @@ Everything the [README](https://github.com/musharna/plantcv-mcp#readme) does not
   - [Real-world units](#real-world-units)
 - [Getting the polarity right](#getting-the-polarity-right)
 - [Refining a mask](#refining-a-mask)
+- [One plant of a tray](#one-plant-of-a-tray)
 - [Colour correction](#colour-correction)
 - [Measuring a tray](#measuring-a-tray)
 - [Morphology: leaves, stem, branch points](#morphology-leaves-stem-branch-points)
@@ -50,6 +51,7 @@ Verify with `list_methods()`.
 | `segment_thermal(path, min_c, max_c, ...)`                              | a thermal session from a °C band + grey-frame overlay                                                              |
 | `measure_thermal(session_id, ...)`                                      | max/min/mean/median °C under the mask                                                                              |
 | `zoom_image(image_path, x, y, w, h, scale)`                             | part of an image, enlarged, to look closely (not a measurement)                                                    |
+| `crop_image(image_path, x, y, w, h, output_path)`                       | the box written as its own PNG next to the input or to `output_path`; segment, count or measure one plant of a tray on it |
 | `list_methods()`                                                        | channels, methods, object types, pinned PlantCV version                                                            |
 
 ## Segmenting
@@ -357,7 +359,15 @@ And `segment` emits an `implausible_coverage` warning when the mask covers more 
 frame. Neither refuses the measurement, because a macro shot of a single leaf legitimately
 fills the frame — they make the choice visible rather than making it for you.
 
-`ambiguous` in the polarity report only compares the two polarities' coverage; it is not a
+The recommendation is the **greener** polarity when that side is green (mean excess green,
+(2G − R − B)/(R + G + B), at least 0.10) and leads the other by at least 0.05; `basis` starts
+`greenness`. Otherwise it is the polarity covering less of the frame (`basis` starts
+`coverage`). Coverage alone picked the soil for every rosette that filled its pot (the
+2026-10-24 field benchmark's leaf counts); greenness picked the plant in every annotated pot
+cell of that tray. A plant that is not green — purple, senescent, a grey image — falls to
+coverage, so check the overlay there.
+
+`ambiguous` is set only when neither rule decides; it is not a
 quality verdict. A recommendation made of specks — on a sorghum photo, `a`/otsu recommended
 'dark' with 118 components of chamber-wall texture — is flagged `noisy_segmentation`, with each
 polarity's `largest_fraction` (largest component / masked pixels) reported so you can see why.
@@ -398,6 +408,24 @@ present that an op removes entirely is reported as `refine_dropped_object`, nami
 the op and the earlier op that split it off — on a real sorghum photo `opening`
 detached a leaf and `keep_largest` threw it away, a 17% change that sat under the
 `refine_large_change` alarm and showed only in the overlay.
+
+`fill_holes` fills every background region the mask encloses, and a pot rim or a line of
+specks along the frame edge encloses the whole pot. When one `fill_holes` op fills more pixels
+than the mask held before it, `refine()` reports `fill_holes_flooded`: on a seedling's pot cell,
+`a`/otsu took the seedling plus a speckled ring round the frame, and `fill_holes` turned 16% of
+the frame into 99.6%. The coverage guard then says "inverted"; the flood warning comes first
+because the polarity was right. Drop `fill_holes`, close small gaps with `closing`, or
+`crop_image()` tighter so no rim is in the frame.
+
+## One plant of a tray
+
+Every segmenter and both leaf counters work on the whole frame. To work on one pot, find its
+box with `zoom_image`, then `crop_image(image_path, x, y, w, h)` writes that box as its own PNG
+(`<image>_crop_x<x>_y<y>_w<w>_h<h>.png` next to the input, overwritten on a re-crop; or
+`output_path`, which must be a new `.png`). Give the crop to `suggest_segmentation`, `segment`,
+`count_leaves` or `segment_leaves_sam`: the coverage guards and the polarity report then judge
+the pot, not the tray. The pixels are the image's own, so a `px_per_mm` from the full image
+applies; positions reported on the crop are crop pixels (add the box's x and y).
 
 ## Colour correction
 
@@ -570,7 +598,12 @@ What goes wrong, and what the response does about it:
   mean error on one tray), so isolate the plant (`keep_largest`, or crop) and check
   the overlay.
 - Empty and inverted (`implausible_coverage`) masks are refused by name; an empty
-  mask is never a count of zero. `min_distance` must be between 1 and the mask's own
+  mask is never a count of zero. A mask over half the frame that is plant green
+  (mean excess green at least 0.20) is counted instead, with `plant_fills_frame`:
+  that is a plant cropped to its own pot (`crop_image`), where a grown rosette
+  fills 56-86% of the crop at 0.28-0.32, while every background mask over half
+  the frame on the benchmark images scored 0.123 or less. The same holds for
+  `segment_leaves_sam` and the seeded split. `min_distance` must be between 1 and the mask's own
   extent in pixels: beyond that nothing in the mask can be that far apart, and the
   working arrays grow with the square of it (200000 asked for 1.9 TB before the
   check existed). The "twice" comparison pass is capped at the extent too, and
@@ -620,13 +653,20 @@ and is not available is `SamDeviceError`, not a quiet run on the CPU.
 | Tray 032 (held out)              | method               | mean error | mean abs. error | exact | s/plant, CPU |
 | -------------------------------- | -------------------- | ---------- | --------------- | ----- | ------------ |
 | 20 young rosettes (8–16 leaves)  | `count_leaves`       | −3.2       | 3.2             | 0/20  | under 0.1    |
-|                                  | `segment_leaves_sam` | −0.6       | 1.1             | 6/20  | 21           |
+|                                  | `segment_leaves_sam` | −1.4       | 1.5             | 5/20  | 21           |
 | 13 grown rosettes (18–25 leaves) | `count_leaves`       | −5.4       | 7.9             | 0/13  | under 0.1    |
-|                                  | `segment_leaves_sam` | +0.2       | 1.8             | 2/13  | 19           |
+|                                  | `segment_leaves_sam` | −2.8       | 2.8             | 1/13  | 19           |
 
 It is closer on both, and still an estimate: exact on fewer than a third of plants, on
-one dataset of one species. The model was not trained on leaves and is not fine-tuned.
-Budget about 20 s per plant on a 6-thread CPU and about 4 GB of memory.
+one dataset of one species. It **undercounts**: the hand counts include leaves mostly
+hidden under others, and small central leaves often share one mask. Up to 1.17.2 the
+grown-plant figure was +0.2 / 1.8 because soil gaps counted as leaves cancelled that
+undercount; how much they cancelled depended on how much soil a rosette enclosed (+3
+to +6 leaves on grown plants cropped to their pots). On grown rosettes most missed
+leaves are the small ones packed at the centre; SAM's larger checkpoints did not
+recover them (docs/EVAL.md, 2026-10-31). The model was not trained on
+leaves and is not fine-tuned. Budget about 20 s per plant on a 6-thread CPU and about
+4 GB of memory.
 
 - **Read `mask_coverage` and the overlay.** Leaves that got no leaf-sized mask from the
   model are not in the count. `mask_coverage` is the share of the plant mask that
@@ -634,10 +674,17 @@ Budget about 20 s per plant on a 6-thread CPU and about 4 GB of memory.
   carries `low_instance_coverage`.
 - **What is kept.** Prompts are a 32×32 grid over the plant's crop, kept where they
   fall on the mask. A candidate is kept when SAM scores it at least 0.80 (predicted
-  IoU) and 0.85 (stability), at least 80% of it is on the mask, and it is between 0.2%
-  and 40% of the plant's area; smaller masks win, and a mask more than half covered by
-  kept ones is dropped. None of this is tunable per call: the constants are what was
-  measured.
+  IoU) and 0.85 (stability), at least 80% of it is on pixels `segment()` itself took as
+  plant, and it is between 0.2% and 40% of the plant's area; smaller masks win, and a
+  mask more than half covered by kept ones is dropped. None of this is tunable per
+  call: the constants are what was measured.
+- **Filled gaps are not leaves.** A grown rosette encloses patches of soil between its
+  leaves; `refine(fill_holes)` (or `closing`, `dilate`) adds them to the mask, and SAM
+  outlines each as a crisp object. The session remembers which pixels `segment()` saw,
+  through any chain of `refine()` calls, and a candidate lying on added pixels is not
+  kept. Judged against the filled mask instead, these gaps were 22 of the masks counted
+  on five grown Tray 032 plants (every one at most 37% on observed pixels; leaf masks
+  were at least 83% on them in 109 of 113 cases).
 - Isolate one plant first, as for `count_leaves()`: the area limits are fractions of
   the whole mask. Several comparable objects are counted together and flagged
   `multi_object_mask`. Empty and inverted masks are refused by name, and a result
@@ -799,6 +846,7 @@ the committed fixtures. Blocking guards withhold numbers; advisories travel with
 | code                                                                | raised by                                              | meaning                                                                                                                                                                                  | batch    |
 | ------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
 | `implausible_coverage`                                              | any segmenter, `measure`                               | mask covers > 50% of the frame — probably the background                                                                                                                                 | blocking |
+| `plant_fills_frame`                                                 | `count_leaves`, `segment_leaves_sam`                   | the mask covers > 50% of the frame but is plant green, so it was counted rather than refused as inverted                                                                                 | advisory |
 | `empty_mask`                                                        | any segmenter                                          | nothing selected                                                                                                                                                                         | blocking |
 | `fill_erased_mask`                                                  | any segmenter                                          | thresholding found objects; `fill_size` deleted them all — names the size to use                                                                                                         | blocking |
 | `noisy_segmentation`                                                | any segmenter, `suggest`                               | ≥50 non-major components and no dominant object — background texture                                                                                                                     | blocking |
@@ -812,6 +860,7 @@ the committed fixtures. Blocking guards withhold numbers; advisories travel with
 | `nan_pixels`                                                        | thermal and spectral measurers                         | non-finite values excluded from statistics; counts given                                                                                                                                 | advisory |
 | `refine_large_change`                                               | `refine`                                               | mask changed > 25% — a different outline, not a cleanup                                                                                                                                  | —        |
 | `refine_dropped_object`                                             | `refine`                                               | an op removed a component ≥ 10% of the largest — a leaf, not a speck; names the op that split it                                                                                         | —        |
+| `fill_holes_flooded`                                                | `refine`                                               | a `fill_holes` op filled more than the mask held: a ring (pot rim, frame-edge specks) enclosed background — not an inverted polarity                                                     | —        |
 | `object_exceeds_region`                                             | `measure_regions`                                      | a cell's object is ≥ 1.25× the cell — two plants, or a misaligned grid                                                                                                                   | —        |
 | `object_claimed_by_neighbour`                                       | `measure_regions`                                      | this cell's material was assigned whole to a neighbour, or its own object is < 20% of it                                                                                                 | —        |
 | `grid_misaligned`                                                   | `measure_regions` (`auto_grid`)                        | empty cells plus exceeded cells → use `rect_grid`                                                                                                                                        | —        |

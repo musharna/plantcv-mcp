@@ -41,6 +41,7 @@ from .diagnostics import (
     multi_specimen_warning,
 )
 from .hyperspectral import compute_index
+from .labels import create_labels_partial
 from .measurement import (
     ANALYSES,
     HISTOGRAM_TRAITS,
@@ -429,10 +430,15 @@ def partition_regions(
 ) -> tuple[np.ndarray, int, list[RegionSlot]]:
     """Label the mask by region and decide, per cell, whether it can be measured.
 
-    Must be called under the `isolated_pcv_outputs` lock: PlantCV's
-    create_labels is native code sharing state with the analyses that follow.
+    The labels are PlantCV's `create_labels(roi_type="partial")`, pixel for
+    pixel, computed by `create_labels_partial` (labels.py): PlantCV's own call
+    costs ROIs x contours x frame and timed out on real trays.
+
+    Every caller runs this under the `isolated_pcv_outputs` lock. The lock was
+    justified as labelling sharing native state with the analyses that follow;
+    that was never verified, and the lock is kept.
     """
-    labeled, n = pcv.create_labels(mask=mask, rois=regions.rois, roi_type="partial")
+    labeled, n = create_labels_partial(mask, regions.rois)
     # Labels actually carrying pixels. A region whose label is absent here is
     # empty -- this is the only reliable discriminator, since the analysis
     # emits a full zero-valued group for it either way.

@@ -45,25 +45,6 @@ numbers with correct units:
 | plant clipped by the frame        | size traits that are silently lower bounds                  |
 | empty mask                        | 17 traits of zeros, with PlantCV reporting `in_bounds=True` |
 
-## Does it help?
-
-Not on these test images: the server did not make Claude measurably more accurate than writing
-its own code (mostly OpenCV), and its own code was cheaper.
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/musharna/plantcv-mcp/master/benchmarks/agent_qa/rerun_2026-10-18/agent_qa.png" width="780" alt="Stacked bar chart of right and wrong answers in the 2026-10-18 re-run, 46 questions times 3 runs per setup. Claude + plantcv-mcp + Read: 132 right, 6 wrong. Claude + Bash/PlantCV/OpenCV + web: 134 right, 4 wrong. No-model controls, one answer per question: one color cut 28 right, 10 wrong, 8 declined; median answer of its kind 2 right, 44 wrong.">
-</p>
-
-In a pre-registered re-run on 2026-10-18, against an unreleased commit (051aff0) that adds
-several-channel segmentation rules and `zoom_image`, Claude Opus 5.5 was right on 97.1% of 46
-measurement questions about rendered plant images with its own code and 95.7% with the server
-(three runs each; 44 against 42 questions right in every run, exact McNemar p = 0.63, a tie).
-Its own code cost $0.038 against $0.066 per answer (medians; the intervals do not overlap). On
-release 1.16.1 the server was right on 86.2% against 95.7% (p = 0.18). The images have crisp
-edges, so a single color cut with no model answers 28 of the 46. Method, controls and
-limitations:
-[benchmarks/agent_qa](https://github.com/musharna/plantcv-mcp/blob/master/benchmarks/agent_qa/README.md).
-
 ## Install
 
 With [uv](https://docs.astral.sh/uv/) nothing needs installing: `uvx --python 3.13 plantcv-mcp` fetches and
@@ -98,6 +79,33 @@ Flags: `--root DIR` (repeatable, or `PLANTCV_MCP_ROOTS`) confines every read, an
 the server keeps, to your imagery: `plantcv-mcp --root /data/phenotyping`. `--no-isolate` (or
 `PLANTCV_MCP_ISOLATE=0`) runs analyses in-process instead of in the crash-containing worker.
 
+## What the benchmark shows
+
+Claude with the server was compared with Claude writing its own code (mostly OpenCV) in a
+Python environment we set up with the same PlantCV and OpenCV, on 46 measurement questions about rendered plant
+images, 3 runs each. A tie means the server matches that result without you building the
+environment. Questions right in every run, server against Claude's own code: Claude Haiku 5.5
+38 against 32, Sonnet 5.5 33 against 28, Opus 5.5 42 against 44. None is separated
+(pre-registered; exact McNemar p = 0.15, 0.23 and 0.63), and Claude's own code was cheaper on
+all three models.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/musharna/plantcv-mcp/master/benchmarks/agent_qa/rerun_2026-10-18/agent_qa.png" width="780" alt="Stacked bar chart of right and wrong answers in the 2026-10-18 re-run, 46 questions times 3 runs per setup. Claude + plantcv-mcp + Read: 132 right, 6 wrong. Claude + Bash/PlantCV/OpenCV + web: 134 right, 4 wrong. No-model controls, one answer per question: one color cut 28 right, 10 wrong, 8 declined; median answer of its kind 2 right, 44 wrong.">
+</p>
+
+The chart is the Opus 5.5 re-run on 2026-10-18, against an unreleased commit (051aff0) that adds
+several-channel segmentation rules and `zoom_image`: right on 97.1% of answers with its own code
+and 95.7% with the server. Its own code cost $0.038 against $0.066 per answer (medians; the
+intervals do not overlap). On release 1.16.1 the server was right on 86.2% against 95.7%
+(p = 0.18). The images have crisp edges, so a single color cut with no model answers 28 of the
+46.
+
+We wrote the questions and ran the benchmark ourselves; an outside re-run is welcome. Method,
+controls and limitations:
+[benchmarks/agent_qa](https://github.com/musharna/plantcv-mcp/blob/master/benchmarks/agent_qa/README.md);
+the Haiku and Sonnet runs:
+[2026-10-20 re-run](https://github.com/musharna/plantcv-mcp/blob/master/benchmarks/agent_qa/README.md#haiku-and-sonnet-re-run-2026-10-20).
+
 ## Tools
 
 | Tool                                          | Returns                                                          |
@@ -116,6 +124,7 @@ the server keeps, to your imagery: `plantcv-mcp --root /data/phenotyping`. `--no
 | `segment_hyperspectral`, `measure_spectral`   | an HSI session from an index threshold; index statistics         |
 | `segment_thermal`, `measure_thermal`          | a thermal session from a °C band; °C statistics under the mask   |
 | `zoom_image`                                  | part of an image, enlarged to look closely (not a measurement)   |
+| `crop_image`                                  | one plant of a tray written as its own image, for the other tools |
 | `list_methods`                                | channels, methods, object types, pinned PlantCV version          |
 
 Typical loop: `suggest_segmentation` → `segment` → **look at the overlay** → `segment` again
