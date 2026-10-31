@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.18.1] — 2026-10-31
+
 ### Fixed
 
 - `refine.validate_ops` refuses an `ops` that is not a list (a number, a bool, a
@@ -20,6 +22,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   offers only masks of the whole cluster. A second pass zoomed on the uncovered parts
   and the larger ViT-L and ViT-H checkpoints were screened and did not fix it, so the
   tool stays on ViT-B.
+
+### Changed
+
+- `uv.lock` moves mcp to 2.3.0, pydantic to 2.14.1, torch to 2.14.1, torchvision to
+  0.29.2 and ruff to 0.17.2 (#136), and CI's actions to their latest minor versions
+  (#130). The lock is what checkouts and CI install; a `uvx` install resolves its own.
 
 ## [1.18.0] — 2026-10-29
 
