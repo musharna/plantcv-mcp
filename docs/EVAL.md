@@ -258,14 +258,15 @@ not tell a mask of one whole leaf from a mask of two real neighbours, and a cut 
 darker seam between real neighbours would have fixed as many splits as it created
 merges.
 
-Three changes were screened on these five plants, with the counting rule unchanged:
+Four changes were screened on these five plants, with the counting rule unchanged:
 
-| five grown F2 plants                  | count (truth 116) | mean / MAE per plant | missed | extra | CPU time |
-| ------------------------------------- | ----------------- | -------------------- | ------ | ----- | -------- |
-| ViT-B (as shipped)                    | 109               | −1.4 / 1.4           | 16     | 9     | 1×       |
-| ViT-B, second pass on uncovered parts | 111               | −1.0 / 1.0           | 15     | 10    | —        |
-| ViT-L (`sam_vit_l_0b3195.pth`)        | 115               | −0.2 / 1.4           | 13     | 12    | 2.3×     |
-| ViT-H (`sam_vit_h_4b8939.pth`)        | 118               | +0.4 / 1.6           | 13     | 15    | 2.9×     |
+| five grown F2 plants                        | count (truth 116) | mean / MAE per plant | missed | extra | CPU time |
+| ------------------------------------------- | ----------------- | -------------------- | ------ | ----- | -------- |
+| ViT-B (as shipped)                          | 109               | −1.4 / 1.4           | 16     | 9     | 1×       |
+| ViT-B, second pass on uncovered parts       | 111               | −1.0 / 1.0           | 15     | 10    | —        |
+| ViT-L (`sam_vit_l_0b3195.pth`)              | 115               | −0.2 / 1.4           | 13     | 12    | 2.3×     |
+| ViT-H (`sam_vit_h_4b8939.pth`)              | 118               | +0.4 / 1.6           | 13     | 15    | 2.9×     |
+| SAM 2.1 Hiera-L (`sam2.1_hiera_large.pt`)   | 91                | −5.0 / 5.0           | 26     | 1     | 1.1×     |
 
 Read plainly: none fixes it. The second pass (each uncovered region re-cropped, zoomed
 2.1–2.6×, and prompted on its own) still got no leaf-sized mask for most centre leaves, and
@@ -274,7 +275,11 @@ was one short. The larger checkpoints move the mean towards zero only by trading
 for split leaves, the same cancellation as before 2026-10-29, and MAE does not improve.
 Before these ran, the bar for a held-out evaluation was set at a usable mask (SAM's
 own thresholds, IoU ≥ 0.5) for at least 9 of those 17 leaves with no worse MAE;
-ViT-L gave 3 and ViT-H 4. These are diagnosis plants, so the table is a screen, not an
+ViT-L gave 3 and ViT-H 4. SAM 2.1 (Meta's `sam2` at commit 2b90b9f, given the same
+prompts and settings) gave none and missed 26 leaves: it offers about half as many
+masks. With its score filter switched off, a leaf-sized mask exists for 7 of the 17,
+but SAM 2.1 itself scores those masks 0.04–0.72 predicted IoU, below the 0.80 floor,
+so no threshold would have reached 9. These are diagnosis plants, so the table is a screen, not an
 evaluation, and the tool stays on ViT-B.
 
 **Dataset.** Aberystwyth Leaf Evaluation Dataset (Bell and Dee, 2016,
