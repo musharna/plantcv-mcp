@@ -6,6 +6,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- `refine.validate_ops` refuses an `ops` that is not a list (a number, a bool, a
+  string, or one op object not wrapped in a list) with `RefineSpecError`. A truthy
+  scalar escaped as a raw `TypeError` (#155, found by fuzzing). Library callers
+  only: the `refine` tool's argument schema already refused these.
+
 ## [1.18.0] — 2026-10-29
 
 Fixes from the 2026-10-24 field benchmark's leaf-count family (F2), where every
