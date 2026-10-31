@@ -18,6 +18,12 @@ Tolerances, per category (README: Scoring has the reasons):
 - counts (``leaf_count``, tray counts): exact.
 - hue: within 3 degrees, around the circle.
 - yellow share: within 1 percentage point.
+- field set (``field_2026-10-24/``, hand-annotated trays): ``tray_plant_area``
+  takes two numbers, pixels then mm², and is right only if both fall in the
+  key's windows (``px_lo``..``px_hi``, ``mm2_lo``..``mm2_hi``: the hand mask
+  eroded and dilated by 1 px, the mm² window also widened by the lens-model
+  and scale uncertainty); ``tray_leaf_count`` is exact, and ``dic`` (answer
+  minus truth) is kept for the |DiC| <= 1 secondary.
 
 A wrong answer is also given a ``slip`` when it matches a specific other
 quantity, checked against the number, never guessed from the wording:
@@ -99,6 +105,7 @@ def truth_value(question: dict[str, Any]) -> float:
         "extent": "px",
         "area_mm": "area_mm2",
         "leaf_count": "count",
+        "tray_leaf_count": "count",
     }.get(question["category"])
     if field is None:  # tray and color: the field depends on the kind
         field = {
@@ -110,15 +117,69 @@ def truth_value(question: dict[str, Any]) -> float:
     return t[field]
 
 
+# A number and the unit word right after it, if any.
+_PAIR_ITEM = re.compile(
+    r"(?<![\w^.])(" + _NUMBER.pattern + r")\s*(px|pixels?|mm|cm|sq)?", re.IGNORECASE
+)
+
+
+def area_pair(value: str) -> tuple[float | None, float | None]:
+    """(pixels, mm²) from a two-number answer. A number followed by px or
+    pixel(s) is the pixel count; one followed by mm, cm or sq is the area,
+    multiplied by 100 when its unit is cm². Unlabelled numbers fill what is
+    left in order, pixels first. A number glued to a letter or a caret (the 2
+    of mm2 or mm^2) is part of a unit, not a number."""
+    px = area = None
+    loose: list[float] = []
+    for m in _PAIR_ITEM.finditer(value):
+        x = float(m.group(1).replace(",", ""))
+        unit = (m.group(2) or "").lower()
+        if unit.startswith("p") and px is None:
+            px = x
+        elif unit in ("mm", "cm", "sq") and area is None:
+            area = x * 100.0 if _CM2.match(value, m.start(2)) else x
+        else:
+            loose.append(x)
+    for x in loose:
+        if px is None:
+            px = x
+        elif area is None:
+            area = x
+    return px, area
+
+
+def truth_answer(question: dict[str, Any]) -> str:
+    """The key's own answer written as a reply value (the oracle's input)."""
+    if question["category"] == "tray_plant_area":
+        t = question["truth"]
+        return f"{t['area_px']} px, {t['area_mm2']} mm²"
+    return str(truth_value(question))
+
+
 def score(question: dict[str, Any], reply: str) -> dict[str, Any]:
     value = extract(reply)
     if value is None:
         return {"verdict": "no_answer", "value": None, "number": None, "slip": None}
     if value.strip().upper() in _UNKNOWN:
         return {"verdict": "declined", "value": value, "number": None, "slip": None}
-    x = number(value)
     truth = question["truth"]
     category = question["category"]
+    if category == "tray_plant_area":
+        px, area = area_pair(value)
+        px_ok = px is not None and truth["px_lo"] <= px <= truth["px_hi"]
+        mm_ok = area is not None and truth["mm2_lo"] <= area <= truth["mm2_hi"]
+        return {
+            "verdict": "right" if px_ok and mm_ok else "wrong",
+            "value": value, "number": px, "number_mm2": area, "slip": None,
+            "px_right": px_ok, "mm2_right": mm_ok,
+        }  # fmt: skip
+    x = number(value)
+    if category == "tray_leaf_count":
+        return {
+            "verdict": "right" if x is not None and x == truth["count"] else "wrong",
+            "value": value, "number": x, "slip": None,
+            "dic": None if x is None else x - truth["count"],
+        }  # fmt: skip
     kind = truth.get("kind", category)
     slip = None
     if x is None:
