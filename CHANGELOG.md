@@ -13,6 +13,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   scalar escaped as a raw `TypeError` (#155, found by fuzzing). Library callers
   only: the `refine` tool's argument schema already refused these.
 
+### Documentation
+
+- docs/EVAL.md traces `segment_leaves_sam`'s remaining undercount on grown rosettes:
+  most missed leaves are the small ones packed at the centre, where Segment Anything
+  offers only masks of the whole cluster. A second pass zoomed on the uncovered parts
+  and the larger ViT-L and ViT-H checkpoints were screened and did not fix it, so the
+  tool stays on ViT-B.
+
 ## [1.18.0] — 2026-10-29
 
 Fixes from the 2026-10-24 field benchmark's leaf-count family (F2), where every
