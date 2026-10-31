@@ -143,6 +143,13 @@ def test_fill_holes_plus_keep_largest_recovers_the_known_disc_area():
         # object; `[] in REFINE_OPS` was a TypeError (unhashable), not a refusal.
         ([{"op": []}], "must be a string"),
         ([{"op": {}}], "must be a string"),
+        # fuzz #155: a truthy scalar passed the emptiness check and reached
+        # enumerate(), so it escaped as a raw TypeError, not a refusal.
+        (True, "list of op objects"),
+        (1, "list of op objects"),
+        (1.5, "list of op objects"),
+        ({"op": "fill_holes"}, "list of op objects"),  # one op, not wrapped
+        ("fill_holes", "list of op objects"),
     ],
 )
 def test_invalid_op_lists_are_refused_before_anything_runs(ops, needle):

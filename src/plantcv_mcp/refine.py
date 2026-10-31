@@ -151,6 +151,12 @@ def validate_ops(
     run: the kernel ops had a floor and no ceiling (#117; audit 2026-09-22,
     M7) because the ceiling needs the mask.
     """
+    # A truthy scalar would reach enumerate() as a raw TypeError (fuzz #155); a
+    # bare op object or a string would iterate as keys or characters.
+    if not isinstance(ops, Sequence) or isinstance(ops, (str, bytes)):
+        raise RefineSpecError(
+            f"ops must be a list of op objects; got {type(ops).__name__}."
+        )
     if not ops:
         raise RefineSpecError("ops is empty; give at least one operation.")
     normalised: list[dict[str, Any]] = []
