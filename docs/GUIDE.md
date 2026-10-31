@@ -662,7 +662,9 @@ one dataset of one species. It **undercounts**: the hand counts include leaves m
 hidden under others, and small central leaves often share one mask. Up to 1.17.2 the
 grown-plant figure was +0.2 / 1.8 because soil gaps counted as leaves cancelled that
 undercount; how much they cancelled depended on how much soil a rosette enclosed (+3
-to +6 leaves on grown plants cropped to their pots). The model was not trained on
+to +6 leaves on grown plants cropped to their pots). On grown rosettes most missed
+leaves are the small ones packed at the centre; SAM's larger checkpoints did not
+recover them (docs/EVAL.md, 2026-10-31). The model was not trained on
 leaves and is not fine-tuned. Budget about 20 s per plant on a 6-thread CPU and about
 4 GB of memory.
 

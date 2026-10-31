@@ -244,6 +244,39 @@ diagnosis plants; nothing was tuned on them. Tray 031 was not re-run (its two da
 not recorded). `scripts/eval_leaf_count_sam.py` runs this path; the old rule is
 `segment_leaves_sam(..., observed=None)`.
 
+**2026-10-31: where the remaining undercount comes from, and what did not fix it.** On
+the same five F2 plants (116 annotated leaves; the tool counts 109), every missed leaf
+and every extra instance was traced to the step that lost or made it, and the trace
+reproduced the tool's count on all five. 16 leaves are missed (17 if a leaf counts as
+found only when a whole kept mask lies mostly on it) and 9 instances are extra. The
+plant mask is not the cause: all but one missed leaf lie at least 99% inside it, and
+that one 91%. In the three largest plants, 3–4 missed leaves sit together in one
+uncovered region at the rosette centre, where SAM offers only masks of the whole
+cluster, and those lose to the leaves already kept. Most of the others lie under a
+neighbour's mask. The extra instances are leaves kept as two pieces. SAM's scores did
+not tell a mask of one whole leaf from a mask of two real neighbours, and a cut on the
+darker seam between real neighbours would have fixed as many splits as it created
+merges.
+
+Three changes were screened on these five plants, with the counting rule unchanged:
+
+| five grown F2 plants                  | count (truth 116) | mean / MAE per plant | missed | extra | CPU time |
+| ------------------------------------- | ----------------- | -------------------- | ------ | ----- | -------- |
+| ViT-B (as shipped)                    | 109               | −1.4 / 1.4           | 16     | 9     | 1×       |
+| ViT-B, second pass on uncovered parts | 111               | −1.0 / 1.0           | 15     | 10    | —        |
+| ViT-L (`sam_vit_l_0b3195.pth`)        | 115               | −0.2 / 1.4           | 13     | 12    | 2.3×     |
+| ViT-H (`sam_vit_h_4b8939.pth`)        | 118               | +0.4 / 1.6           | 13     | 15    | 2.9×     |
+
+Read plainly: none fixes it. The second pass (each uncovered region re-cropped, zoomed
+2.1–2.6×, and prompted on its own) still got no leaf-sized mask for most centre leaves, and
+its lower MAE is one recovered leaf plus one false split that landed on a plant that
+was one short. The larger checkpoints move the mean towards zero only by trading misses
+for split leaves, the same cancellation as before 2026-10-29, and MAE does not improve.
+Before these ran, the bar for a held-out evaluation was set at a usable mask (SAM's
+own thresholds, IoU ≥ 0.5) for at least 9 of those 17 leaves with no worse MAE;
+ViT-L gave 3 and ViT-H 4. These are diagnosis plants, so the table is a screen, not an
+evaluation, and the tool stays on ViT-B.
+
 **Dataset.** Aberystwyth Leaf Evaluation Dataset (Bell and Dee, 2016,
 <https://doi.org/10.5281/zenodo.168158>), CC BY 4.0, as above.
 
