@@ -1385,7 +1385,7 @@ wheels = [
 
 [[package]]
 name = "plantcv-mcp"
-version = "1.18.0"
+version = "1.18.1"
 source = { editable = "." }
 dependencies = [
     { name = "mcp" },
