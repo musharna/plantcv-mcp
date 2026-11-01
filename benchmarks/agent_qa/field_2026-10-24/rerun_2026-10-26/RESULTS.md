@@ -45,5 +45,7 @@ Descriptive, not confirmatory.
 
 The confirmatory run on 30 fresh tray 031 questions did **not** confirm this gap:
 mcp 1.18.1 right on 23, alt on 16, paired 11:4, p = 0.118 against a pre-registered
-p < 0.05. Young rosettes and the rim scale cost the server 7. See
+p < 0.05. Young rosettes cost the server 5 of its 7 misses (Otsu overcounts a plant
+that is a few percent of the crop; the rim scale, first blamed too, was not at
+fault). See
 [`../../field_2026-10-31_f1confirm/RESULTS.md`](../../field_2026-10-31_f1confirm/RESULTS.md).
