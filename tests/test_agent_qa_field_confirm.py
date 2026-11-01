@@ -124,7 +124,7 @@ def test_fetch_reads_the_tray_in_any_order_and_refuses_a_bad_flag(
     assert fetch.GT_COUNT == {"032": 13, "031": 43}
     asked: list[str] = []
 
-    def wanted(images, software, harvest, tray):  # noqa: ANN001
+    def wanted(images, software, harvest, tray):
         asked.append(tray)
         raise _Stop
 
