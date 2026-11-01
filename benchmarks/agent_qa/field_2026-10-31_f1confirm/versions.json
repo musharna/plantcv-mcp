@@ -1,0 +1,34 @@
+{
+ "server_spec": "git+https://github.com/musharna/plantcv-mcp@287a049f9684b7dcd2ba5c174b8d61feb9f1d6f6",
+ "server_uvx": [
+  "--exclude-newer",
+  "2026-10-17",
+  "--python",
+  "3.12",
+  "--with",
+  "opencv-python==4.11.0.86",
+  "--from",
+  "git+https://github.com/musharna/plantcv-mcp@287a049f9684b7dcd2ba5c174b8d61feb9f1d6f6",
+  "plantcv-mcp"
+ ],
+ "exclude_newer": "2026-10-17",
+ "model": "claude-sonnet-5-5",
+ "versions": {
+  "alt": {
+   "plantcv": "4.11.3",
+   "opencv-python": "4.11.0.86",
+   "numpy": "2.4.6",
+   "scikit-image": "0.26.0"
+  },
+  "mcp": {
+   "plantcv": "4.11.3",
+   "plantcv-mcp": "1.18.1",
+   "opencv-python": "4.11.0.86",
+   "numpy": "2.4.6",
+   "scikit-image": "0.26.0"
+  }
+ },
+ "models_served": [
+  "claude-sonnet-5-5"
+ ]
+}
