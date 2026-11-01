@@ -183,8 +183,8 @@ async def test_suggest_segmentation_reports_downscale_factors(tmp_path):
     whose entire purpose is making the channel/method choice informed. Values
     independently reproduced before writing this test: for a 3000x3000 input,
     colorspace_sheet's contact-sheet grid is (4125, 9000, 3) -> scale
-    1024/9000 = 0.11377..., and threshold_sheet is (3000, 3000, 3) ->
-    scale 1024/3000 = 0.34133...
+    1024/9000 = 0.11377..., and threshold_sheet (Otsu | Triangle) is
+    (3000, 6000, 3) -> scale 1024/6000 = 0.17066...
     """
     path = _write_huge_green_png(tmp_path)
     mcp = build_server()
@@ -195,7 +195,7 @@ async def test_suggest_segmentation_reports_downscale_factors(tmp_path):
     # block sequence that could be indexed directly.
     payload = json.loads(result.content[0].text)
     assert payload["colorspace_sheet_scale"] == pytest.approx(1024 / 9000)
-    assert payload["threshold_sheet_scale"] == pytest.approx(1024 / 3000)
+    assert payload["threshold_sheet_scale"] == pytest.approx(1024 / 6000)
 
 
 @pytest.mark.anyio
