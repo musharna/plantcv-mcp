@@ -48,10 +48,12 @@ from .color import (
 )
 from .contracts import WarningItem, closed
 from .diagnostics import (
+    GLOBAL_THRESHOLDS,
     analyze_mask,
     implausible_longest_path_warning,
     mask_warnings,
     segmentation_warnings,
+    threshold_inside_mode_warning,
 )
 from .hyperspectral import IndexUnavailableError, load_cube
 from .imaging import (
@@ -103,6 +105,7 @@ from .segmentation import (
     describe_rules,
     rules_mask,
     threshold_mask,
+    to_gray,
     validate_rules,
 )
 from .session import SessionStore
@@ -403,6 +406,10 @@ def _segment_impl(
     diag = analyze_mask(mask)
     # Shared with the batch path so the two cannot apply different guards.
     warnings = segmentation_warnings(mask, diag, analyze_mask(pre_fill), fill_size)
+    if rules is None and method in GLOBAL_THRESHOLDS:
+        inside = threshold_inside_mode_warning(to_gray(img, channel), method, channel)
+        if inside:
+            warnings.append(inside)
     if card_note is not None:
         warnings.append(card_note)
 

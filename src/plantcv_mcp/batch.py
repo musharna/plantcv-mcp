@@ -39,11 +39,13 @@ from .color import (
 from .contracts import WarningItem, closed
 from .diagnostics import (
     BLOCKING_CODES,
+    GLOBAL_THRESHOLDS,
     NOISE_EXPLAINED_PER_CELL,
     Advisory,
     analyze_mask,
     grid_explains_components,
     segmentation_warnings,
+    threshold_inside_mode_warning,
 )
 from .imaging import load_image
 from .limits import require_fill_size, require_threshold_params
@@ -69,6 +71,7 @@ from .segmentation import (
     UnknownMethodError,
     UnknownObjectTypeError,
     threshold_mask,
+    to_gray,
 )
 
 # A cap, so a model passing a directory glob of ten thousand files fails fast and
@@ -423,6 +426,13 @@ def measure_batch(
             warnings = segmentation_warnings(
                 mask, diag, analyze_mask(pre_fill), fill_size
             )
+            if method in GLOBAL_THRESHOLDS:
+                # Advice, not in BLOCKING_CODES: the plant may really be small.
+                inside = threshold_inside_mode_warning(
+                    to_gray(img, channel), method, channel
+                )
+                if inside:
+                    warnings.append(inside)
             if card_note is not None:
                 warnings.append(card_note)
         except Exception as exc:  # noqa: BLE001 — see below

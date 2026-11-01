@@ -677,6 +677,71 @@ def threshold_outside_range_warning(
     )
 
 
+# The histogram's height at the cut, as a share of its peak, at or above which
+# the cut is said to run through a population of pixels rather than a valley.
+# Chosen 2026-11-01 on 45 pot crops from the F1 field set: all 19 small-plant
+# Otsu overcounts measured 0.55-0.97, the 26 other crops 0.27 or less. Held
+# out (PREREG_threshold_inside_mode.md, benchmarks/agent_qa/
+# field_2026-10-31_f1confirm/diag_2026-11-01/): 739 pot cells, fires on 351/351
+# Otsu overcounts and 6/354 right answers (all within 1% of the window's top).
+INSIDE_MODE = 0.4
+GLOBAL_THRESHOLDS = {"otsu": cv2.THRESH_OTSU, "triangle": cv2.THRESH_TRIANGLE}
+
+
+def histogram_density_at(gray: np.ndarray, value: int) -> float:
+    """Height of the 3-bin-smoothed 256-bin histogram at `value`, over its peak.
+
+    The smoothing treats the bins past 0 and 255 as empty, so at those two
+    values it averages two real bins over three. That is the signal the
+    cut-off was chosen and held-out-tested on, so it stays as it is; a cut at
+    0 or 255 selects all or nothing and trips another guard anyway.
+    """
+    hist = np.bincount(gray.ravel(), minlength=256).astype(float)
+    smoothed = np.convolve(hist, np.ones(3) / 3, mode="same")
+    return float(smoothed[value] / smoothed.max())
+
+
+def threshold_inside_mode_warning(
+    gray: np.ndarray, method: str, channel: str
+) -> "Advisory | None":
+    """Say when an automatic threshold cuts through the middle of a mode.
+
+    Otsu assumes two populations. When the plant is a few percent of the
+    frame it barely registers, so Otsu splits the background's own spread
+    instead, and the darker half of the soil joins the mask. The specks that
+    touch the leaves survive fill and keep_largest, so no mask-only guard sees
+    them: on 739 held-out pot cells of the F1 field set, every plant under
+    about 6% of its cell came back 13% to 9,967% too large (median +718%) with
+    nothing said. The cut's place in the histogram
+    shows it: a good cut sits in a valley. Only otsu and triangle have one value
+    to place; `gray` is the channel they were applied to.
+    """
+    flag = GLOBAL_THRESHOLDS.get(method)
+    if flag is None:
+        return None
+    value = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + flag)[0]
+    density = histogram_density_at(gray, int(value))
+    if density < INSIDE_MODE:
+        return None
+    return Advisory(
+        code="threshold_inside_mode",
+        message=(
+            f"The {method} threshold on channel '{channel}' is {value:.0f}, and "
+            f"the histogram there is {density:.0%} of its peak: the cut runs "
+            "through a population of pixels instead of the valley between two. "
+            "When the plant is a small part of the frame, that population is "
+            "the background, and part of it is now in the mask (young rosettes "
+            "in pot crops of a field set measured a median 8 times their true "
+            "area). Check the overlay before using any trait. Crop to the "
+            "plant's own pot if "
+            "the crop is wider, then compare otsu and triangle on "
+            "suggest_segmentation's threshold sheet; on those pot crops triangle "
+            "was right about half the time, so the overlay decides, not the "
+            "method name."
+        ),
+    )
+
+
 def finite_range(values: np.ndarray, what: str) -> tuple[float, float]:
     """(min, max) over the FINITE values only.
 

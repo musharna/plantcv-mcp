@@ -581,3 +581,92 @@ def test_the_fill_size_remedy_clears_every_extender_not_just_the_named_one():
     half = mask.copy()
     half[120:130, 440:450] = 0
     assert minor_extent_inflation_warning(half, analyze_mask(half)) is not None
+
+
+# --- threshold_inside_mode ---------------------------------------------------
+
+
+def _disc_on_soil(radius: int, seed: int = 0) -> np.ndarray:
+    """BGR image whose `a` channel is a dark disc (a ~114) on textured soil
+    (a ~130). radius 14 is 1.5% of the frame, like the F1 field set's young
+    rosettes; radius 60 is 28%, a plant that fills its pot."""
+    rng = np.random.default_rng(seed)
+    a = rng.normal(130, 4, (200, 200))
+    yy, xx = np.mgrid[:200, :200]
+    disc = (yy - 100) ** 2 + (xx - 100) ** 2 < radius**2
+    a[disc] = rng.normal(114, 3, int(disc.sum()))
+    lab = np.dstack(
+        [np.full((200, 200), 128), np.clip(a, 0, 255), np.full((200, 200), 128)]
+    ).astype(np.uint8)
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+
+def test_density_is_the_smoothed_histogram_at_the_cut_over_its_peak():
+    """Counts set by hand: 600 px at 10, 300 at 11, none at 12, 1200 at 200.
+    Smoothed over 3 bins: at 11 (600+300+0)/3 = 300, at 12 (300+0+0)/3 = 100,
+    the peak at 200 is 1200/3 = 400."""
+    from plantcv_mcp.diagnostics import histogram_density_at
+
+    gray = np.concatenate(
+        [np.full(600, 10), np.full(300, 11), np.full(1200, 200)]
+    ).astype(np.uint8)
+    assert histogram_density_at(gray, 11) == pytest.approx(0.75)
+    assert histogram_density_at(gray, 12) == pytest.approx(0.25)
+    assert histogram_density_at(gray, 100) == 0.0
+
+
+def test_density_at_the_ends_counts_the_missing_bin_as_empty():
+    """The documented edge behaviour, pinned because the cut-off was tested on
+    it: 300 px at 0 and 300 at 1, 900 at 128. At 0 the average is
+    (0 + 300 + 300)/3 = 200 over the peak 300, not (300 + 300)/2."""
+    from plantcv_mcp.diagnostics import histogram_density_at
+
+    gray = np.concatenate([np.full(300, 0), np.full(300, 1), np.full(900, 128)]).astype(
+        np.uint8
+    )
+    assert histogram_density_at(gray, 0) == pytest.approx(200 / 300)
+
+
+def test_threshold_inside_mode_fires_where_otsu_splits_the_soil():
+    """A plant 1.5% of the frame: Otsu cuts inside the soil's own spread. The
+    same soil around a plant filling 28% of it has a valley, and stays quiet."""
+    from plantcv_mcp.diagnostics import threshold_inside_mode_warning
+    from plantcv_mcp.segmentation import to_gray
+
+    small = to_gray(_disc_on_soil(14), "a")
+    w = threshold_inside_mode_warning(small, "otsu", "a")
+    assert w is not None and w.code == "threshold_inside_mode"
+    t = cv2.threshold(small, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[0]
+    assert f"is {t:.0f}," in w.message  # the value the method actually cut at
+    # Positive control: a plant big enough to make its own histogram mode.
+    big = to_gray(_disc_on_soil(60), "a")
+    assert threshold_inside_mode_warning(big, "otsu", "a") is None
+
+
+def test_threshold_inside_mode_reads_the_triangle_value_for_triangle():
+    from plantcv_mcp.diagnostics import (
+        histogram_density_at,
+        threshold_inside_mode_warning,
+    )
+    from plantcv_mcp.segmentation import to_gray
+
+    gray = to_gray(_disc_on_soil(14), "a")
+    t = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_TRIANGLE)[0]
+    o = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[0]
+    assert t != o  # the test can tell the two apart
+    w = threshold_inside_mode_warning(gray, "triangle", "a")
+    fires = histogram_density_at(gray, int(t)) >= 0.4
+    assert (w is not None) == fires
+    if w is not None:
+        assert f"is {t:.0f}," in w.message
+
+
+def test_threshold_inside_mode_is_silent_for_the_adaptive_methods():
+    """mean and gaussian have no single threshold to place in the histogram."""
+    from plantcv_mcp.diagnostics import threshold_inside_mode_warning
+    from plantcv_mcp.segmentation import to_gray
+
+    gray = to_gray(_disc_on_soil(14), "a")
+    assert threshold_inside_mode_warning(gray, "otsu", "a") is not None  # control
+    for method in ("mean", "gaussian"):
+        assert threshold_inside_mode_warning(gray, method, "a") is None
