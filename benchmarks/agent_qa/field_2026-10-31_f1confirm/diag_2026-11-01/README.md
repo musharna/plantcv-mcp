@@ -8,10 +8,11 @@ Exploratory, after the confirmatory result. Behind the "traced" paragraph of
   the real tools: Otsu with `fill_size` 0, 50 and 300, and `triangle` at 50, each
   then `keep_largest` and `measure`. Run from the repo root with the datasets
   fetched by `../../field_2026-10-24/fetch.py`.
-- `sweep.json`: its output on plantcv-mcp 1.18.2, where `triangle` was still
-  PlantCV's and so Otsu (`tri50` equals `otsu50` in every row).
-- `sweep_tri.json`: the same sweep with `triangle` as OpenCV's `THRESH_TRIANGLE`,
-  as plantcv-mcp #180 makes it.
+- `sweep.json`: its output on master at `4d4f5b8` (plantcv-mcp 1.18.2), where
+  `triangle` was still PlantCV's and so Otsu (`tri50` equals `otsu50` in every row).
+- `sweep_tri.json`: the same script run on the #180 branch at `a4afa66`, where
+  `triangle` is OpenCV's `THRESH_TRIANGLE`. The Otsu columns match `sweep.json`
+  row for row; only `tri50` differs.
 - `valley.py OUTDIR`: for each cell crop (and the five crops the agent used on its
   young-plant misses), the histogram's height at the Otsu threshold as a share of
   its peak. Every small-plant overcount is 0.55 or more, every other crop 0.27 or
