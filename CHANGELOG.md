@@ -6,6 +6,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- Warning `threshold_inside_mode` from `segment` and `measure_images` when an
+  `otsu` or `triangle` threshold cuts through the bulk of the channel's
+  histogram instead of a valley. That is what happens when the plant is a small
+  part of the frame: the threshold splits the background, and part of it joins
+  the mask unseen by the other guards. Tested on 739 held-out pot crops from the
+  field benchmark: it fires on all 351 where Otsu overcounts (median 8 times the
+  true area) and on 6 of 354 where Otsu is right. It advises and does not block
+  a batch.
+
 ## [1.18.3] — 2026-11-01
 
 ### Fixed

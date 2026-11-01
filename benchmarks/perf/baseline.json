@@ -370,7 +370,7 @@
    "cv2.connectedComponentsWithStats": 9,
    "cv2.contourArea": 3,
    "cv2.convexHull": 3,
-   "cv2.cvtColor": 6,
+   "cv2.cvtColor": 9,
    "cv2.drawContours": 18,
    "cv2.fillPoly": 10,
    "cv2.findContours": 12,
@@ -381,8 +381,8 @@
    "cv2.multiply": 3,
    "cv2.pointPolygonTest": 49,
    "cv2.putText": 6,
-   "cv2.split": 3,
-   "cv2.threshold": 12
+   "cv2.split": 6,
+   "cv2.threshold": 15
   },
   "output": {
    "areas": [
@@ -404,6 +404,7 @@
    "diagnostics.py:component_areas": 9,
    "diagnostics.py:empty_mask_warning": 3,
    "diagnostics.py:frame_clipping_warning": 3,
+   "diagnostics.py:histogram_density_at": 3,
    "diagnostics.py:implausible_coverage_warning": 3,
    "diagnostics.py:is_noisy": 3,
    "diagnostics.py:largest_fraction": 3,
@@ -412,6 +413,7 @@
    "diagnostics.py:multi_specimen_warning": 3,
    "diagnostics.py:noisy_segmentation_warning": 3,
    "diagnostics.py:segmentation_warnings": 3,
+   "diagnostics.py:threshold_inside_mode_warning": 3,
    "imaging.py:decode_image": 3,
    "imaging.py:digest_bytes": 3,
    "imaging.py:load_image": 3,
@@ -441,7 +443,7 @@
    "paths.py:check_readable": 6,
    "paths.py:configured_roots": 9,
    "segmentation.py:threshold_mask": 3,
-   "segmentation.py:to_gray": 3,
+   "segmentation.py:to_gray": 6,
    "server.py:_as_xy": 2,
    "server.py:_loud.<locals>.wrapper": 1,
    "server.py:build_server.<locals>.measure_images": 1,
@@ -452,7 +454,7 @@
    "plantcv/plantcv/analyze/size.py:size": 3,
    "plantcv/plantcv/classes.py:Outputs.clear": 3,
    "plantcv/plantcv/fill.py:fill": 3,
-   "plantcv/plantcv/rgb2gray_lab.py:rgb2gray_lab": 3,
+   "plantcv/plantcv/rgb2gray_lab.py:rgb2gray_lab": 6,
    "plantcv/plantcv/roi/roi_methods.py:rectangle": 3,
    "plantcv/plantcv/threshold/threshold_methods.py:otsu": 3
   },
@@ -903,12 +905,12 @@
  "segment": {
   "cv2": {
    "cv2.connectedComponentsWithStats": 2,
-   "cv2.cvtColor": 1,
+   "cv2.cvtColor": 2,
    "cv2.erode": 1,
    "cv2.imdecode": 1,
    "cv2.imencode": 1,
-   "cv2.split": 1,
-   "cv2.threshold": 1
+   "cv2.split": 2,
+   "cv2.threshold": 2
   },
   "output": {
    "largest_area": 10781
@@ -919,6 +921,7 @@
    "diagnostics.py:component_areas": 2,
    "diagnostics.py:empty_mask_warning": 1,
    "diagnostics.py:frame_clipping_warning": 1,
+   "diagnostics.py:histogram_density_at": 1,
    "diagnostics.py:implausible_coverage_warning": 1,
    "diagnostics.py:is_noisy": 1,
    "diagnostics.py:largest_fraction": 1,
@@ -927,6 +930,7 @@
    "diagnostics.py:multi_specimen_warning": 1,
    "diagnostics.py:noisy_segmentation_warning": 1,
    "diagnostics.py:segmentation_warnings": 1,
+   "diagnostics.py:threshold_inside_mode_warning": 1,
    "imaging.py:decode_image": 1,
    "imaging.py:digest_bytes": 1,
    "imaging.py:downscale": 1,
@@ -942,7 +946,7 @@
    "paths.py:check_readable": 2,
    "paths.py:configured_roots": 3,
    "segmentation.py:threshold_mask": 1,
-   "segmentation.py:to_gray": 1,
+   "segmentation.py:to_gray": 2,
    "server.py:_loud.<locals>.wrapper": 1,
    "server.py:_segment_impl": 1,
    "server.py:build_server.<locals>.segment": 1,
@@ -950,7 +954,7 @@
   },
   "plantcv": {
    "plantcv/plantcv/fill.py:fill": 1,
-   "plantcv/plantcv/rgb2gray_lab.py:rgb2gray_lab": 1,
+   "plantcv/plantcv/rgb2gray_lab.py:rgb2gray_lab": 2,
    "plantcv/plantcv/threshold/threshold_methods.py:otsu": 1
   },
   "spawns": {}

@@ -20,3 +20,11 @@ Exploratory, after the confirmatory result. Behind the "traced" paragraph of
 
 Plants under about 5% of their pot cell: Otsu wrong on 14 of 14 (+42% to
 +5,232%), triangle right on 9. All 40: Otsu 21 right, triangle 29.
+
+## The `threshold_inside_mode` warning, tested on held-out cells
+
+- `PREREG_threshold_inside_mode.md`: the rule, the held-out set and the pass
+  criteria, pushed (`31d5fb2`) before any held-out cell was opened.
+- `heldout.py OUTDIR [--shard I --of N | --score]`: the evaluation.
+- `heldout.json`: its 739 rows, run on `71a19bd`.
+- `RESULTS_threshold_inside_mode.md`: the verdict.
