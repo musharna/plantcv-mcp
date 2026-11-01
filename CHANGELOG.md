@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.18.2] — 2026-11-01
+
 ### Fixed
 
 - `measure_regions` and `measure_images` check that `coord` and `spacing` are two
