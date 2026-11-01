@@ -1121,3 +1121,39 @@ def test_edge_contact_names_the_contiguous_object_case():
         _disc_image(80), x=100, y=100, w=100, h=100, marker_length_mm=20.0
     )
     assert not est2.warnings
+
+
+def test_segment_and_batch_say_when_the_threshold_splits_the_background(tmp_path):
+    """threshold_inside_mode reaches both entry points, and batch keeps the
+    measurement: it is advice, not a refusal."""
+    from plantcv_mcp.server import _segment_impl
+
+    rng = np.random.default_rng(0)
+    yy, xx = np.mgrid[:200, :200]
+
+    def disc_on_soil(radius):
+        a = rng.normal(130, 4, (200, 200))
+        disc = (yy - 100) ** 2 + (xx - 100) ** 2 < radius**2
+        a[disc] = rng.normal(114, 3, int(disc.sum()))
+        lab = np.dstack(
+            [np.full((200, 200), 128), np.clip(a, 0, 255), np.full((200, 200), 128)]
+        ).astype(np.uint8)
+        return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+    small = _write(tmp_path, "small.png", disc_on_soil(14))
+    big = _write(tmp_path, "big.png", disc_on_soil(60))
+
+    def codes(ws):
+        return [w["code"] for w in ws]
+
+    seg = _segment_impl(small, "a", "otsu", fill_size=50)
+    assert "threshold_inside_mode" in codes(seg["warnings"])
+    out = measure_batch([small, big], channel="a", method="otsu", fill_size=50)
+    by = {r["image_path"]: r for r in out["results"]}
+    assert "threshold_inside_mode" in codes(by[small]["warnings"])
+    assert by[small]["measured"] is True
+    # Positive control: the plant that fills its pot is cut in a valley.
+    assert "threshold_inside_mode" not in codes(by[big]["warnings"])
+    assert "threshold_inside_mode" not in codes(
+        _segment_impl(big, "a", "otsu", fill_size=50)["warnings"]
+    )
