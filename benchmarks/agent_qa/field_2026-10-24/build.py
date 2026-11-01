@@ -102,11 +102,15 @@ def configure(argv: list[str]) -> None:
     a.add_argument("--first", default=None, help="raw image the pot rims are read from")
     a.add_argument("--built", default=BUILT)
     o = a.parse_args(argv)
-    if (o.tray, o.set) == (TRAY, SET):
-        return  # the pilot set: every other default stands
     if o.set == SET:
-        raise SystemExit("another tray needs its own --set")
+        # The pilot set takes no other flag: one would be silently ignored.
+        if vars(o) != vars(a.parse_args([])):
+            raise SystemExit("a set other than the pilot's needs its own --set")
+        return
     fams = tuple(o.families.split(","))
+    unknown = sorted(set(fams) - {"F1", "F2"})
+    if unknown:
+        raise SystemExit(f"unknown --families {unknown}; F1 and F2 exist")
     if o.tray == "031" and "F2" in fams:
         raise SystemExit("tray 031 never serves F2: count_leaves was designed on it")
     if o.id_prefix and len(fams) != 1:

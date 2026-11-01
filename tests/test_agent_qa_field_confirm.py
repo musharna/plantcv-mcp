@@ -100,12 +100,48 @@ def test_tray_031_never_serves_leaf_counts_and_another_tray_needs_its_own_set() 
     assert (build.TRAY, build.SET, build.FAMILIES, build.N, build.OUT) == before
 
 
-def test_fetch_knows_only_the_annotated_trays() -> None:
+def test_build_refuses_a_flag_it_would_ignore_and_an_unknown_family() -> None:
+    import build
+
+    # the pilot set's name with another flag: that flag would be dropped
+    with pytest.raises(SystemExit, match="its own --set"):
+        build.configure(["--families", "F2", "--n", "5"])
+    with pytest.raises(SystemExit, match="unknown --families"):
+        build.configure(["--tray", "031", "--set", "x", "--families", "F1,F3"])
+
+
+class _Stop(Exception):
+    pass
+
+
+def test_fetch_reads_the_tray_in_any_order_and_refuses_a_bad_flag(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    """main() is driven for real up to the first archive member it would read;
+    the archives themselves are stubbed, so no network is touched."""
     import fetch
 
     assert fetch.GT_COUNT == {"032": 13, "031": 43}
-    with pytest.raises(SystemExit, match="--tray must be one of"):
-        fetch.main(["--tray", "033"])  # refused before any network call
+    asked: list[str] = []
+
+    def wanted(images, software, harvest, tray):  # noqa: ANN001
+        asked.append(tray)
+        raise _Stop
+
+    monkeypatch.setattr(fetch, "open_archive", lambda name: None)
+    monkeypatch.setattr(fetch, "wanted", wanted)
+    for argv in ([str(tmp_path), "--tray", "031"], ["--tray", "031", str(tmp_path)]):
+        with pytest.raises(_Stop):
+            fetch.main(argv)
+    # positive control: no flag is the pilot's tray
+    with pytest.raises(_Stop):
+        fetch.main([str(tmp_path)])
+    assert asked == ["031", "031", "032"]
+    for bad in (["--tray"], ["--tray", "033"], [str(tmp_path), str(tmp_path)]):
+        with pytest.raises(SystemExit):
+            fetch.main(bad)
+    assert "invalid choice: '033'" in capsys.readouterr().err
+    assert asked == ["031", "031", "032"]  # no bad flag reached the archive
 
 
 # --------------------------------------------- tests that read the dataset

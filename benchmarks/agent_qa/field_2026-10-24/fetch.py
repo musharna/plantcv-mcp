@@ -29,6 +29,7 @@ DEST defaults to ~/plantcv-mcp-artifacts/field_2026-10-24/aberystwyth for tray
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import io
 import json
@@ -161,13 +162,18 @@ def wanted(
     return out
 
 
+def parse(argv: list[str]) -> tuple[str, Path]:
+    """(tray, dest) from the flags, in any order; a bad or partial flag exits
+    with argparse's message rather than falling back to tray 032."""
+    a = argparse.ArgumentParser(description="Fetch one tray's annotated members.")
+    a.add_argument("--tray", default="032", choices=sorted(GT_COUNT))
+    a.add_argument("dest", nargs="?", type=Path, default=None)
+    o = a.parse_args(argv)
+    return o.tray, o.dest or DEFAULT_DEST[o.tray]
+
+
 def main(argv: list[str]) -> int:
-    tray = "032"
-    if argv[:1] == ["--tray"]:
-        tray, argv = argv[1], argv[2:]
-    if tray not in GT_COUNT:
-        raise SystemExit(f"--tray must be one of {sorted(GT_COUNT)}")
-    dest = Path(argv[0]) if argv else DEFAULT_DEST[tray]
+    tray, dest = parse(argv)
     dest.mkdir(parents=True, exist_ok=True)
     images = open_archive("images_and_annotations.zip")
     software = open_archive("software.zip")
