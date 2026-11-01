@@ -30,7 +30,7 @@ def test_threshold_sheet_returns_exact_shape():
     img = _img()
     sheet = threshold_sheet(img, channel="a")
     assert sheet.ndim == 3
-    assert sheet.shape == (200, 200, 3)
+    assert sheet.shape == (200, 400, 3)  # Otsu | Triangle
     # Ensure it's not just a passthrough of the input image
     assert not np.array_equal(sheet, img), "Output must not be identical to input"
 
@@ -44,7 +44,7 @@ def test_threshold_sheet_unknown_channel_raises_and_valid_channel_works():
 
     # Positive control: valid channel must still work
     sheet = threshold_sheet(img, channel="a")
-    assert sheet.shape == (200, 200, 3)
+    assert sheet.shape == (200, 400, 3)
 
 
 # --- suggest says when the recommended polarity is noise (real-photo finding #4) ---
@@ -159,3 +159,24 @@ def test_polarity_report_keeps_a_purple_plant_on_grey_with_coverage():
             gap = rep[grey]["excess_green"] - rep[square]["excess_green"]
             assert gap >= GREENNESS_MARGIN
             assert rep[grey]["excess_green"] < GREEN_FLOOR
+
+
+def test_threshold_sheet_shows_otsu_and_a_real_triangle_side_by_side():
+    """The sheet was PlantCV's Otsu panel alone (result[0] of its list), and
+    its triangle was Otsu anyway: the tool meant to show which method works
+    compared nothing. Left half is Otsu, right half the triangle threshold."""
+    from test_segmentation import _small_dark_object_on_soil
+
+    from plantcv_mcp.segmentation import threshold_mask
+
+    img, _ = _small_dark_object_on_soil()
+    sheet = threshold_sheet(img, channel="a")
+    assert sheet.shape == (200, 400, 3)
+    left, right = sheet[:, :200, 0] > 127, sheet[:, 200:, 0] > 127
+    otsu = threshold_mask(img, "a", "otsu", object_type="light") > 0
+    tri = threshold_mask(img, "a", "triangle", object_type="light") > 0
+    # panels carry a label, so compare away from the text band
+    body = np.s_[60:, :]
+    assert (left[body] == otsu[body]).mean() > 0.99
+    assert (right[body] == tri[body]).mean() > 0.99
+    assert (left[body] != right[body]).mean() > 0.2  # the panels differ

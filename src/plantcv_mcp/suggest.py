@@ -19,15 +19,36 @@ def colorspace_sheet(img: np.ndarray) -> np.ndarray:
 
 
 def threshold_sheet(img: np.ndarray, channel: str) -> np.ndarray:
-    """Grid of auto-threshold methods on one channel — which method works here."""
+    """Otsu and triangle side by side on one channel, each labelled with its
+    threshold — which method works here.
+
+    Built here, not with pcv.visualize.auto_threshold_methods: that returned a
+    list whose first item is the Otsu panel alone, and its triangle panel is
+    Otsu as well (PlantCV 4.11.3 thresholds with THRESH_OTSU after computing
+    the triangle value). The sheet compared nothing. Each panel is the
+    threshold segment() applies (threshold_mask's otsu and triangle are these
+    same cv2 calls; tests hold the two equal), in "light" polarity as PlantCV
+    drew it, from one channel conversion.
+    """
+    import cv2
+
     gray = to_gray(img, channel)
-    if min(gray.shape[:2]) < 2:
-        # PlantCV halves the sheet internally, which is a zero-size resize for
-        # a 1 px edge. Doubling every pixel keeps the histogram's proportions,
-        # so each method picks the same threshold (audit of 2026-09-22, L9).
-        gray = np.repeat(np.repeat(gray, 2, axis=0), 2, axis=1)
-    result = pcv.visualize.auto_threshold_methods(gray_img=gray, grid_img=True)
-    return result[0] if isinstance(result, list) else result
+    w = gray.shape[1]
+    panels = []
+    for name, flag in (("Otsu", cv2.THRESH_OTSU), ("Triangle", cv2.THRESH_TRIANGLE)):
+        value, mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + flag)
+        panel = cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB)
+        cv2.putText(
+            panel,
+            f"{name} {value:.0f}",
+            (max(w // 8, 1), max(gray.shape[0] // 8, 1)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            pcv.params.text_size,
+            (255, 0, 255),
+            pcv.params.text_thickness,
+        )
+        panels.append(panel)
+    return np.hstack(panels)
 
 
 def noisy_segmentation_warning(polarity: str, stats: dict) -> Advisory | None:

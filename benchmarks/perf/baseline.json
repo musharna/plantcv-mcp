@@ -1028,14 +1028,13 @@
  },
  "suggest_segmentation": {
   "cv2": {
-   "cv2.calcHist": 1,
    "cv2.connectedComponentsWithStats": 2,
    "cv2.copyMakeBorder": 3,
    "cv2.cvtColor": 21,
    "cv2.imdecode": 1,
    "cv2.imencode": 2,
    "cv2.putText": 12,
-   "cv2.resize": 7,
+   "cv2.resize": 6,
    "cv2.split": 13,
    "cv2.threshold": 4
   },
@@ -1081,7 +1080,6 @@
    "plantcv/plantcv/fill.py:fill": 2,
    "plantcv/plantcv/rgb2gray_lab.py:rgb2gray_lab": 3,
    "plantcv/plantcv/threshold/threshold_methods.py:otsu": 2,
-   "plantcv/plantcv/visualize/auto_threshold_methods.py:auto_threshold_methods": 1,
    "plantcv/plantcv/visualize/colorspaces.py:colorspaces": 1
   },
   "spawns": {}

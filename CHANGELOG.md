@@ -6,6 +6,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- `method="triangle"` is now the triangle threshold. It called PlantCV's
+  `threshold.triangle`, which in PlantCV 4.11.3 computes the triangle value and
+  then thresholds with Otsu, so every `triangle` mask was Otsu's. It now uses
+  OpenCV's triangle threshold. On a small plant the two can differ a lot: on 40
+  annotated pot crops from the 2026-10-31 field benchmark, Otsu overcounts every
+  plant under about 5% of the crop and triangle gets 9 of those 14 right, though
+  not on every crop of the same plant.
+- `suggest_segmentation`'s threshold sheet shows Otsu and triangle side by side,
+  each labelled with its threshold. It was the Otsu panel alone.
+
 ## [1.18.2] — 2026-11-01
 
 ### Fixed

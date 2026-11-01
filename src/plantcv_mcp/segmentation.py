@@ -111,7 +111,15 @@ def threshold_mask(
     if method == "otsu":
         return pcv.threshold.otsu(gray_img=gray, object_type=object_type)
     if method == "triangle":
-        return pcv.threshold.triangle(gray_img=gray, object_type=object_type, xstep=1)
+        # Not pcv.threshold.triangle: PlantCV 4.11.3 computes the triangle value
+        # and then thresholds with THRESH_OTSU, which makes cv2 ignore it, so
+        # it returned Otsu's mask. That mattered most where triangle is the
+        # better choice: a plant under ~5% of the crop, where Otsu splits the
+        # soil (2026-11-01, F1 field set: young rosettes +42% to +5,232%).
+        import cv2
+
+        inv = cv2.THRESH_BINARY_INV if object_type == "dark" else cv2.THRESH_BINARY
+        return cv2.threshold(gray, 0, 255, inv + cv2.THRESH_TRIANGLE)[1]
     if method == "mean":
         return pcv.threshold.mean(
             gray_img=gray, ksize=ksize, offset=offset, object_type=object_type
