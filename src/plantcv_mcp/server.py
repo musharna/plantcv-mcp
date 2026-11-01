@@ -1110,8 +1110,9 @@ def _as_xy(pair: list[int] | None, name: str) -> tuple[int, int] | None:
         raise RegionSpecError(
             f"{name} must be exactly [x, y]; got {len(pair)} values: {pair!r}."
         )
-    if any(isinstance(v, bool) or not isinstance(v, int) for v in pair):
-        raise RegionSpecError(f"{name} must be [x, y] integers; got {pair!r}.")
+    for v in pair:  # a loop, not any(<genexpr>): no frame for the work-count ratchet
+        if isinstance(v, bool) or not isinstance(v, int):
+            raise RegionSpecError(f"{name} must be [x, y] integers; got {pair!r}.")
     return (pair[0], pair[1])
 
 
