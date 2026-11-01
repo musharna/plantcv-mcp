@@ -266,8 +266,9 @@ def test_coord_of_the_wrong_length_is_refused(tmp_path):
 def test_coord_that_is_not_two_integers_is_refused_by_name(pair):
     """`_as_xy` names the argument instead of leaking whatever int() raises.
 
-    Over MCP the argument model refuses these first (see the next test); this
-    holds for any caller that skips it.
+    Over MCP the argument model refuses inf, NaN and 10.7 first (see the next
+    test) but turns True and "10" into 1 and 10, so only a caller that skips it
+    reaches these cases.
     """
     from plantcv_mcp.server import _as_xy
 
@@ -310,7 +311,9 @@ def test_non_integer_coord_is_refused_over_the_real_mcp_layer(tmp_path, bad):
         "width": 180,
         "spacing": [200, 200],
     }
-    with pytest.raises(Exception, match=r"coord\.0") as err:
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    with pytest.raises(ToolError, match=r"coord\.0") as err:
         asyncio.run(server.call_tool("measure_regions", {**args, "coord": [bad, 10]}))
     assert "Overflow" not in str(err.value)
     # positive control: the same call with integers measures the grid
