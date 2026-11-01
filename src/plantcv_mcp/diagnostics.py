@@ -689,7 +689,13 @@ GLOBAL_THRESHOLDS = {"otsu": cv2.THRESH_OTSU, "triangle": cv2.THRESH_TRIANGLE}
 
 
 def histogram_density_at(gray: np.ndarray, value: int) -> float:
-    """Height of the 3-bin-smoothed 256-bin histogram at `value`, over its peak."""
+    """Height of the 3-bin-smoothed 256-bin histogram at `value`, over its peak.
+
+    The smoothing treats the bins past 0 and 255 as empty, so at those two
+    values it averages two real bins over three. That is the signal the
+    cut-off was chosen and held-out-tested on, so it stays as it is; a cut at
+    0 or 255 selects all or nothing and trips another guard anyway.
+    """
     hist = np.bincount(gray.ravel(), minlength=256).astype(float)
     smoothed = np.convolve(hist, np.ones(3) / 3, mode="same")
     return float(smoothed[value] / smoothed.max())

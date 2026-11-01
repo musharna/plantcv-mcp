@@ -615,6 +615,18 @@ def test_density_is_the_smoothed_histogram_at_the_cut_over_its_peak():
     assert histogram_density_at(gray, 100) == 0.0
 
 
+def test_density_at_the_ends_counts_the_missing_bin_as_empty():
+    """The documented edge behaviour, pinned because the cut-off was tested on
+    it: 300 px at 0 and 300 at 1, 900 at 128. At 0 the average is
+    (0 + 300 + 300)/3 = 200 over the peak 300, not (300 + 300)/2."""
+    from plantcv_mcp.diagnostics import histogram_density_at
+
+    gray = np.concatenate([np.full(300, 0), np.full(300, 1), np.full(900, 128)]).astype(
+        np.uint8
+    )
+    assert histogram_density_at(gray, 0) == pytest.approx(200 / 300)
+
+
 def test_threshold_inside_mode_fires_where_otsu_splits_the_soil():
     """A plant 1.5% of the frame: Otsu cuts inside the soil's own spread. The
     same soil around a plant filling 28% of it has a valley, and stays quiet."""
