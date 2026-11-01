@@ -9,11 +9,12 @@ build.py.
   one frame), not the builder's 14-board fit; the mask image is resampled
   with cv2.undistort (bilinear, summed), not integrated through an area
   Jacobian; the scale is the interior pots' rims measured on the
-  undistorted first image itself, not on undistorted edge points.
+  undistorted first image itself, not on undistorted edge points. The first
+  image is the tray's earliest annotated date, from the question's own tray.
 - Leaves: distinct colours with at least 8 px, counted from packed RGB
   integers with bincount.
 
-    python benchmarks/agent_qa/field_2026-10-24/reference.py   # prints one reply per question
+    python benchmarks/agent_qa/field_2026-10-24/reference.py [questions.json]   # one reply per question
 
 Its replies must score right on every question (tests/test_agent_qa_field.py).
 """
@@ -57,12 +58,28 @@ def plant_mask(rgb: np.ndarray, where: dict) -> np.ndarray:
     return painted & (lab == best)
 
 
-@lru_cache(maxsize=1)
-def shipped_scale(data: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
-    lens = F.shipped(Path(data) / "camera_correction" / "psi_camera_data.xml")
-    first = cv2.imread(
-        str(Path(data) / "PSI_Tray032/tv" / "PSI_Tray032_2015-12-14--12-54-51_top.png")
+def first_image(tray_dir: Path) -> Path:
+    """The tray's earliest annotated raw image: every pot still unoccluded."""
+    gts = sorted((tray_dir / "gt").glob("*.png"))
+    if not gts:
+        raise FileNotFoundError(f"no annotations in {tray_dir / 'gt'}")
+    name = (
+        gts[0]
+        .name.replace("_top_gt.png", "_top.png")
+        .replace("_top-gt.png", "_top.png")
     )
+    return tray_dir / name
+
+
+@lru_cache(maxsize=2)
+def shipped_scale(
+    data: str, tray_dir: str
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    lens = F.shipped(Path(data) / "camera_correction" / "psi_camera_data.xml")
+    path = first_image(Path(data) / tray_dir)
+    first = cv2.imread(str(path))
+    if first is None:
+        raise FileNotFoundError(f"cannot read the rim image {path}")
     und = cv2.undistort(first, lens.K, lens.dist, None, lens.K)
     c = F.cream(und)
     # interior pots: rows 2-3, columns 2-4; cell bounds from the corrected
@@ -94,18 +111,18 @@ def answer(q: dict, data: Path) -> str:
         packed = (rgb[mask].astype(np.int64) * [65536, 256, 1]).sum(axis=1)
         _, counts = np.unique(packed, return_counts=True)
         return f"ANSWER: {int((counts >= 8).sum())}"
-    K, dist, _, ppm = shipped_scale(str(data))
+    K, dist, _, ppm = shipped_scale(str(data), q["image"].rsplit("/", 1)[0])
     und = cv2.undistort(mask.astype(np.float32), K, dist, None, K)
     mm2 = float(und.sum()) / ppm**2
     return f"ANSWER: {int(mask.sum())} px, {mm2:.2f} mm²"
 
 
-def main() -> int:
-    doc = json.loads((HERE / "questions.json").read_text())
+def main(argv: list[str]) -> int:
+    doc = json.loads(Path(argv[0] if argv else HERE / "questions.json").read_text())
     for q in doc["questions"]:
         print(q["id"], answer(q, data_dir(doc)))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

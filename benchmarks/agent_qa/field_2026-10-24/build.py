@@ -14,11 +14,22 @@ calibration, the pot scale, the retention of every annotated plant with the
 reason for each exclusion, and the shortcut measurements. Deterministic: the
 calibration is OpenCV's, and the sampling is seeded.
 
+The flags build a held-out set from another tray without changing the pilot's:
+with none given the output is the pilot set, byte for byte. The F1 confirmatory
+set (PREREG amendment 2026-10-31) is
+
+    uv run --with openpyxl==3.1.5 python benchmarks/agent_qa/field_2026-10-24/build.py \
+      --tray 031 --set field_2026-10-31_f1confirm --families F1 \
+      --seed-f1 SEED --n N --id-prefix f1c --built 2026-10-31
+
+which writes benchmarks/agent_qa/field_2026-10-31_f1confirm/questions.json.
+
 Never imports or calls plantcv-mcp.
 """
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import glob
 import hashlib
@@ -41,6 +52,11 @@ N = 10
 SOWN = dt.date(2015, 11, 23)
 FIRST = "PSI_Tray032_2015-12-14--12-54-51_top.png"  # every pot unoccluded
 SET = "field_2026-10-24"
+TRAY = "032"
+FAMILIES = ("F1", "F2")
+ID_PREFIX = {"F1": "f1", "F2": "f2"}
+BUILT = "2026-10-24"
+OUT = HERE / "questions.json"
 
 TRAY_TEXT = (
     "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, "
@@ -72,6 +88,47 @@ def raw_name(gt: Path) -> str:
     return gt.name.replace("_top_gt.png", "_top.png").replace("_top-gt.png", "_top.png")
 
 
+def configure(argv: list[str]) -> None:
+    """Set the module constants from the flags; none given = the pilot set."""
+    global ART, DATA, TV, SEED, N, FIRST, SET, TRAY, FAMILIES, ID_PREFIX, BUILT, OUT
+    a = argparse.ArgumentParser()
+    a.add_argument("--tray", default=TRAY)
+    a.add_argument("--set", default=SET)
+    a.add_argument("--families", default=",".join(FAMILIES))
+    a.add_argument("--seed-f1", type=int, default=SEED["F1"])
+    a.add_argument("--seed-f2", type=int, default=SEED["F2"])
+    a.add_argument("--n", type=int, default=N)
+    a.add_argument("--id-prefix", default=None, help="one prefix, single-family sets")
+    a.add_argument("--first", default=None, help="raw image the pot rims are read from")
+    a.add_argument("--built", default=BUILT)
+    o = a.parse_args(argv)
+    if o.set == SET:
+        # The pilot set takes no other flag: one would be silently ignored.
+        if vars(o) != vars(a.parse_args([])):
+            raise SystemExit("a set other than the pilot's needs its own --set")
+        return
+    fams = tuple(o.families.split(","))
+    unknown = sorted(set(fams) - {"F1", "F2"})
+    if unknown:
+        raise SystemExit(f"unknown --families {unknown}; F1 and F2 exist")
+    if o.tray == "031" and "F2" in fams:
+        raise SystemExit("tray 031 never serves F2: count_leaves was designed on it")
+    if o.id_prefix and len(fams) != 1:
+        raise SystemExit("--id-prefix needs exactly one family")
+    TRAY, SET, FAMILIES, N, BUILT = o.tray, o.set, fams, o.n, o.built
+    SEED = {f: {"F1": o.seed_f1, "F2": o.seed_f2}[f] for f in fams}
+    ID_PREFIX = {f: o.id_prefix or f.lower() for f in fams}
+    ART = Path.home() / "plantcv-mcp-artifacts" / SET
+    DATA = ART / "aberystwyth"
+    TV = f"PSI_Tray{TRAY}/tv"
+    OUT = HERE.parent / SET / "questions.json"
+    # Default rim image: the tray's earliest annotated date (the pilot's FIRST
+    # is tray 032's), when every pot is still unoccluded.
+    FIRST = o.first or min(
+        raw_name(Path(p)) for p in glob.glob(str(DATA / TV / "gt" / "*.png"))
+    )
+
+
 def main() -> int:
     lenses = F.calibrate(DATA / BOARDS, DATA / "camera_correction/psi_camera_data.xml")
     jac = {k: F.area_jacobian(v) for k, v in lenses.items()}
@@ -88,7 +145,7 @@ def main() -> int:
     scale_se = float(iv.std(ddof=1) / np.sqrt(len(iv)) / iv.mean())
     scale_term = 2 * 1.96 * scale_se
     ppm_raw = {"interior": F.px_per_mm(raw_sizes), "all": F.px_per_mm(raw_sizes, "all")}
-    harvests = F.read_harvests(DATA / "AT20_graphed_GT.xlsx")
+    harvests = F.read_harvests(DATA / "AT20_graphed_GT.xlsx", int(TRAY))
 
     retention, eligible = [], []
     leaves_by_date: dict[str, list[int]] = {}
@@ -167,7 +224,7 @@ def main() -> int:
     questions, sampled = [], {}
     boards = sorted(Path(p) for p in glob.glob(str(DATA / BOARDS / "*.png")))
     board_sha = {b.name: sha(b) for b in boards}
-    for fam in ("F1", "F2"):
+    for fam in FAMILIES:
         rng = np.random.default_rng(SEED[fam])
         pick = sorted(rng.choice(len(images), size=N, replace=False).tolist())
         sampled[fam] = []
@@ -176,7 +233,7 @@ def main() -> int:
             e = cands[int(rng.integers(len(cands)))]
             sampled[fam].append((e["image"], e["row"], e["col"]))
             q = {
-                "id": f"{fam.lower()}_{n:02d}",
+                "id": f"{ID_PREFIX[fam]}_{n:02d}",
                 "family": fam,
                 "image": f"{TV}/{e['image']}",
                 "sha256": sha(DATA / TV / e["image"]),
@@ -223,7 +280,7 @@ def main() -> int:
         "set": SET,
         "source": {"doi": "10.5281/zenodo.168158", "licence": "CC BY 4.0",
                    "citation": "Bell J, Dee HM (2016) Aberystwyth Leaf Evaluation Dataset. Zenodo.",
-                   "manifest_sha256": sha(DATA / "MANIFEST.json"), "tray": "032"},
+                   "manifest_sha256": sha(DATA / "MANIFEST.json"), "tray": TRAY},
         "lenses": {k: v.to_json() for k, v in lenses.items()},
         "distortion": {
             k: {"max_area_jacobian": float(jac[k].max()), "min_area_jacobian": float(jac[k].min()),
@@ -254,9 +311,9 @@ def main() -> int:
     F.save_json(ART / "build_report.json", report)
     out = {
         "set": SET,
-        "built": "2026-10-24",
+        "built": BUILT,
         "seed": SEED,
-        "images_dir": "~/plantcv-mcp-artifacts/field_2026-10-24/aberystwyth",
+        "images_dir": f"~/plantcv-mcp-artifacts/{SET}/aberystwyth",
         "alt_web": False,
         "source": report["source"],
         "build_report_sha256": sha(ART / "build_report.json"),
@@ -279,7 +336,8 @@ def main() -> int:
         },
         "questions": questions,
     }  # fmt: skip
-    F.save_json(HERE / "questions.json", out)
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    F.save_json(OUT, out)
     print(json.dumps({k: report[k] for k in ("eligible", "annotated", "shortcut_uncorrected_all_eligible",
                       "shortcut_uncorrected_sampled", "px_per_mm", "scale_rel_se")}, indent=1))  # fmt: skip
     return 0
@@ -291,4 +349,5 @@ def _corners() -> np.ndarray:
 
 
 if __name__ == "__main__":
+    configure(sys.argv[1:])
     sys.exit(main())

@@ -40,3 +40,10 @@ Descriptive, not confirmatory.
 - **Cost:** $1.30 by the runs' own records (10 runs). The spend ledger
   moved $137.45 → $138.64.
 - **Not re-run:** the alt arm (its 6/10 is one rep from 10-24) and F2.
+
+## Since then (added 2026-10-31)
+
+The confirmatory run on 30 fresh tray 031 questions did **not** confirm this gap:
+mcp 1.18.1 right on 23, alt on 16, paired 11:4, p = 0.118 against a pre-registered
+p < 0.05. Young rosettes and the rim scale cost the server 7. See
+[`../../field_2026-10-31_f1confirm/RESULTS.md`](../../field_2026-10-31_f1confirm/RESULTS.md).

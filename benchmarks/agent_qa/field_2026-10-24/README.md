@@ -13,7 +13,9 @@ archive with HTTP range requests.
 **Tray 032 only, and it is not unseen.** Only trays 031 and 032 have hand
 annotations; 033 and 034 have none (dataset PDF §2.2; the archive's `gt/`
 listing has 0 files for each). Tray 031 is excluded because `count_leaves` was
-designed on it (docs/EVAL.md). Tray 032 is the server's own held-out reporting
+designed on it (docs/EVAL.md); it later served the F1 confirmatory set only
+(`../field_2026-10-31_f1confirm/`, not confirmed), since no area choice was made on
+it. Tray 032 is the server's own held-out reporting
 tray: its figures were seen during development, though nothing was chosen from
 them. This set is reported separately from the rendered set for that reason.
 
