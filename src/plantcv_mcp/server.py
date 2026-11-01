@@ -1096,14 +1096,23 @@ def _as_xy(pair: list[int] | None, name: str) -> tuple[int, int] | None:
     is a caller who thinks it means something else, and silently taking the
     first two would lay the grid down in the wrong place and measure the
     neighbouring plant — with numbers that look entirely reasonable.
+
+    Each value must already be an int, as `limits.require_int` demands: bare
+    int() would truncate 10.7 to 10, turn True into 1, and raise OverflowError
+    on infinity (fuzz #174). Over MCP the argument model refuses floats first;
+    this holds for any other caller.
     """
     if pair is None:
         return None
+    if not isinstance(pair, (list, tuple)):
+        raise RegionSpecError(f"{name} must be [x, y]; got {pair!r}.")
     if len(pair) != 2:
         raise RegionSpecError(
             f"{name} must be exactly [x, y]; got {len(pair)} values: {pair!r}."
         )
-    return (int(pair[0]), int(pair[1]))
+    if any(isinstance(v, bool) or not isinstance(v, int) for v in pair):
+        raise RegionSpecError(f"{name} must be [x, y] integers; got {pair!r}.")
+    return (pair[0], pair[1])
 
 
 def _measure_regions_impl(
