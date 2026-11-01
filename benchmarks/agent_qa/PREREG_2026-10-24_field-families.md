@@ -210,3 +210,12 @@ rates). This is a guess, not part of the rule.
   dataset.
 - The dataset is public. A model that recalls it could answer from memory;
   the leak scan and `text_mentions` report any sign of that.
+
+**Key, drawn after the amendment above was pushed (a9285c8), before any run.**
+`field_2026-10-31_f1confirm/questions.json`, sha256
+`1934e4a30cd46e3c4f889f21144b3f0fd85190eab60f02542de9e90fb14b9bcd` (pinned in
+`tests/test_agent_qa_field_confirm.py`). 30 questions from 30 images over 27
+dates; 18 plants at the tray's edge. `reference.py` (the authors' calibration, no
+plantcv-mcp) scores right on all 30, and still on all 20 of the pilot. Measured
+on the draw: uncorrected mm² fails none of the 30 (on the pilot, 1 of 10), so
+this set tests segmentation and the pot scale, not lens correction.

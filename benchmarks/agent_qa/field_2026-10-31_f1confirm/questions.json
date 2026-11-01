@@ -1,0 +1,2698 @@
+{
+ "alt_web": false,
+ "build_report_sha256": "fec18852ac2781697393d04f7d2944c0a4f1dfaa0ff903707540147f0d56ac1e",
+ "built": "2026-10-31",
+ "controls": {
+  "annotated_plants": 706,
+  "eligible_plants": 608,
+  "max_area_jacobian": 1.1423093369301787,
+  "max_displacement_px": 64.86079432195785,
+  "retention": [
+   {
+    "date": "2015-12-14",
+    "kept": 20,
+    "not_found": 0,
+    "plants": 20,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-14",
+    "kept": 20,
+    "not_found": 0,
+    "plants": 20,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-15",
+    "kept": 20,
+    "not_found": 0,
+    "plants": 20,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-16",
+    "kept": 20,
+    "not_found": 0,
+    "plants": 20,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-17",
+    "kept": 20,
+    "not_found": 0,
+    "plants": 20,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-18",
+    "kept": 20,
+    "not_found": 0,
+    "plants": 20,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-19",
+    "kept": 20,
+    "not_found": 0,
+    "plants": 20,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-20",
+    "kept": 20,
+    "not_found": 0,
+    "plants": 20,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-20",
+    "kept": 20,
+    "not_found": 0,
+    "plants": 20,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-20",
+    "kept": 20,
+    "not_found": 0,
+    "plants": 20,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-21",
+    "kept": 20,
+    "not_found": 0,
+    "plants": 20,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-22",
+    "kept": 20,
+    "not_found": 0,
+    "plants": 20,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-23",
+    "kept": 18,
+    "not_found": 0,
+    "plants": 18,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-24",
+    "kept": 18,
+    "not_found": 0,
+    "plants": 18,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-25",
+    "kept": 18,
+    "not_found": 0,
+    "plants": 18,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-26",
+    "kept": 18,
+    "not_found": 0,
+    "plants": 18,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-27",
+    "kept": 18,
+    "not_found": 0,
+    "plants": 18,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-27",
+    "kept": 18,
+    "not_found": 0,
+    "plants": 18,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-27",
+    "kept": 18,
+    "not_found": 0,
+    "plants": 18,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-28",
+    "kept": 18,
+    "not_found": 0,
+    "plants": 18,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-29",
+    "kept": 18,
+    "not_found": 0,
+    "plants": 18,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-30",
+    "kept": 16,
+    "not_found": 0,
+    "plants": 16,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2015-12-31",
+    "kept": 16,
+    "not_found": 0,
+    "plants": 16,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2016-01-01",
+    "kept": 16,
+    "not_found": 0,
+    "plants": 16,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2016-01-02",
+    "kept": 16,
+    "not_found": 0,
+    "plants": 16,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2016-01-03",
+    "kept": 16,
+    "not_found": 0,
+    "plants": 16,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2016-01-03",
+    "kept": 16,
+    "not_found": 0,
+    "plants": 16,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2016-01-03",
+    "kept": 16,
+    "not_found": 0,
+    "plants": 16,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2016-01-04",
+    "kept": 16,
+    "not_found": 0,
+    "plants": 16,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2016-01-05",
+    "kept": 14,
+    "not_found": 0,
+    "plants": 14,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2016-01-06",
+    "kept": 14,
+    "not_found": 0,
+    "plants": 14,
+    "stray_group": 0,
+    "touching": 0
+   },
+   {
+    "date": "2016-01-07",
+    "kept": 12,
+    "not_found": 0,
+    "plants": 14,
+    "stray_group": 0,
+    "touching": 2
+   },
+   {
+    "date": "2016-01-08",
+    "kept": 8,
+    "not_found": 0,
+    "plants": 14,
+    "stray_group": 0,
+    "touching": 6
+   },
+   {
+    "date": "2016-01-09",
+    "kept": 7,
+    "not_found": 0,
+    "plants": 14,
+    "stray_group": 0,
+    "touching": 7
+   },
+   {
+    "date": "2016-01-10",
+    "kept": 5,
+    "not_found": 0,
+    "plants": 14,
+    "stray_group": 0,
+    "touching": 9
+   },
+   {
+    "date": "2016-01-10",
+    "kept": 4,
+    "not_found": 0,
+    "plants": 14,
+    "stray_group": 0,
+    "touching": 10
+   },
+   {
+    "date": "2016-01-11",
+    "kept": 5,
+    "not_found": 0,
+    "plants": 12,
+    "stray_group": 0,
+    "touching": 7
+   },
+   {
+    "date": "2016-01-12",
+    "kept": 3,
+    "not_found": 0,
+    "plants": 12,
+    "stray_group": 0,
+    "touching": 9
+   },
+   {
+    "date": "2016-01-13",
+    "kept": 3,
+    "not_found": 0,
+    "plants": 12,
+    "stray_group": 0,
+    "touching": 9
+   },
+   {
+    "date": "2016-01-14",
+    "kept": 2,
+    "not_found": 0,
+    "plants": 12,
+    "stray_group": 0,
+    "touching": 10
+   },
+   {
+    "date": "2016-01-15",
+    "kept": 1,
+    "not_found": 0,
+    "plants": 10,
+    "stray_group": 0,
+    "touching": 9
+   },
+   {
+    "date": "2016-01-16",
+    "kept": 0,
+    "not_found": 0,
+    "plants": 10,
+    "stray_group": 0,
+    "touching": 10
+   },
+   {
+    "date": "2016-01-17",
+    "kept": 0,
+    "not_found": 0,
+    "plants": 10,
+    "stray_group": 0,
+    "touching": 10
+   }
+  ],
+  "shortcut_date_median_leaf_count": {
+   "exact": 173,
+   "of": 608,
+   "within_one": 423
+  },
+  "shortcut_uncorrected_all_eligible": {
+   "uncorrected_px_per_mm_all": {
+    "edge_plants": 424,
+    "fails": 1,
+    "fails_edge": 1,
+    "fails_interior": 0,
+    "of": 608,
+    "px_per_mm": 7.336875,
+    "rel_error_edge_median": -0.022087252110903455,
+    "rel_error_edge_range": [
+     -0.05326876182828577,
+     0.004259695907161243
+    ],
+    "rel_error_interior_median": 0.011825892514713776,
+    "rel_error_interior_range": [
+     0.008593167789315403,
+     0.02454904924771295
+    ]
+   },
+   "uncorrected_px_per_mm_interior": {
+    "edge_plants": 424,
+    "fails": 9,
+    "fails_edge": 9,
+    "fails_interior": 0,
+    "of": 608,
+    "px_per_mm": 7.3875,
+    "rel_error_edge_median": -0.03544419366103829,
+    "rel_error_edge_range": [
+     -0.06619980689262572,
+     -0.009457108673148085
+    ],
+    "rel_error_interior_median": -0.0019942558926007714,
+    "rel_error_interior_range": [
+     -0.005182826049712763,
+     0.01055512003921466
+    ]
+   }
+  },
+  "shortcut_uncorrected_sampled": {
+   "all": 0,
+   "interior": 0
+  }
+ },
+ "images_dir": "~/plantcv-mcp-artifacts/field_2026-10-31_f1confirm/aberystwyth",
+ "questions": [
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_01",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-14--12-54-06_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 3, column 3 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "38d43a64ba8c7f88d9789f6a98888b84a588fb1a9c9e11dfc0ec8f59efa25d0b",
+   "truth": {
+    "area_mm2": 18.206910233466523,
+    "area_px": 1004,
+    "mm2_by_lens": {
+     "k1k2k3": 18.21567724237907,
+     "k1k2p1p2": 18.20391470794365,
+     "k1k2p1p2k3": 18.206910233466523,
+     "shipped_xml": 18.234953739642574
+    },
+    "mm2_hi": 23.1527390489928,
+    "mm2_lo": 13.4963660872214,
+    "mm2_rel_terms": {
+     "calibration": 0.00154026717419109,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 1267,
+    "px_lo": 750,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 18.651401578912143,
+     "interior": 18.39664911632754
+    }
+   },
+   "where": {
+    "cell_x": [
+     1066,
+     1525
+    ],
+    "cell_y": [
+     966,
+     1417
+    ],
+    "col": 3,
+    "das": 21,
+    "date": "2015-12-14",
+    "edge": false,
+    "row": 3
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_02",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-15--19-25-16_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 1, column 5 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "55beceb556718226410d8ddf50959e8ea0834d98c7b7e34e78fe911653aca81d",
+   "truth": {
+    "area_mm2": 39.77158182441808,
+    "area_px": 2034,
+    "mm2_by_lens": {
+     "k1k2k3": 39.904291803355235,
+     "k1k2p1p2": 39.817426464224006,
+     "k1k2p1p2k3": 39.77158182441808,
+     "shipped_xml": 39.65490485008933
+    },
+    "mm2_hi": 49.26849052486931,
+    "mm2_lo": 30.058205491597327,
+    "mm2_rel_terms": {
+     "calibration": 0.003336804141284677,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 2496,
+    "px_lo": 1552,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 37.78580758118257,
+     "interior": 37.26970548068747
+    }
+   },
+   "where": {
+    "cell_x": [
+     1968,
+     2417.0
+    ],
+    "cell_y": [
+     66.5,
+     516
+    ],
+    "col": 5,
+    "das": 22,
+    "date": "2015-12-15",
+    "edge": true,
+    "row": 1
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_03",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-16--20-38-55_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 1, column 4 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "31342ad11796e3759101d7adaf91c296b0dad9073e27e4c7a7e266a0464d458b",
+   "truth": {
+    "area_mm2": 46.1243065902433,
+    "area_px": 2438,
+    "mm2_by_lens": {
+     "k1k2k3": 46.138029947676095,
+     "k1k2p1p2": 46.1138824593459,
+     "k1k2p1p2k3": 46.1243065902433,
+     "shipped_xml": 45.91583044993245
+    },
+    "mm2_hi": 56.02444582336152,
+    "mm2_lo": 36.123128197227054,
+    "mm2_rel_terms": {
+     "calibration": 0.004519875868550183,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 2930,
+    "px_lo": 1930,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 45.290953236442036,
+     "interior": 44.672341180883016
+    }
+   },
+   "where": {
+    "cell_x": [
+     1522,
+     1968
+    ],
+    "cell_y": [
+     66.5,
+     516
+    ],
+    "col": 4,
+    "das": 23,
+    "date": "2015-12-16",
+    "edge": true,
+    "row": 1
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_04",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-17--20-23-02_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 2, column 1 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "64eaaf70eb2f4f9d0117668f848e5f25bc42db95c5fa2a194feb8ecf969c2aa2",
+   "truth": {
+    "area_mm2": 69.04965712353537,
+    "area_px": 3616,
+    "mm2_by_lens": {
+     "k1k2k3": 68.74607310316874,
+     "k1k2p1p2": 69.03223543212572,
+     "k1k2p1p2k3": 69.04965712353537,
+     "shipped_xml": 68.89866899135397
+    },
+    "mm2_hi": 83.65387999076347,
+    "mm2_lo": 54.77249975280592,
+    "mm2_rel_terms": {
+     "calibration": 0.004396604313667951,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 4335,
+    "px_lo": 2899,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 67.17476903321345,
+     "interior": 66.25725418788883
+    }
+   },
+   "where": {
+    "cell_x": [
+     172.0,
+     621
+    ],
+    "cell_y": [
+     516,
+     967
+    ],
+    "col": 1,
+    "das": 24,
+    "date": "2015-12-17",
+    "edge": true,
+    "row": 2
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_05",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-18--20-24-39_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 3, column 3 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "98fa574084c0ecdb72d325a227acd78b38b53ff5a9e40a104f73f2bb32b989f2",
+   "truth": {
+    "area_mm2": 50.463206954789264,
+    "area_px": 2783,
+    "mm2_by_lens": {
+     "k1k2k3": 50.48576492155387,
+     "k1k2p1p2": 50.4545598970269,
+     "k1k2p1p2k3": 50.463206954789264,
+     "shipped_xml": 50.537275166771984
+    },
+    "mm2_hi": 64.56771155988997,
+    "mm2_lo": 36.2422436858266,
+    "mm2_rel_terms": {
+     "calibration": 0.0014677666452922455,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 3534,
+    "px_lo": 2014,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 51.70005039254232,
+     "interior": 50.993898895158914
+    }
+   },
+   "where": {
+    "cell_x": [
+     1069,
+     1521
+    ],
+    "cell_y": [
+     966,
+     1415
+    ],
+    "col": 3,
+    "das": 25,
+    "date": "2015-12-18",
+    "edge": false,
+    "row": 3
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_06",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-20--14-09-27_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 1, column 2 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "3333a1a6edbabc883cedc2a0d89000b2f7497fa5a24811d7c0ea1a21abaeaae4",
+   "truth": {
+    "area_mm2": 108.98923107470162,
+    "area_px": 5769,
+    "mm2_by_lens": {
+     "k1k2k3": 108.59677589395018,
+     "k1k2p1p2": 108.97230371873331,
+     "k1k2p1p2k3": 108.98923107470162,
+     "shipped_xml": 108.4043800208843
+    },
+    "mm2_hi": 128.89939107063503,
+    "mm2_lo": 89.46700807210509,
+    "mm2_rel_terms": {
+     "calibration": 0.005366136159052792,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 6745,
+    "px_lo": 4791,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 107.17125070592047,
+     "interior": 105.70743899610915
+    }
+   },
+   "where": {
+    "cell_x": [
+     621,
+     1068
+    ],
+    "cell_y": [
+     65.5,
+     516
+    ],
+    "col": 2,
+    "das": 27,
+    "date": "2015-12-20",
+    "edge": true,
+    "row": 1
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_07",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-21--20-32-51_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 2, column 4 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "64acdc3737f256ff6872fb9ec2d173b5fd3f2651218b58888b352d1359ba994b",
+   "truth": {
+    "area_mm2": 109.66261979262757,
+    "area_px": 5963,
+    "mm2_by_lens": {
+     "k1k2k3": 109.80255904934263,
+     "k1k2p1p2": 109.67482889721806,
+     "k1k2p1p2k3": 109.66261979262757,
+     "shipped_xml": 109.53789527458746
+    },
+    "mm2_hi": 127.7058022244608,
+    "mm2_lo": 91.363277240035,
+    "mm2_rel_terms": {
+     "calibration": 0.0012760889442517964,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 6893,
+    "px_lo": 5005,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 110.77520678790151,
+     "interior": 109.2621700006585
+    }
+   },
+   "where": {
+    "cell_x": [
+     1523,
+     1968
+    ],
+    "cell_y": [
+     516,
+     969
+    ],
+    "col": 4,
+    "das": 28,
+    "date": "2015-12-21",
+    "edge": false,
+    "row": 2
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_08",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-22--20-34-45_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 1, column 1 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "af46ff02806c4b195ad7abd363a50ff7b7f8858a104c71f3cac27b8a05375412",
+   "truth": {
+    "area_mm2": 123.72555660817642,
+    "area_px": 6320,
+    "mm2_by_lens": {
+     "k1k2k3": 123.09010742827898,
+     "k1k2p1p2": 123.77566921100669,
+     "k1k2p1p2k3": 123.72555660817642,
+     "shipped_xml": 123.01910439806488
+    },
+    "mm2_hi": 144.56245389298857,
+    "mm2_lo": 103.14924810135098,
+    "mm2_rel_terms": {
+     "calibration": 0.0057098325477635825,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 7298,
+    "px_lo": 5332,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 117.40722906247485,
+     "interior": 115.80360798325704
+    }
+   },
+   "where": {
+    "cell_x": [
+     172.0,
+     621
+    ],
+    "cell_y": [
+     66.0,
+     516
+    ],
+    "col": 1,
+    "das": 29,
+    "date": "2015-12-22",
+    "edge": true,
+    "row": 1
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_09",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-23--22-56-06_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 3, column 3 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "5a49677fcaa91d2bc89d7929d980ec5002b8f82092f010b415f6a8007a24d748",
+   "truth": {
+    "area_mm2": 150.1459680287903,
+    "area_px": 8280,
+    "mm2_by_lens": {
+     "k1k2k3": 150.2152918137469,
+     "k1k2p1p2": 150.12052817366967,
+     "k1k2p1p2k3": 150.1459680287903,
+     "shipped_xml": 150.36590423865394
+    },
+    "mm2_hi": 176.55739543402183,
+    "mm2_lo": 122.80332604259952,
+    "mm2_rel_terms": {
+     "calibration": 0.0014648159571055697,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 9663,
+    "px_lo": 6824,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 153.81833174640693,
+     "interior": 151.71738514262157
+    }
+   },
+   "where": {
+    "cell_x": [
+     1072,
+     1523
+    ],
+    "cell_y": [
+     968,
+     1417
+    ],
+    "col": 3,
+    "das": 30,
+    "date": "2015-12-23",
+    "edge": false,
+    "row": 3
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_10",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-24--21-01-09_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 4, column 3 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "ec29556236861f552e37b746a765f1e4757766fef491012db657edbd7b4aafa5",
+   "truth": {
+    "area_mm2": 168.10839166132644,
+    "area_px": 9082,
+    "mm2_by_lens": {
+     "k1k2k3": 168.3583369305008,
+     "k1k2p1p2": 168.1247937509949,
+     "k1k2p1p2k3": 168.10839166132644,
+     "shipped_xml": 169.1440134832012
+    },
+    "mm2_hi": 193.68991742978722,
+    "mm2_lo": 142.624012001103,
+    "mm2_rel_terms": {
+     "calibration": 0.00616044096097923,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 10337,
+    "px_lo": 7801,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 168.71716049768932,
+     "interior": 166.41271640885134
+    }
+   },
+   "where": {
+    "cell_x": [
+     1065,
+     1523
+    ],
+    "cell_y": [
+     1417,
+     1866.0
+    ],
+    "col": 3,
+    "das": 31,
+    "date": "2015-12-24",
+    "edge": true,
+    "row": 4
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_11",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-26--20-39-30_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 2, column 5 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "a2ff6115a74a81642ce2b6ea33e4abf2e241363ed57bec1c2d016eee247a175f",
+   "truth": {
+    "area_mm2": 367.0530711698803,
+    "area_px": 19232,
+    "mm2_by_lens": {
+     "k1k2k3": 368.3628043345164,
+     "k1k2p1p2": 366.9929268838465,
+     "k1k2p1p2k3": 367.0530711698803,
+     "shipped_xml": 367.033974637946
+    },
+    "mm2_hi": 408.5162685865198,
+    "mm2_lo": 324.5420311026706,
+    "mm2_rel_terms": {
+     "calibration": 0.0035682392207254665,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 21198,
+    "px_lo": 17172,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 357.2746565394804,
+     "interior": 352.3947766984176
+    }
+   },
+   "where": {
+    "cell_x": [
+     1968,
+     2417.0
+    ],
+    "cell_y": [
+     520,
+     964
+    ],
+    "col": 5,
+    "das": 33,
+    "date": "2015-12-26",
+    "edge": true,
+    "row": 2
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_12",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-27--20-49-37_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 3, column 3 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "7858e243afd1faf159d1be2322414d0d1b0c18dcefa6e17111beee63b846efa0",
+   "truth": {
+    "area_mm2": 313.5810593009803,
+    "area_px": 17290,
+    "mm2_by_lens": {
+     "k1k2k3": 313.72373303779426,
+     "k1k2p1p2": 313.5298821353405,
+     "k1k2p1p2k3": 313.5810593009803,
+     "shipped_xml": 314.0493171275255
+    },
+    "mm2_hi": 351.1549180339416,
+    "mm2_lo": 275.8754616899897,
+    "mm2_rel_terms": {
+     "calibration": 0.0014932592790808386,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 19215,
+    "px_lo": 15328,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 321.1979415332579,
+     "interior": 316.81081994153703
+    }
+   },
+   "where": {
+    "cell_x": [
+     1070,
+     1523
+    ],
+    "cell_y": [
+     967,
+     1416
+    ],
+    "col": 3,
+    "das": 34,
+    "date": "2015-12-27",
+    "edge": false,
+    "row": 3
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_13",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-28--20-45-12_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 3, column 5 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "5c7928421240692b9abd57b3e9742a536e91e3ab7890d50e2f0a98e4a24b1f46",
+   "truth": {
+    "area_mm2": 290.6498446653479,
+    "area_px": 15316,
+    "mm2_by_lens": {
+     "k1k2k3": 291.9628478183126,
+     "k1k2p1p2": 290.59218764699335,
+     "k1k2p1p2k3": 290.6498446653479,
+     "shipped_xml": 291.7344252292819
+    },
+    "mm2_hi": 327.72631654957513,
+    "mm2_lo": 252.1661233584915,
+    "mm2_rel_terms": {
+     "calibration": 0.004517474125872889,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 17087,
+    "px_lo": 13432,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 284.5267595444406,
+     "interior": 280.6405158024628
+    }
+   },
+   "where": {
+    "cell_x": [
+     1968,
+     2417.0
+    ],
+    "cell_y": [
+     964,
+     1417
+    ],
+    "col": 5,
+    "das": 35,
+    "date": "2015-12-28",
+    "edge": true,
+    "row": 3
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_14",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-29--21-22-10_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 4, column 4 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "373caf0864fa9d77ea4c26fab1a472051b736dc3a67fd1f4b6b804f8dcd1c7d6",
+   "truth": {
+    "area_mm2": 233.55977609417855,
+    "area_px": 12505,
+    "mm2_by_lens": {
+     "k1k2k3": 234.36201546326586,
+     "k1k2p1p2": 233.5467837649563,
+     "k1k2p1p2k3": 233.55977609417855,
+     "shipped_xml": 235.09224629239677
+    },
+    "mm2_hi": 262.7884972778058,
+    "mm2_lo": 202.61459270428352,
+    "mm2_rel_terms": {
+     "calibration": 0.006561361822852163,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 13893,
+    "px_lo": 10988,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 232.30655054212784,
+     "interior": 229.13356294788437
+    }
+   },
+   "where": {
+    "cell_x": [
+     1523,
+     1969
+    ],
+    "cell_y": [
+     1417,
+     1866.0
+    ],
+    "col": 4,
+    "das": 36,
+    "date": "2015-12-29",
+    "edge": true,
+    "row": 4
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_15",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-30--20-44-06_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 1, column 4 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "09c5c3600d696c95be8537648096e8128fdc0a23c637c017835fa40757e8fd71",
+   "truth": {
+    "area_mm2": 691.7460431305806,
+    "area_px": 36492,
+    "mm2_by_lens": {
+     "k1k2k3": 692.0383173568729,
+     "k1k2p1p2": 691.5953029950805,
+     "k1k2p1p2k3": 691.7460431305806,
+     "shipped_xml": 688.6366019130037
+    },
+    "mm2_hi": 751.5644272982714,
+    "mm2_lo": 631.7429458943915,
+    "mm2_rel_terms": {
+     "calibration": 0.004495061805492528,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 39230,
+    "px_lo": 33685,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 677.9152852765557,
+     "interior": 668.6558959691481
+    }
+   },
+   "where": {
+    "cell_x": [
+     1523,
+     1969
+    ],
+    "cell_y": [
+     66.0,
+     516
+    ],
+    "col": 4,
+    "das": 37,
+    "date": "2015-12-30",
+    "edge": true,
+    "row": 1
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_16",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2015-12-31--20-46-16_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 4, column 2 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "b546ec30e1a5fd880098d5f7c7b1368f5c29afa38366d6cec305ef37e2309fed",
+   "truth": {
+    "area_mm2": 1150.817586465678,
+    "area_px": 61486,
+    "mm2_by_lens": {
+     "k1k2k3": 1150.6708417042578,
+     "k1k2p1p2": 1150.7792551776827,
+     "k1k2p1p2k3": 1150.817586465678,
+     "shipped_xml": 1157.6366004710883
+    },
+    "mm2_hi": 1235.9289676572018,
+    "mm2_lo": 1065.923534466088,
+    "mm2_rel_terms": {
+     "calibration": 0.005925364789004073,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 65245,
+    "px_lo": 57647,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 1142.231152869514,
+     "interior": 1126.62984817382
+    }
+   },
+   "where": {
+    "cell_x": [
+     621,
+     1068
+    ],
+    "cell_y": [
+     1417,
+     1865.5
+    ],
+    "col": 2,
+    "das": 38,
+    "date": "2015-12-31",
+    "edge": true,
+    "row": 4
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_17",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2016-01-01--10-01-36_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 1, column 1 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "c2171c66ab80c0ec45672ee9fe7f323bffe4db352e168080fc10d1564adf6c5c",
+   "truth": {
+    "area_mm2": 750.3646390920964,
+    "area_px": 38368,
+    "mm2_by_lens": {
+     "k1k2k3": 746.5780440960264,
+     "k1k2p1p2": 750.7974057769865,
+     "k1k2p1p2k3": 750.3646390920964,
+     "shipped_xml": 746.1574903053715
+    },
+    "mm2_hi": 817.4715163832843,
+    "mm2_lo": 684.0504136471653,
+    "mm2_rel_terms": {
+     "calibration": 0.005606805768213263,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 41314,
+    "px_lo": 35393,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 712.7659121311764,
+     "interior": 703.0305112502541
+    }
+   },
+   "where": {
+    "cell_x": [
+     172.3,
+     622
+    ],
+    "cell_y": [
+     71.5,
+     520
+    ],
+    "col": 1,
+    "das": 39,
+    "date": "2016-01-01",
+    "edge": true,
+    "row": 1
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_18",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2016-01-03--09-03-58_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 2, column 2 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "389ddb77f0655b064a81c5b04fe5bdf7fe54f24f1e0f573e6487e2499e1209c8",
+   "truth": {
+    "area_mm2": 978.7154145203488,
+    "area_px": 53212,
+    "mm2_by_lens": {
+     "k1k2k3": 976.433907641775,
+     "k1k2p1p2": 978.7765225908225,
+     "k1k2p1p2k3": 978.7154145203488,
+     "shipped_xml": 976.6793491301324
+    },
+    "mm2_hi": 1050.769773994835,
+    "mm2_lo": 906.877546160229,
+    "mm2_rel_terms": {
+     "calibration": 0.0023311238841495774,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 56648,
+    "px_lo": 49729,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 988.5242836823436,
+     "interior": 975.0224031653597
+    }
+   },
+   "where": {
+    "cell_x": [
+     623,
+     1070
+    ],
+    "cell_y": [
+     521,
+     970
+    ],
+    "col": 2,
+    "das": 41,
+    "date": "2016-01-03",
+    "edge": false,
+    "row": 2
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_19",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2016-01-03--14-06-26_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 2, column 2 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "b102645ee6bb33d62e2a7800f8aba0edf8f88ef4974de92ffa3ed043647a1857",
+   "truth": {
+    "area_mm2": 978.9574754019354,
+    "area_px": 53220,
+    "mm2_by_lens": {
+     "k1k2k3": 976.6692663575707,
+     "k1k2p1p2": 979.0186323212088,
+     "k1k2p1p2k3": 978.9574754019354,
+     "shipped_xml": 976.9378819707761
+    },
+    "mm2_hi": 1051.8948437458673,
+    "mm2_lo": 906.3986565254323,
+    "mm2_rel_terms": {
+     "calibration": 0.002337393708981339,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 56703,
+    "px_lo": 49698,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 988.6729004279923,
+     "interior": 975.1689900109081
+    }
+   },
+   "where": {
+    "cell_x": [
+     621,
+     1066
+    ],
+    "cell_y": [
+     520,
+     966
+    ],
+    "col": 2,
+    "das": 41,
+    "date": "2016-01-03",
+    "edge": false,
+    "row": 2
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_20",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2016-01-03--20-51-47_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 1, column 4 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "9bdd26689f2a51ec8596f61e465f196b7e11cbc90fb2b29e5915856fc85dc311",
+   "truth": {
+    "area_mm2": 1025.591502572185,
+    "area_px": 54069,
+    "mm2_by_lens": {
+     "k1k2k3": 1026.0067886965408,
+     "k1k2p1p2": 1025.3797034824559,
+     "k1k2p1p2k3": 1025.591502572185,
+     "shipped_xml": 1020.928931180213
+    },
+    "mm2_hi": 1102.0008595067088,
+    "mm2_lo": 948.9349670665207,
+    "mm2_rel_terms": {
+     "calibration": 0.004546226621689242,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 57483,
+    "px_lo": 50568,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 1004.4448525599609,
+     "interior": 990.7255189947349
+    }
+   },
+   "where": {
+    "cell_x": [
+     1523,
+     1970
+    ],
+    "cell_y": [
+     71.5,
+     520
+    ],
+    "col": 4,
+    "das": 41,
+    "date": "2016-01-03",
+    "edge": true,
+    "row": 1
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_21",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2016-01-04--20-56-55_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 2, column 2 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "4da21ead14ac73e4a9deb92dd0f20fa16063fde71df6893001deb38bd3e67b83",
+   "truth": {
+    "area_mm2": 1215.6443839926517,
+    "area_px": 66081,
+    "mm2_by_lens": {
+     "k1k2k3": 1212.8025254307545,
+     "k1k2p1p2": 1215.7183417452336,
+     "k1k2p1p2k3": 1215.6443839926517,
+     "shipped_xml": 1213.1410458039022
+    },
+    "mm2_hi": 1300.967205637592,
+    "mm2_lo": 1130.7468965083094,
+    "mm2_rel_terms": {
+     "calibration": 0.0023377384038606452,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 70123,
+    "px_lo": 61993,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 1227.5928961514874,
+     "interior": 1210.8256675856976
+    }
+   },
+   "where": {
+    "cell_x": [
+     621,
+     1068
+    ],
+    "cell_y": [
+     521,
+     968
+    ],
+    "col": 2,
+    "das": 42,
+    "date": "2016-01-04",
+    "edge": false,
+    "row": 2
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_22",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2016-01-06--20-59-27_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 3, column 2 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "c5550a4e8db2f8b2f3cfff0cb753eb896ac4df37f3869888c5e12c846eafac9e",
+   "truth": {
+    "area_mm2": 1088.2513562002166,
+    "area_px": 59225,
+    "mm2_by_lens": {
+     "k1k2k3": 1086.8117373210175,
+     "k1k2p1p2": 1088.3381891427675,
+     "k1k2p1p2k3": 1088.2513562002166,
+     "shipped_xml": 1090.131368227695
+    },
+    "mm2_hi": 1164.0200375583688,
+    "mm2_lo": 1012.0780110833138,
+    "mm2_rel_terms": {
+     "calibration": 0.0017275531215901196,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 62854,
+    "px_lo": 55516,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 1100.2283451305495,
+     "interior": 1085.200740950696
+    }
+   },
+   "where": {
+    "cell_x": [
+     621,
+     1068
+    ],
+    "cell_y": [
+     971,
+     1417
+    ],
+    "col": 2,
+    "das": 44,
+    "date": "2016-01-06",
+    "edge": false,
+    "row": 3
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_23",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2016-01-08--20-59-22_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 2, column 4 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "1760fdd1db9faad409c21ebcdd0b0e4a20ffe0518eb0652654396f1138277db9",
+   "truth": {
+    "area_mm2": 1586.9228255684322,
+    "area_px": 86209,
+    "mm2_by_lens": {
+     "k1k2k3": 1588.925505656906,
+     "k1k2p1p2": 1587.053064250089,
+     "k1k2p1p2k3": 1586.9228255684322,
+     "shipped_xml": 1585.0877197312805
+    },
+    "mm2_hi": 1673.4327241490914,
+    "mm2_lo": 1500.2398117042492,
+    "mm2_rel_terms": {
+     "calibration": 0.0012619895915582102,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 90239,
+    "px_lo": 82109,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 1601.5126282036224,
+     "interior": 1579.6381709855389
+    }
+   },
+   "where": {
+    "cell_x": [
+     1523,
+     1969
+    ],
+    "cell_y": [
+     516,
+     966
+    ],
+    "col": 4,
+    "das": 46,
+    "date": "2016-01-08",
+    "edge": false,
+    "row": 2
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_24",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2016-01-09--21-00-19_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 3, column 1 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "53d704237dd14240164996b97669f737435f1cec78c5b0b0be9c480992ca5c50",
+   "truth": {
+    "area_mm2": 1882.702078382554,
+    "area_px": 98682,
+    "mm2_by_lens": {
+     "k1k2k3": 1876.6135364976776,
+     "k1k2p1p2": 1882.479564157901,
+     "k1k2p1p2k3": 1882.702078382554,
+     "shipped_xml": 1885.8301415814865
+    },
+    "mm2_hi": 1979.2557069592722,
+    "mm2_lo": 1785.5125898647173,
+    "mm2_rel_terms": {
+     "calibration": 0.003233938048290197,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 102776,
+    "px_lo": 94476,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 1833.2247117631555,
+     "interior": 1808.1853865512296
+    }
+   },
+   "where": {
+    "cell_x": [
+     171.3,
+     621
+    ],
+    "cell_y": [
+     969,
+     1417
+    ],
+    "col": 1,
+    "das": 47,
+    "date": "2016-01-09",
+    "edge": true,
+    "row": 3
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_25",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2016-01-10--14-12-38_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 3, column 5 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "c31a07c42e76ba69bc7d8d7f123c2c324bf1801002e5a0d77930ea81e32df38a",
+   "truth": {
+    "area_mm2": 1534.0781734752936,
+    "area_px": 80596,
+    "mm2_by_lens": {
+     "k1k2k3": 1541.3731307503526,
+     "k1k2p1p2": 1534.009541161264,
+     "k1k2p1p2k3": 1534.0781734752936,
+     "shipped_xml": 1540.0303080345554
+    },
+    "mm2_hi": 1638.3313066394164,
+    "mm2_lo": 1430.1602275999596,
+    "mm2_rel_terms": {
+     "calibration": 0.004755270885924201,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 85145,
+    "px_lo": 75964,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 1497.2394040378517,
+     "interior": 1476.789175477624
+    }
+   },
+   "where": {
+    "cell_x": [
+     1969,
+     2418.3
+    ],
+    "cell_y": [
+     970,
+     1417
+    ],
+    "col": 5,
+    "das": 48,
+    "date": "2016-01-10",
+    "edge": true,
+    "row": 3
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_26",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2016-01-10--21-06-09_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 3, column 3 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "2fea62a8cbae6655f99da5c387a9a2b488abff07b4a5e1518482a9dd5c7cd911",
+   "truth": {
+    "area_mm2": 1813.6296653535558,
+    "area_px": 99923,
+    "mm2_by_lens": {
+     "k1k2k3": 1814.5179557968154,
+     "k1k2p1p2": 1813.3780865028104,
+     "k1k2p1p2k3": 1813.6296653535558,
+     "shipped_xml": 1816.3684303786497
+    },
+    "mm2_hi": 1908.3002836985982,
+    "mm2_lo": 1718.460711755372,
+    "mm2_rel_terms": {
+     "calibration": 0.0015101015810523588,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 104339,
+    "px_lo": 95411,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 1856.2788844319105,
+     "interior": 1830.9246709669292
+    }
+   },
+   "where": {
+    "cell_x": [
+     1065,
+     1523
+    ],
+    "cell_y": [
+     969,
+     1417
+    ],
+    "col": 3,
+    "das": 48,
+    "date": "2016-01-10",
+    "edge": false,
+    "row": 3
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_27",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2016-01-11--19-38-13_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 2, column 2 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "eeecce9b05e319462edda124bc11c5bbe8803b3389b1f2e359385a7121a8861d",
+   "truth": {
+    "area_mm2": 3030.8716298779477,
+    "area_px": 164553,
+    "mm2_by_lens": {
+     "k1k2k3": 3023.711404527157,
+     "k1k2p1p2": 3031.0031228351363,
+     "k1k2p1p2k3": 3030.8716298779477,
+     "shipped_xml": 3024.8115657520993
+    },
+    "mm2_hi": 3155.6225741589465,
+    "mm2_lo": 2905.5328852059656,
+    "mm2_rel_terms": {
+     "calibration": 0.0023624310842486063,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 169878,
+    "px_lo": 159104,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 3056.9164183413645,
+     "interior": 3015.163149441281
+    }
+   },
+   "where": {
+    "cell_x": [
+     621,
+     1068
+    ],
+    "cell_y": [
+     516,
+     966
+    ],
+    "col": 2,
+    "das": 49,
+    "date": "2016-01-11",
+    "edge": false,
+    "row": 2
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_28",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2016-01-12--19-57-38_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 4, column 4 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "201b7f0411bade6c4f4a8a778886dcce1a05ac398ea237117c1ca8ffbf5279a4",
+   "truth": {
+    "area_mm2": 1715.093545654795,
+    "area_px": 91608,
+    "mm2_by_lens": {
+     "k1k2k3": 1721.2503730211781,
+     "k1k2p1p2": 1714.9736156612166,
+     "k1k2p1p2k3": 1715.093545654795,
+     "shipped_xml": 1726.50240921359
+    },
+    "mm2_hi": 1810.2209545208343,
+    "mm2_lo": 1620.1705681101766,
+    "mm2_rel_terms": {
+     "calibration": 0.006652035737467088,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 95464,
+    "px_lo": 87663,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 1701.8103544232904,
+     "interior": 1678.5659683750332
+    }
+   },
+   "where": {
+    "cell_x": [
+     1521,
+     1969
+    ],
+    "cell_y": [
+     1416,
+     1866.0
+    ],
+    "col": 4,
+    "das": 50,
+    "date": "2016-01-12",
+    "edge": true,
+    "row": 4
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_29",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2016-01-13--19-48-28_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 4, column 4 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "8b7be14f2c96b2f9273e077ce65e9613c65641f5ebb76fc12a5a7360282d26b6",
+   "truth": {
+    "area_mm2": 1965.0630265520003,
+    "area_px": 104953,
+    "mm2_by_lens": {
+     "k1k2k3": 1972.1091667150642,
+     "k1k2p1p2": 1964.9306918852835,
+     "k1k2p1p2k3": 1965.0630265520003,
+     "shipped_xml": 1978.1486663752862
+    },
+    "mm2_hi": 2073.8826383669107,
+    "mm2_lo": 1856.4793355455952,
+    "mm2_rel_terms": {
+     "calibration": 0.006659145099405128,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 109362,
+    "px_lo": 100442,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 1949.721663258532,
+     "interior": 1923.0911501055025
+    }
+   },
+   "where": {
+    "cell_x": [
+     1521,
+     1969
+    ],
+    "cell_y": [
+     1417,
+     1866.5
+    ],
+    "col": 4,
+    "das": 51,
+    "date": "2016-01-13",
+    "edge": true,
+    "row": 4
+   }
+  },
+  {
+   "answer_format": "two numbers, the area in pixels and then in mm\u00b2, e.g. 12345 px, 678.9 mm\u00b2",
+   "category": "tray_plant_area",
+   "extra_dirs": {
+    "checkerboards": "camera_correction/images"
+   },
+   "extra_sha256": {
+    "checkerboards/0.png": "ac44b5b525da2bff0ce3f97edf63da542920fe2b84cd6bc946e86be3002b7dac",
+    "checkerboards/1.png": "67f13faf893761aa87e92e053aae8111f4f386438b4d3305cf500a98f3ee7722",
+    "checkerboards/10.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8",
+    "checkerboards/11.png": "fb4bd048b3d66947bd6ebec9f14d8b256fd8b19c9b5352a3f4390c2e3e2051c6",
+    "checkerboards/12.png": "1243884e1f804f86e6dca13785da5fa8b7328b339dc1101ed10190361379e008",
+    "checkerboards/13.png": "8338a75c2e1a9fb8bdf3a067c7b105d286ecf2feed5bcb7b888c7b945959ee1c",
+    "checkerboards/14.png": "4fbcc09007f23449789a68f53db8b12ce9063b36edf95c2da60f251eee402e8c",
+    "checkerboards/15.png": "8d303c90ee4802b91d1a39a45314e2f768066924c143f8f15d76d8973697c80b",
+    "checkerboards/16.png": "a52713448ae47f9509dc82bd3f906c54d2c6547a487bfba575eff755c2ba7103",
+    "checkerboards/17.png": "3141329f7d90494343f4d3570476c6d7a5cd647239b40e52f88bba7614bb1ad5",
+    "checkerboards/18.png": "773a95ab6d50d266e068742440a4fd8bce9e31f935390372591375833a381e72",
+    "checkerboards/19.png": "36acfa348c527d29401438e287052af27816e076ff77919315d168e3d7ea5048",
+    "checkerboards/20.png": "97b81df1578cd5ad9d8ad1f0bc341ff80c8f8cbb00fc6e1459ef6a6a6eff358e",
+    "checkerboards/21.png": "442dd66304fe607582bbe4979a9fed13205c3f75edbb0abb1df727f20e8dcfaf",
+    "checkerboards/22.png": "70e6406c7def3cf92ca1b918f348dbcf287ab32060c597a728cbccc8cc2e281a",
+    "checkerboards/23.png": "dfa80c735038108b4fab0d7f8a81f0b3a5cc27a28e853cc56928ecf06fddb949",
+    "checkerboards/3.png": "dbc54813ed9425c3205497b45eaacab19e16fb090aa777f783dcfeb1b802f879",
+    "checkerboards/4.png": "ce705c7bb3fb0990bc1f6fa2ff1546c246b0ade8f188dbb95263f6fae9bf9333",
+    "checkerboards/5.png": "5c22860c3079472b47ca37a9b0edc87f8b8ba492dce4829c0bb47708aa8398f0",
+    "checkerboards/6.png": "d1557d39f7c68c05877458eabb189726a9e9a78a3ebf32a329924b554a0924b2",
+    "checkerboards/7.png": "67d1b0ad149b74ec2ce856c20dbe182d61b1a7ba471ceb252043b1829083b800",
+    "checkerboards/8.png": "dbb38cc51643d4c1a1f141d07d8c19a38c6f47985ef44ba22337aabd6a83d8ab",
+    "checkerboards/9.png": "bd6c4a90d5c6e7aab7085b7f768c22e76d71b5c8470d2ac766f3e12a3bb54bb8"
+   },
+   "family": "F1",
+   "how_built": "hand-annotation pixels of the plant's 25 px-dilated group; px window = the mask eroded / dilated by 1 px (3x3); mm2 = sum over the mask of the undistortion area Jacobian (OpenCV k1k2p1p2k3 fit to the shipped checkerboards) / px_per_mm^2, px_per_mm from the 6 interior pot rims (60 mm) in corrected coordinates; window widened by the lens-model spread and 2 x 1.96 x the scale's standard error",
+   "id": "f1c_30",
+   "image": "PSI_Tray031/tv/PSI_Tray031_2016-01-14--19-52-19_top.png",
+   "question": "This is a top-down photo of a tray of Arabidopsis rosettes in square pots, 4 rows by 5 columns; some pots may be empty. What is the projected leaf area of the plant in the pot at row 3, column 5 (row 1 is the top row of pots in the image, column 1 the leftmost), counting that plant only: (a) in pixels of this image as it is, and (b) in square millimetres, with the lens distortion removed and the scale taken from the pot rims, which are 60 mm across. The camera lens has barrel distortion; the folder checkerboards in the same directory as the image holds photos of a flat checkerboard with 12 x 9 inner corners, taken with the same camera.",
+   "sha256": "6c09d0924ad8678cc4129b68e70c3bb8c2f26822abe7a6fc52ff236e8e6aec48",
+   "truth": {
+    "area_mm2": 2652.0593765953586,
+    "area_px": 139246,
+    "mm2_by_lens": {
+     "k1k2k3": 2664.8563485207574,
+     "k1k2p1p2": 2652.1582030088407,
+     "k1k2p1p2k3": 2652.0593765953586,
+     "shipped_xml": 2662.6028357798127
+    },
+    "mm2_hi": 2775.430714271067,
+    "mm2_lo": 2528.2896855210456,
+    "mm2_rel_terms": {
+     "calibration": 0.004825296159781667,
+     "scale": 0.0061466576506547105
+    },
+    "px_hi": 144141,
+    "px_lo": 134221,
+    "px_per_mm": 7.43250361051651,
+    "uncorrected_mm2": {
+     "all": 2586.785920574901,
+     "interior": 2551.4539869045266
+    }
+   },
+   "where": {
+    "cell_x": [
+     1967,
+     2416.0
+    ],
+    "cell_y": [
+     970,
+     1415
+    ],
+    "col": 5,
+    "das": 52,
+    "date": "2016-01-14",
+    "edge": true,
+    "row": 3
+   }
+  }
+ ],
+ "seed": {
+  "F1": 20261031
+ },
+ "set": "field_2026-10-31_f1confirm",
+ "source": {
+  "citation": "Bell J, Dee HM (2016) Aberystwyth Leaf Evaluation Dataset. Zenodo.",
+  "doi": "10.5281/zenodo.168158",
+  "licence": "CC BY 4.0",
+  "manifest_sha256": "364b73593ec4bed84a473214d44a14a79b8de2c6441a28b6655757062e661a4d",
+  "tray": "031"
+ }
+}
