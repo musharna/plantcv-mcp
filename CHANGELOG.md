@@ -6,6 +6,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- `measure_regions` and `measure_images` check that `coord` and `spacing` are two
+  integers and refuse anything else with `RegionSpecError`. A direct Python call
+  with infinity raised `OverflowError` (fuzz #174), and 10.7 or `True` was
+  silently taken as 10 or 1. Over MCP the argument model already refused
+  non-finite and fractional numbers, so no client could reach the crash; a test
+  now holds that.
+
 ### Documentation
 
 - docs/EVAL.md adds SAM 2.1 (Hiera-L) to the grown-rosette undercount screen: it

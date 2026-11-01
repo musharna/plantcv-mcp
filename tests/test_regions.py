@@ -251,6 +251,76 @@ def test_coord_of_the_wrong_length_is_refused(tmp_path):
         _as_xy([1, 2, 3], "spacing")
 
 
+@pytest.mark.parametrize(
+    "pair",
+    [
+        [float("inf"), 0],  # was OverflowError (fuzz #174)
+        [float("nan"), 0],  # was a bare ValueError
+        [10.7, 0],  # was silently truncated to 10
+        [True, 0],  # was silently 1
+        ["10", 0],  # was silently 10
+        "ab",  # two characters is not [x, y]
+        5,  # was TypeError from len()
+    ],
+)
+def test_coord_that_is_not_two_integers_is_refused_by_name(pair):
+    """`_as_xy` names the argument instead of leaking whatever int() raises.
+
+    Over MCP the argument model refuses inf, NaN and 10.7 first (see the next
+    test) but turns True and "10" into 1 and 10, so only a caller that skips it
+    reaches these cases.
+    """
+    from plantcv_mcp.server import _as_xy
+
+    with pytest.raises(RegionSpecError, match="coord must be"):
+        _as_xy(pair, "coord")
+    # positive control in the same test: two integers still pass through
+    assert _as_xy((3, 4), "coord") == (3, 4)
+
+
+@pytest.mark.parametrize("bad", [float("inf"), float("nan"), 10.7])
+def test_non_integer_coord_is_refused_over_the_real_mcp_layer(tmp_path, bad):
+    """What keeps fuzz #174 away from clients: the tool's argument model.
+
+    Python's json parses `Infinity`/`NaN`, so a client can send them. If
+    `coord` were ever typed as floats or Any, this test fails and `_as_xy`
+    is the only line left.
+    """
+    img, _ = _tray()
+    path = tmp_path / "tray.png"
+    PILImage.fromarray(img[:, :, ::-1]).save(path)
+    server = build_server()
+    seg = asyncio.run(
+        server.call_tool(
+            "segment",
+            {
+                "image_path": str(path),
+                "channel": "a",
+                "method": "otsu",
+                "object_type": "dark",
+                "fill_size": 10,
+            },
+        )
+    )
+    args = {
+        "session_id": json.loads(seg.content[0].text)["session_id"],
+        "mode": "rect_grid",
+        "nrows": 2,
+        "ncols": 2,
+        "height": 180,
+        "width": 180,
+        "spacing": [200, 200],
+    }
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    with pytest.raises(ToolError, match=r"coord\.0") as err:
+        asyncio.run(server.call_tool("measure_regions", {**args, "coord": [bad, 10]}))
+    assert "Overflow" not in str(err.value)
+    # positive control: the same call with integers measures the grid
+    ok = asyncio.run(server.call_tool("measure_regions", {**args, "coord": [10, 10]}))
+    assert json.loads(ok.content[0].text)["regions_total"] == 4
+
+
 # --- geometry validation: malformed rect_grid input must be refused up front ---
 #
 # `pcv.roi.multi_rect` accepts any integers, and a rectangle that starts off the
