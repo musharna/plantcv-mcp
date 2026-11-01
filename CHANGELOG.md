@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.18.3] — 2026-11-01
+
 ### Fixed
 
 - `method="triangle"` is now the triangle threshold. It called PlantCV's
