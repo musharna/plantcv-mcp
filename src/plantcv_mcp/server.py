@@ -321,6 +321,35 @@ def list_methods_impl() -> MethodsInfo:
     }
 
 
+def rules_inside_mode_warnings(img, rules, combine: str | None) -> list:
+    """threshold_inside_mode for a rules segmentation, one per firing rule.
+
+    Under 'or' (and a lone rule) each otsu/triangle rule that cuts inside a
+    histogram mode adds its share of the background to the union, so each one
+    is named. Under 'and' the intersection holds no more background than its
+    cleanest rule lets in: it warns only when every rule is an otsu/triangle
+    rule and every one fires. A range or adaptive rule has no cut to judge and
+    may bound the intersection, so it keeps 'and' quiet. Chosen 2026-11-01 on
+    the 40 F1 calibration cells (a/otsu/dark AND b/otsu/light): warning on any
+    firing rule flagged 3 of 19 right answers and 2 undercounts; on every rule,
+    8 of 9 overcounts and none of the 19. Held out in
+    PREREG_rules_inside_mode.md.
+    """
+    found = {}
+    for r in rules:
+        key = (r["channel"], r.get("method"))
+        if key[1] in GLOBAL_THRESHOLDS and key not in found:
+            found[key] = threshold_inside_mode_warning(
+                to_gray(img, r["channel"]), r["method"], r["channel"]
+            )
+    fired = [w for w in found.values() if w is not None]
+    if combine == "and" and not all(
+        found.get((r["channel"], r.get("method"))) is not None for r in rules
+    ):
+        return []
+    return fired
+
+
 def _segment_impl(
     image_path: str,
     channel: str | None = None,
@@ -406,7 +435,9 @@ def _segment_impl(
     diag = analyze_mask(mask)
     # Shared with the batch path so the two cannot apply different guards.
     warnings = segmentation_warnings(mask, diag, analyze_mask(pre_fill), fill_size)
-    if rules is None and method in GLOBAL_THRESHOLDS:
+    if rules is not None:
+        warnings.extend(rules_inside_mode_warnings(img, rules, combine))
+    elif method in GLOBAL_THRESHOLDS:
         inside = threshold_inside_mode_warning(to_gray(img, channel), method, channel)
         if inside:
             warnings.append(inside)
@@ -1852,7 +1883,9 @@ def build_server() -> MCPServer:
         or an explicit range {"channel", "min", "max"} on the channel's 0-255
         value (h is hue in degrees/2, 0-179). Example: [{"channel": "a",
         "method": "otsu", "object_type": "dark"}, {"channel": "b", "method":
-        "otsu", "object_type": "light"}] with combine 'or'. fill_size drops
+        "otsu", "object_type": "light"}] with combine 'or'. Each otsu/triangle
+        rule is checked for threshold_inside_mode as one channel is (under
+        'and', only when every rule fires). fill_size drops
         components smaller than itself and will erase a genuinely small
         specimen (0 disables it; negative is refused). ksize (3-1001) and
         offset (-255 to 255) apply to the 'mean' and 'gaussian' methods.
