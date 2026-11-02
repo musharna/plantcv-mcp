@@ -1159,15 +1159,17 @@ def test_segment_and_batch_say_when_the_threshold_splits_the_background(tmp_path
     )
 
 
-def _disc_on_soil_la(radius, seed=0):
+def _disc_on_soil_la(radius, seed=0, l_disc=114):
     """A dark disc on textured soil in BOTH `l` and `a`: each channel's Otsu
-    cut falls inside the soil when the disc is small."""
+    cut falls inside the soil when the disc is small. With l_disc=100 the disc
+    stands far enough below the soil in `l` for Otsu to find the valley there,
+    so only `a` cuts inside a mode."""
     rng = np.random.default_rng(seed)
     yy, xx = np.mgrid[:200, :200]
     disc = (yy - 100) ** 2 + (xx - 100) ** 2 < radius**2
     l_ch = rng.normal(130, 4, (200, 200))
     a_ch = rng.normal(130, 4, (200, 200))
-    l_ch[disc] = rng.normal(114, 3, int(disc.sum()))
+    l_ch[disc] = rng.normal(l_disc, 3, int(disc.sum()))
     a_ch[disc] = rng.normal(114, 3, int(disc.sum()))
     lab = np.dstack(
         [np.clip(l_ch, 0, 255), np.clip(a_ch, 0, 255), np.full((200, 200), 128)]
@@ -1236,3 +1238,17 @@ def test_two_rules_on_one_cut_are_named_once(tmp_path):
     light = dict(A_OTSU, object_type="light")
     seg = _segment_impl(small, rules=[A_OTSU, light], combine="or", fill_size=50)
     assert _inside_channels(seg) == ["a"]
+
+
+def test_and_stays_quiet_when_one_otsu_rule_cuts_in_a_valley(tmp_path):
+    """The pilot's case: a cuts inside the soil, the other rule cleanly. The
+    union carries a's background, the intersection does not. Each rule's cut is
+    judged on its own channel: on `a` the l rule would fire too."""
+    from plantcv_mcp.server import _segment_impl
+
+    img = _write(tmp_path, "one.png", _disc_on_soil_la(14, l_disc=100))
+    seg = _segment_impl(img, rules=[A_OTSU, L_OTSU], combine="or", fill_size=50)
+    assert _inside_channels(seg) == ["a"]
+    seg = _segment_impl(img, rules=[A_OTSU, L_OTSU], combine="and", fill_size=50)
+    assert _inside_channels(seg) == []
+    assert _inside_channels(_segment_impl(img, rules=[L_OTSU], fill_size=50)) == []

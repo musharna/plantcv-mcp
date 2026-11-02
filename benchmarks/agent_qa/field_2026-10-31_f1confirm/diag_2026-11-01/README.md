@@ -45,3 +45,6 @@ Plants under about 5% of their pot cell: Otsu wrong on 14 of 14 (+42% to
 - `PREREG_rules_inside_mode.md`: the rule and pass criteria, pushed before the
   held-out run.
 - `rules_check.py OUTDIR [--shard I --of N | --of N --score]`: the check.
+- `rules_check.json`: its 739 rows (shards merged, sorted by cell), run on
+  `738814b`.
+- `RESULTS_rules_inside_mode.md`: the verdict.
