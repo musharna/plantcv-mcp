@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.19.2] — 2026-11-01
+
 ### Changed
 
 - `segment` with `rules` now raises `threshold_inside_mode` too, once for each
