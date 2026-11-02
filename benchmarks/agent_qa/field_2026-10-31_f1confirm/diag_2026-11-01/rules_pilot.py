@@ -1,8 +1,9 @@
 """Pilot for the rules form of threshold_inside_mode, on the 40 calibration cells.
 
-Wrote rules_pilot.json (run before the warning existed for rules, so it records
-each channel's density and the labels, not warnings). Usage, from the repo
-root: uv run --with openpyxl==3.1.5 python <this file> OUTDIR
+Writes OUTDIR/pilot.json, committed beside this file as rules_pilot.json (run
+before the warning existed for rules, so it records each channel's density and
+the labels, not warnings). Usage, from the repo root:
+uv run --with openpyxl==3.1.5 python <this file> OUTDIR
 """
 
 import asyncio

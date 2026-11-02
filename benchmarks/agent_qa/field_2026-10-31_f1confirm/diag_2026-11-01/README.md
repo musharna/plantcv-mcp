@@ -40,8 +40,9 @@ Plants under about 5% of their pot cell: Otsu wrong on 14 of 14 (+42% to
 
 ## The same warning for `segment` with `rules`
 
-- `rules_pilot.py OUTDIR`, `rules_pilot.json`: a/otsu/dark with b/otsu/light,
-  `or` and `and`, on the 40 calibration cells; how `and` was chosen.
+- `rules_pilot.py OUTDIR`: a/otsu/dark with b/otsu/light, `or` and `and`, on
+  the 40 calibration cells; how `and` was chosen. It writes `OUTDIR/pilot.json`,
+  committed here as `rules_pilot.json`, which `rules_check.py` reads.
 - `PREREG_rules_inside_mode.md`: the rule and pass criteria, pushed before the
   held-out run.
 - `rules_check.py OUTDIR [--shard I --of N | --of N --score]`: the check.
