@@ -1803,7 +1803,9 @@ def build_server() -> MCPServer:
         choice is informed rather than blind. Call this before segment().
         polarity.warnings carries `noisy_segmentation` when the recommended
         polarity is many components with no dominant one — background texture,
-        not a plant — which the `ambiguous` flag alone cannot tell you."""
+        not a plant — which the `ambiguous` flag alone cannot tell you, and
+        `threshold_inside_mode` when the otsu/triangle cut falls inside a
+        histogram mode (a small plant whose mask will take in background)."""
         img = load_image(check_readable(image_path))
         cs, cs_scale = downscale(colorspace_sheet(img))
         th, th_scale = downscale(threshold_sheet(img, channel))

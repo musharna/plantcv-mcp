@@ -28,3 +28,12 @@ Plants under about 5% of their pot cell: Otsu wrong on 14 of 14 (+42% to
 - `heldout.py OUTDIR [--shard I --of N | --score]`: the evaluation.
 - `heldout.json`: its 739 rows, run on `71a19bd`.
 - `RESULTS_threshold_inside_mode.md`: the verdict.
+
+## The same warning in `suggest_segmentation`
+
+- `PREREG_suggest_inside_mode.md`: the claim and pass criterion, pushed
+  (`23424b5`) before the run.
+- `suggest_check.py OUTDIR [--shard I --of N | --score]`: the check.
+- `suggest_check.json`: its 739 rows (shards merged, sorted by cell), run on
+  `23424b5`.
+- `RESULTS_suggest_inside_mode.md`: the verdict.

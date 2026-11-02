@@ -6,6 +6,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- `suggest_segmentation` now carries `threshold_inside_mode` in
+  `polarity.warnings`, so the warning arrives before `segment` is run. Before,
+  it recommended the failing cut on a young rosette as unambiguous and said
+  nothing.
+
 ## [1.19.0] — 2026-11-01
 
 ### Added
