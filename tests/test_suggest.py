@@ -180,3 +180,42 @@ def test_threshold_sheet_shows_otsu_and_a_real_triangle_side_by_side():
     assert (left[body] == otsu[body]).mean() > 0.99
     assert (right[body] == tri[body]).mean() > 0.99
     assert (left[body] != right[body]).mean() > 0.2  # the panels differ
+
+
+# --- threshold_inside_mode reaches suggest (field benchmark F1, 2026-11-01) ---
+
+
+@pytest.mark.parametrize("method", ["otsu", "triangle"])
+def test_polarity_report_says_the_cut_is_inside_a_mode_as_segment_does(method):
+    """The polarity report recommended a/otsu/dark on a young rosette as
+    unambiguous and clean; segment() then warned, one call too late. The
+    report now carries segment's own advisory, word for word."""
+    from test_diagnostics import _disc_on_soil
+
+    from plantcv_mcp.diagnostics import threshold_inside_mode_warning
+    from plantcv_mcp.segmentation import to_gray
+
+    small = _disc_on_soil(14)
+    expected = threshold_inside_mode_warning(to_gray(small, "a"), method, "a")
+    rep = polarity_report(small, "a", method=method)
+    got = [w for w in rep["warnings"] if w["code"] == "threshold_inside_mode"]
+    if expected is None:  # triangle may find the valley on this scene
+        assert got == []
+    else:
+        assert got == [{"code": expected.code, "message": expected.message}]
+    # Positive control: a plant that fills its pot is cut in a valley.
+    big = polarity_report(_disc_on_soil(60), "a", method=method)
+    assert "threshold_inside_mode" not in [w["code"] for w in big["warnings"]]
+
+
+def test_polarity_report_fires_inside_mode_on_the_small_rosette_under_otsu():
+    """The otsu case must actually fire, or the test above could pass on
+    nothing; the adaptive methods, which have no single cut, stay quiet."""
+    from test_diagnostics import _disc_on_soil
+
+    small = _disc_on_soil(14)
+    codes = [w["code"] for w in polarity_report(small, "a")["warnings"]]
+    assert "threshold_inside_mode" in codes
+    for method in ("mean", "gaussian"):
+        rep = polarity_report(small, "a", method=method)
+        assert "threshold_inside_mode" not in [w["code"] for w in rep["warnings"]]

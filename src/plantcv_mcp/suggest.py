@@ -9,6 +9,7 @@ from .diagnostics import (
     excess_green,
     is_noisy,
     largest_fraction,
+    threshold_inside_mode_warning,
 )
 from .segmentation import OBJECT_TYPES, segment_mask, to_gray
 
@@ -113,6 +114,12 @@ def polarity_report(
     `basis` says which rule decided. When neither decides (no greenness gap
     and coverages within `ambiguity_margin`), `ambiguous` is set and the
     caller is told to look at the overlay.
+
+    `warnings` also carries segment()'s `threshold_inside_mode` when the
+    otsu or triangle cut falls inside a histogram mode. The cut is the same
+    for both polarities, so it is said once, here, before segment() is run:
+    on a young rosette in its pot the report picked a/otsu/dark, unambiguous
+    and silent, and that mask was soil.
     """
     per_polarity = {}
     for object_type in OBJECT_TYPES:
@@ -165,6 +172,9 @@ def polarity_report(
     noisy = noisy_segmentation_warning(recommended, per_polarity[recommended])
     if noisy:
         advisories.append(noisy)
+    inside = threshold_inside_mode_warning(to_gray(img, channel), method, channel)
+    if inside:
+        advisories.append(inside)
     report["warnings"] = [{"code": w.code, "message": w.message} for w in advisories]
     if by_green:
         report["basis"] = (
