@@ -1157,3 +1157,82 @@ def test_segment_and_batch_say_when_the_threshold_splits_the_background(tmp_path
     assert "threshold_inside_mode" not in codes(
         _segment_impl(big, "a", "otsu", fill_size=50)["warnings"]
     )
+
+
+def _disc_on_soil_la(radius, seed=0):
+    """A dark disc on textured soil in BOTH `l` and `a`: each channel's Otsu
+    cut falls inside the soil when the disc is small."""
+    rng = np.random.default_rng(seed)
+    yy, xx = np.mgrid[:200, :200]
+    disc = (yy - 100) ** 2 + (xx - 100) ** 2 < radius**2
+    l_ch = rng.normal(130, 4, (200, 200))
+    a_ch = rng.normal(130, 4, (200, 200))
+    l_ch[disc] = rng.normal(114, 3, int(disc.sum()))
+    a_ch[disc] = rng.normal(114, 3, int(disc.sum()))
+    lab = np.dstack(
+        [np.clip(l_ch, 0, 255), np.clip(a_ch, 0, 255), np.full((200, 200), 128)]
+    ).astype(np.uint8)
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+
+A_OTSU = {"channel": "a", "method": "otsu", "object_type": "dark"}
+L_OTSU = {"channel": "l", "method": "otsu", "object_type": "dark"}
+
+
+def _inside_channels(seg):
+    """Which channels a segment response's threshold_inside_mode names."""
+    return sorted(
+        w["message"].split("channel '")[1][0]
+        for w in seg["warnings"]
+        if w["code"] == "threshold_inside_mode"
+    )
+
+
+def test_rules_say_which_rule_cut_inside_a_mode(tmp_path):
+    """rules skipped the warning entirely: a/otsu OR l/otsu on a young rosette
+    put the soil in the mask and said nothing. 'or' names every firing rule;
+    'and' warns when every rule fires."""
+    from plantcv_mcp.server import _segment_impl
+
+    small = _write(tmp_path, "small.png", _disc_on_soil_la(14))
+    big = _write(tmp_path, "big.png", _disc_on_soil_la(60))
+    for combine in ("or", "and"):
+        seg = _segment_impl(
+            small, rules=[A_OTSU, L_OTSU], combine=combine, fill_size=50
+        )
+        assert _inside_channels(seg) == ["a", "l"], combine
+        # Positive control: the plant that fills its pot is cut in a valley.
+        seg = _segment_impl(big, rules=[A_OTSU, L_OTSU], combine=combine, fill_size=50)
+        assert _inside_channels(seg) == [], combine
+    # A lone rule is judged like a one-channel segment.
+    assert _inside_channels(_segment_impl(small, rules=[A_OTSU], fill_size=50)) == ["a"]
+
+
+@pytest.mark.parametrize(
+    "other",
+    [
+        {"channel": "l", "min": 0, "max": 250},
+        {"channel": "l", "method": "mean", "object_type": "dark"},
+    ],
+)
+def test_and_stays_quiet_when_a_rule_has_no_cut_to_judge(tmp_path, other):
+    """Under 'and' a range or adaptive rule may bound the intersection, so a
+    firing a/otsu beside it is not enough; under 'or' the a/otsu rule's
+    background is in the union, and it is named."""
+    from plantcv_mcp.server import _segment_impl
+
+    small = _write(tmp_path, "small.png", _disc_on_soil_la(14))
+    seg = _segment_impl(small, rules=[A_OTSU, other], combine="and", fill_size=50)
+    assert _inside_channels(seg) == []
+    seg = _segment_impl(small, rules=[A_OTSU, other], combine="or", fill_size=50)
+    assert _inside_channels(seg) == ["a"]
+
+
+def test_two_rules_on_one_cut_are_named_once(tmp_path):
+    """dark and light on the same channel and method share one cut."""
+    from plantcv_mcp.server import _segment_impl
+
+    small = _write(tmp_path, "small.png", _disc_on_soil_la(14))
+    light = dict(A_OTSU, object_type="light")
+    seg = _segment_impl(small, rules=[A_OTSU, light], combine="or", fill_size=50)
+    assert _inside_channels(seg) == ["a"]

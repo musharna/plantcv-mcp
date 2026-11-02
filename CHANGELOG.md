@@ -6,6 +6,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- `segment` with `rules` now raises `threshold_inside_mode` too, once for each
+  `otsu` or `triangle` rule whose cut falls inside a histogram mode. Under
+  `combine: "and"` it warns only when every rule is such a rule and every one
+  fires, since one clean rule keeps the background out of an intersection.
+  Before, any `rules` call skipped the warning.
+
 ## [1.19.1] — 2026-11-01
 
 ### Changed
