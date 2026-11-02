@@ -117,26 +117,37 @@ def test_a_one_pixel_wide_line_is_flagged_not_round():
 
 
 def test_an_infinite_marker_length_is_refused_as_such():
-    with pytest.raises(ValueError, match="marker_length_mm must be a positive finite"):
-        calibrate_scale(_scene(60, 60, [(20, 20, 10, 10)]), 10, 10, 30, 30, math.inf)
-
-
-@pytest.mark.parametrize(("w", "h"), [(0, 10), (10, 0)])
-def test_a_crop_with_no_width_or_no_height_is_refused_as_such(w, h):
-    with pytest.raises(ValueError, match=f"positive size, got w={w} h={h}"):
-        calibrate_scale(_scene(60, 60, [(20, 20, 10, 10)]), 10, 10, w, h, 5.0)
-
-
-@pytest.mark.parametrize(("w", "h"), [(1, 20), (20, 1)])
-def test_a_one_pixel_thin_crop_is_still_a_crop(w, h):
-    """One pixel across is a positive size: the crop is measured, half of it
-    on the marker."""
     img = _scene(60, 60, [(20, 20, 10, 10)])
-    est = calibrate_scale(img, 25 - (w > 1) * 15, 25 - (h > 1) * 15, w, h, 5.0)
-    assert est.marker_length_px == 10
+    with pytest.raises(ValueError, match="marker_length_mm must be a positive finite"):
+        calibrate_scale(img, 10, 10, 30, 30, math.inf)
+    # Control: the same call with a finite length is measured (10 px over 5 mm).
+    assert calibrate_scale(img, 10, 10, 30, 30, 5.0).px_per_mm == pytest.approx(2.0)
 
 
-def test_no_object_names_the_settings_that_found_nothing():
+@pytest.mark.parametrize("zero", ["w", "h"])
+def test_a_crop_with_no_width_or_no_height_is_refused_and_one_pixel_is_not(zero):
+    """A crop through the marker: one side spans it, the other is 0, then 1."""
+    img = _scene(60, 60, [(20, 20, 10, 10)])
+
+    def call(size):
+        if zero == "w":
+            return calibrate_scale(img, 25, 10, size, 30, 5.0)
+        return calibrate_scale(img, 10, 25, 30, size, 5.0)
+
+    shown = "w=0 h=30" if zero == "w" else "w=30 h=0"
+    with pytest.raises(ValueError, match=f"positive size, got {shown}"):
+        call(0)
+    # Control: the same crop one pixel across is measured.
+    assert call(1).marker_length_px == 10
+
+
+def test_no_object_names_the_region_and_settings_that_found_nothing():
     blank = np.full((50, 50, 3), 240, np.uint8)
-    with pytest.raises(MarkerNotFoundError, match="channel='v' method='otsu'"):
-        calibrate_scale(blank, 0, 0, 50, 50, 5.0)
+    with pytest.raises(
+        MarkerNotFoundError,
+        match=r"region \(3, 4, 40, 41\) using channel='v' method='otsu'",
+    ):
+        calibrate_scale(blank, 3, 4, 40, 41, 5.0)
+    # Control: the same region and settings find a marker that is there.
+    marked = _scene(50, 50, [(15, 15, 10, 10)])
+    assert calibrate_scale(marked, 3, 4, 40, 41, 5.0).marker_length_px == 10
