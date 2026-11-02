@@ -396,9 +396,16 @@ def test_only_the_fallback_calls_plantcvs_labeller():
     import ast
 
     src = Path(labels.__file__).parent
+    texts = {path: path.read_text() for path in sorted(src.rglob("*.py"))}
+    if any("__mutmut_" in text for text in texts.values()):
+        # The nightly mutation run imports the package from mutmut's rewrite,
+        # which keeps each function's body several times over: the scan would
+        # count those copies, and no mutant can change what a scan of the text
+        # sees. The normal suite runs it on the real source.
+        pytest.skip("scans the source text; this is mutmut's instrumented copy")
     calls = []
-    for path in sorted(src.rglob("*.py")):
-        for node in ast.walk(ast.parse(path.read_text())):
+    for path, text in texts.items():
+        for node in ast.walk(ast.parse(text)):
             f = getattr(node, "func", None)
             if (
                 isinstance(node, ast.Call)

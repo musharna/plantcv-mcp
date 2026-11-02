@@ -49,3 +49,6 @@ Thumbs.db
 # that back a published finding are copied into the project memory directory
 # alongside the record they support, so nothing load-bearing lives only here.
 tmp/
+
+# mutmut's working copy (a local `mutmut run`); the nightly job builds its own.
+mutants/
