@@ -7,6 +7,7 @@ the process boundary.
 """
 
 import json
+import os
 
 import numpy as np
 import pytest
@@ -293,3 +294,41 @@ def test_a_worker_that_survives_sigkill_is_reported_not_ignored():
     with pytest.raises(RuntimeError, match="4242"):
         w._stop()
     assert w._proc is None  # the dead handle is dropped either way
+
+
+def test_under_mutmut_the_suite_runs_analyses_in_process(monkeypatch):
+    """mutmut credits a test to a function only for calls made in its own
+    process, so under mutmut the suite must not send analyses to the worker
+    (tests/conftest.py, pytest_configure). Outside mutmut, isolation stays on."""
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "_suite_conftest", Path(__file__).with_name("conftest.py")
+    )
+    conftest = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(conftest)
+    workers.set_isolation(None)
+
+    # Control: no mutmut, no override ⇒ isolation on, and the hook leaves it so.
+    monkeypatch.delenv("MUTANT_UNDER_TEST", raising=False)
+    monkeypatch.delenv("PLANTCV_MCP_ISOLATE", raising=False)
+    conftest.pytest_configure(None)
+    # Read into a local first: pytest explains a failing assertion that names
+    # os.environ by printing the whole environment, secrets included.
+    isolate = os.environ.get("PLANTCV_MCP_ISOLATE")
+    assert isolate is None
+    assert workers.isolation_enabled() is True
+
+    # mutmut's stats pass and each mutant run set MUTANT_UNDER_TEST first.
+    for value in ("stats", "plantcv_mcp.leaves.x_split_by_seeds__mutmut_195"):
+        monkeypatch.setenv("MUTANT_UNDER_TEST", value)
+        monkeypatch.delenv("PLANTCV_MCP_ISOLATE", raising=False)
+        conftest.pytest_configure(None)
+        assert workers.isolation_enabled() is False, value
+        # The property the env var is for: a test that overrides isolation and
+        # resets with set_isolation(None) must land back in-process, not in the
+        # worker (a hook calling set_isolation(False) would pass the line above).
+        workers.set_isolation(True)
+        workers.set_isolation(None)
+        assert workers.isolation_enabled() is False, f"{value}, after a reset"
