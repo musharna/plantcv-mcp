@@ -326,3 +326,9 @@ def test_under_mutmut_the_suite_runs_analyses_in_process(monkeypatch):
         monkeypatch.delenv("PLANTCV_MCP_ISOLATE", raising=False)
         conftest.pytest_configure(None)
         assert workers.isolation_enabled() is False, value
+        # The property the env var is for: a test that overrides isolation and
+        # resets with set_isolation(None) must land back in-process, not in the
+        # worker (a hook calling set_isolation(False) would pass the line above).
+        workers.set_isolation(True)
+        workers.set_isolation(None)
+        assert workers.isolation_enabled() is False, f"{value}, after a reset"
