@@ -21,6 +21,25 @@ from pathlib import Path
 import pytest
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    """Under mutmut, run analyses in-process instead of in the isolation worker.
+
+    mutmut decides which tests to run against a mutant from its stats pass,
+    which records each call to a function in the process that makes it. A call
+    the tool layer sends to the spawned worker is recorded in the worker and
+    lost, so a test that reaches a function only through the server never runs
+    against that function's mutants: split_by_seeds was credited with one test
+    (a warning check) while the tests of its count and split went unseen, and
+    `leaf_count=None` survived. In-process, every call is recorded.
+
+    The env var rather than set_isolation(False): tests that reset with
+    set_isolation(None) fall back to the env and stay in-process. mutmut sets
+    MUTANT_UNDER_TEST before pytest starts, for the stats pass and each mutant.
+    """
+    if "MUTANT_UNDER_TEST" in os.environ:
+        os.environ["PLANTCV_MCP_ISOLATE"] = "0"
+
+
 def _live_children() -> list[tuple[int, str]]:
     me = os.getpid()
     out: list[tuple[int, str]] = []
