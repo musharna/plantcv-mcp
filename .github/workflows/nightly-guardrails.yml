@@ -428,9 +428,14 @@ jobs:
           # Survivors reset for a recheck read "not checked" until the next run, so
           # without STALE the count drops to near zero the night a shared test file
           # changes (plantcv-mcp, the night after its conftest change: 27 survivors
-          # shown, 1,867 waiting for a recheck).
+          # shown, 1,867 waiting for a recheck). The rest of the unchecked are the
+          # cap's backlog, the same subtraction the gate verdict makes below.
           if [ "$ABORTED" = "1" ]; then title="$title (PARTIAL: mutmut aborted, $UNCHECKED unchecked)"
-          elif [ "${STALE:-0}" != "0" ]; then title="$title (waiting for a recheck: $STALE earlier survivors and timeouts)"
+          elif [ "${STALE:-0}" != "0" ]; then
+            backlog=$(( ${UNCHECKED:-0} - STALE ))
+            title="$title (waiting for a recheck: $STALE earlier survivors and timeouts"
+            if [ "$backlog" -gt 0 ]; then title="$title; $backlog more unchecked at the wall-clock cap"; fi
+            title="$title)"
           elif [ "${UNCHECKED:-0}" != "0" ]; then title="$title ($UNCHECKED unchecked at the wall-clock cap)"; fi
           # A body file of cut lines, never argv: see the dependency-audit issue step.
           # Survivors only, counted per function, then a sample taken from each
