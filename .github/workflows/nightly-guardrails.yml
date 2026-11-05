@@ -421,10 +421,16 @@ jobs:
           N: ${{ steps.survivors.outputs.count }}
           UNCHECKED: ${{ steps.survivors.outputs.unchecked }}
           ABORTED: ${{ steps.survivors.outputs.aborted }}
+          STALE: ${{ steps.tests.outputs.stale }}
         run: |
           title="nightly: $N surviving mutants"
           # A partial run is not a survivor count; say so where it is read.
+          # Survivors reset for a recheck read "not checked" until the next run, so
+          # without STALE the count drops to near zero the night a shared test file
+          # changes (plantcv-mcp, the night after its conftest change: 27 survivors
+          # shown, 1,867 waiting for a recheck).
           if [ "$ABORTED" = "1" ]; then title="$title (PARTIAL: mutmut aborted, $UNCHECKED unchecked)"
+          elif [ "${STALE:-0}" != "0" ]; then title="$title (waiting for a recheck: $STALE earlier survivors and timeouts)"
           elif [ "${UNCHECKED:-0}" != "0" ]; then title="$title ($UNCHECKED unchecked at the wall-clock cap)"; fi
           # A body file of cut lines, never argv: see the dependency-audit issue step.
           # Survivors only, counted per function, then a sample taken from each
@@ -446,6 +452,9 @@ jobs:
           e = os.environ
           print(f"Run: {e['GITHUB_SERVER_URL']}/{e['GITHUB_REPOSITORY']}/actions/runs/{e['GITHUB_RUN_ID']}\n")
           print(f"{counts}. Each survivor is a line of code no test observes; the full list, every status, is the run's `mutmut-survivors` artifact.\n")
+          stale = int(e.get("STALE") or 0)
+          if stale:
+              print(f"Waiting for a recheck: {stale} of the not checked, earlier survivors and timeouts that a changed test may cover. Until the next runs recheck them, the survivor count above is low.\n")
           print(f"Survivors by function ({min(len(order), 100)} of {len(order)}):\n```")
           for f in order[:100]:
               print(f"{len(by[f]):5d} {f}"[:200])
