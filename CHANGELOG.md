@@ -6,6 +6,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- `segment_hyperspectral` with `object_type="dark"` now says a threshold at
+  the index's exact maximum selects every pixel, and no longer says a
+  threshold at the exact minimum selects nothing. PlantCV's dark threshold
+  (OpenCV `THRESH_BINARY_INV`) keeps values at or below the threshold; the
+  warning had assumed strictly below.
+
 ## [1.19.2] — 2026-11-01
 
 ### Changed
