@@ -314,9 +314,13 @@ jobs:
               if dirty:
                   meta.write_text(json.dumps(d))
           fp.parent.mkdir(exist_ok=True)
-          fp.write_text(json.dumps({"tests": now, "recheck": sorted(waiting | set(stale))}, indent=1, sort_keys=True))
+          owed = waiting | set(stale)
+          fp.write_text(json.dumps({"tests": now, "recheck": sorted(owed)}, indent=1, sort_keys=True))
+          # stale: reset tonight, after the run (not this run's to check; the gate).
+          # recheck: every one still owed a recheck, including those reset before
+          # tonight's run that the cap left unchecked (the issue).
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write(f"stale={len(stale)}\n")
+              f.write(f"stale={len(stale)}\nrecheck={len(owed)}\n")
           shown = ", ".join(changed[:10]) + (f" and {len(changed) - 10} more" if len(changed) > 10 else "")
           print(f"test files changed since the carried results: {len(changed)}" + (f" ({shown})" if changed else ""))
           if every and changed:
@@ -421,19 +425,23 @@ jobs:
           N: ${{ steps.survivors.outputs.count }}
           UNCHECKED: ${{ steps.survivors.outputs.unchecked }}
           ABORTED: ${{ steps.survivors.outputs.aborted }}
-          STALE: ${{ steps.tests.outputs.stale }}
+          RECHECK: ${{ steps.tests.outputs.recheck }}
         run: |
           title="nightly: $N surviving mutants"
           # A partial run is not a survivor count; say so where it is read.
           # Survivors reset for a recheck read "not checked" until the next run, so
-          # without STALE the count drops to near zero the night a shared test file
+          # without RECHECK the count drops to near zero the night a shared test file
           # changes (plantcv-mcp, the night after its conftest change: 27 survivors
-          # shown, 1,867 waiting for a recheck). The rest of the unchecked are the
-          # cap's backlog, the same subtraction the gate verdict makes below.
+          # shown, 1,867 waiting for a recheck). The cap can leave some of them for
+          # the night after, so RECHECK counts every one still owed, not only those
+          # reset tonight (plantcv-mcp 2026-11-05: 613 still owed, none reset that
+          # night; the title read "6349 unchecked at the wall-clock cap" and 1,863 ->
+          # 1,151 survivors looked like ~700 kills, of which 114 were). The rest of
+          # the unchecked are the cap's backlog.
           if [ "$ABORTED" = "1" ]; then title="$title (PARTIAL: mutmut aborted, $UNCHECKED unchecked)"
-          elif [ "${STALE:-0}" != "0" ]; then
-            backlog=$(( ${UNCHECKED:-0} - STALE ))
-            title="$title (waiting for a recheck: $STALE earlier survivors and timeouts"
+          elif [ "${RECHECK:-0}" != "0" ]; then
+            backlog=$(( ${UNCHECKED:-0} - RECHECK ))
+            title="$title (waiting for a recheck: $RECHECK earlier survivors and timeouts"
             if [ "$backlog" -gt 0 ]; then title="$title; $backlog more unchecked at the wall-clock cap"; fi
             title="$title)"
           elif [ "${UNCHECKED:-0}" != "0" ]; then title="$title ($UNCHECKED unchecked at the wall-clock cap)"; fi
@@ -457,9 +465,9 @@ jobs:
           e = os.environ
           print(f"Run: {e['GITHUB_SERVER_URL']}/{e['GITHUB_REPOSITORY']}/actions/runs/{e['GITHUB_RUN_ID']}\n")
           print(f"{counts}. Each survivor is a line of code no test observes; the full list, every status, is the run's `mutmut-survivors` artifact.\n")
-          stale = int(e.get("STALE") or 0)
-          if stale:
-              print(f"Waiting for a recheck: {stale} of the not checked, earlier survivors and timeouts that a changed test may cover. Until the next runs recheck them, the survivor count above is low.\n")
+          owed = int(e.get("RECHECK") or 0)
+          if owed:
+              print(f"Waiting for a recheck: {owed} of the not checked, earlier survivors and timeouts that a changed test may cover. Until the next runs recheck them, the survivor count above is low.\n")
           print(f"Survivors by function ({min(len(order), 100)} of {len(order)}):\n```")
           for f in order[:100]:
               print(f"{len(by[f]):5d} {f}"[:200])
