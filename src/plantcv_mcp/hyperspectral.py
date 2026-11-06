@@ -298,13 +298,14 @@ def segment_hyperspectral(
     warnings = warnings + segmentation_warnings(
         mask, diag, analyze_mask(pre_fill), fill_size, remedies=HSI_REMEDIES
     )
-    # pcv.threshold.binary: 'light' keeps values > threshold, 'dark' keeps
-    # values < threshold. A threshold past either end of the index selects
-    # everything or nothing, and neither result blames the threshold.
+    # pcv.threshold.binary is cv2's THRESH_BINARY / THRESH_BINARY_INV: 'light'
+    # keeps values > threshold, 'dark' keeps values <= threshold. A threshold
+    # past either end of the index selects everything or nothing, and neither
+    # result blames the threshold.
     t = float(threshold)
     rng = threshold_outside_range_warning(
-        selects_everything=(t < lo) if object_type == "light" else (t > hi),
-        selects_nothing=(t >= hi) if object_type == "light" else (t <= lo),
+        selects_everything=(t < lo) if object_type == "light" else (t >= hi),
+        selects_nothing=(t >= hi) if object_type == "light" else (t < lo),
         what=f"threshold {t:g} with object_type={object_type!r} on {index}",
         lo=lo,
         hi=hi,

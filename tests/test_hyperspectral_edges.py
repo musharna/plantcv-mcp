@@ -432,6 +432,29 @@ def _range_codes(seg):
     return [w.message for w in seg.warnings if w.code == "threshold_outside_range"]
 
 
+def test_the_range_warning_agrees_with_the_mask_at_the_exact_ends(tmp_path):
+    """pcv.threshold.binary is cv2's THRESH_BINARY (light keeps > t) and
+    THRESH_BINARY_INV (dark keeps <= t). At a threshold equal to either end of
+    the index the warning must say what the mask holds: dark at t == hi keeps
+    every pixel, and dark at t == lo keeps the pixels AT the minimum, so it
+    does not select nothing."""
+    path = _write_cube(tmp_path, "f", _known_cube())
+    lo, hi = segment_hyperspectral(path).index_range
+    expected = {
+        ("light", lo): (DISC, None),
+        ("light", hi): (np.zeros_like(DISC), "nothing"),
+        ("dark", lo): (255 - DISC, None),
+        ("dark", hi): (FULL, "every pixel"),
+    }
+    for (object_type, t), (mask, outcome) in expected.items():
+        seg = segment_hyperspectral(path, threshold=t, object_type=object_type)
+        np.testing.assert_array_equal(seg.mask, mask, err_msg=f"{object_type} {t}")
+        said = [m.split(": the data span")[0] for m in _range_codes(seg)]
+        rule = f"The threshold {t:g} with object_type={object_type!r} on ndvi"
+        want = [] if outcome is None else [f"{rule} selects {outcome}"]
+        assert said == want, (object_type, t)
+
+
 def test_dark_above_the_maximum_selects_every_pixel_and_says_so(tmp_path):
     seg = segment_hyperspectral(
         _write_cube(tmp_path, "f", _known_cube()), threshold=0.95, object_type="dark"
