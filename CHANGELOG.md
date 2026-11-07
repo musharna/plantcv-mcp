@@ -13,6 +13,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   threshold at the exact minimum selects nothing. PlantCV's dark threshold
   (OpenCV `THRESH_BINARY_INV`) keeps values at or below the threshold; the
   warning had assumed strictly below.
+- **The nightly mutation run recorded mutants as timeouts that never got a
+  result.** mutmut forks each mutant from the process that ran its stats
+  pass, and that pass had started libgomp's OpenMP thread pool through
+  scikit-learn's KMeans (`pcv.roi.auto_grid`). The forked child has none of
+  those threads, so its first KMeans waited forever: on 2026-11-06 all 52
+  timeouts had a test that reaches KMeans, and none of the 1,158 survivors
+  did. `tests/conftest.py` now sets `OMP_NUM_THREADS=1` whenever mutmut is
+  running the suite. Control: without it, a child forked after KMeans hangs.
 
 ## [1.19.2] — 2026-11-01
 
