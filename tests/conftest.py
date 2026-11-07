@@ -35,9 +35,20 @@ def pytest_configure(config: pytest.Config) -> None:
     The env var rather than set_isolation(False): tests that reset with
     set_isolation(None) fall back to the env and stay in-process. mutmut sets
     MUTANT_UNDER_TEST before pytest starts, for the stats pass and each mutant.
+
+    OpenMP is pinned to one thread for the same runs. mutmut forks each mutant
+    from the process that ran the stats pass, and that pass reaches
+    scikit-learn's KMeans (pcv.roi.auto_grid -> GaussianMixture), which starts
+    libgomp's thread pool. A forked child has none of those threads, so the
+    first KMeans in a mutant run waited forever on them: every mutant whose
+    tests reach auto_grid was cut off as a "timeout" after ~15 min (52 on
+    2026-11-06, none of them a test result; 0 of 1,158 survivors reach it).
+    libgomp reads the variable once, when scikit-learn first loads it; this
+    hook runs before any test module is imported, so it is early enough.
     """
     if "MUTANT_UNDER_TEST" in os.environ:
         os.environ["PLANTCV_MCP_ISOLATE"] = "0"
+        os.environ["OMP_NUM_THREADS"] = "1"
 
 
 def _live_children() -> list[tuple[int, str]]:
