@@ -261,7 +261,7 @@ def test_zoom_enlarges_with_cubic_interpolation_and_says_how_to_map_back(tmp_pat
         "clipped": False,
         "scale": 2.0,
         "note": ZOOM_NOTE,
-        "_png": out["_png"],
+        "_png": encode_png(cubic),
     }
 
 
@@ -394,7 +394,7 @@ def test_segment_hsi_envelope_is_exact(tmp_path, calls):
     (call,) = calls
     seg = call.result
     assert seg.warnings, "premise: an uncalibrated counts cube is flagged"
-    _, scale = downscale(seg.overlay)
+    small, scale = downscale(seg.overlay)
     d = seg.diagnostics
     assert out == {
         "session_id": out["session_id"],
@@ -412,10 +412,10 @@ def test_segment_hsi_envelope_is_exact(tmp_path, calls):
         "major_object_count": d.major_object_count,
         "largest_area": d.largest_area,
         "overlay_scale": scale,
-        "overlay_png_bytes": len(out["_png"]),
+        "overlay_png_bytes": len(encode_png(small)),
         "warnings": _warning_dicts(seg.warnings),
         "engine": ENGINE,
-        "_png": out["_png"],
+        "_png": encode_png(small),
     }
     assert type(out["threshold"]) is float
 
@@ -507,7 +507,7 @@ def test_segment_thermal_hands_over_the_load_and_records_the_band(tmp_path, call
     session = _store.get(out["session_id"])
     assert session.channel == "celsius" and session.method == "band:25.0-35.0"
     assert session.extra == {"min_c": 25.0, "max_c": 35.0, "source": "npz"}
-    _, scale = downscale(seg.overlay)
+    small, scale = downscale(seg.overlay)
     d = seg.diagnostics
     assert out == {
         "session_id": out["session_id"],
@@ -522,10 +522,10 @@ def test_segment_thermal_hands_over_the_load_and_records_the_band(tmp_path, call
         "major_object_count": d.major_object_count,
         "largest_area": d.largest_area,
         "overlay_scale": scale,
-        "overlay_png_bytes": len(out["_png"]),
+        "overlay_png_bytes": len(encode_png(small)),
         "warnings": _warning_dicts(seg.warnings),
         "engine": ENGINE,
-        "_png": out["_png"],
+        "_png": encode_png(small),
     }
     assert set(out) >= SUMMARY_KEYS
 
@@ -610,7 +610,7 @@ def test_measure_morphology_defaults_and_envelope(tmp_path, calls):
     assert mask is _store.get(refined).mask
     res = call.result
     assert res.warnings, "premise: the cross has no leaf segments to measure"
-    _, scale = downscale(res.overlay)
+    small, scale = downscale(res.overlay)
     assert out == {
         "session_id": refined,
         "lineage": [{"op": "fill_holes"}],
@@ -623,7 +623,7 @@ def test_measure_morphology_defaults_and_envelope(tmp_path, calls):
         "warnings": _warning_dicts(res.warnings),
         "overlay_scale": scale,
         "engine": ENGINE,
-        "_png": out["_png"],
+        "_png": encode_png(small),
     }
 
 
@@ -686,7 +686,7 @@ def test_segment_leaves_sam_passes_the_resolved_checkpoint_and_exact_envelope(
         for w in mask_warnings(session.mask, analyze_mask(session.mask))
         if w.code != "multi_specimen"
     ]
-    _, scale = downscale(res.overlay)
+    small, scale = downscale(res.overlay)
     assert out == {
         "session_id": refined,
         "lineage": [{"op": "fill_holes"}],
@@ -708,7 +708,7 @@ def test_segment_leaves_sam_passes_the_resolved_checkpoint_and_exact_envelope(
         "warnings": _warning_dicts(res.warnings) + carried,
         "overlay_scale": scale,
         "engine": ENGINE,
-        "_png": out["_png"],
+        "_png": encode_png(small),
     }
 
 
