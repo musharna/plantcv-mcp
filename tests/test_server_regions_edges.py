@@ -30,6 +30,7 @@ from plantcv_mcp.imaging import (
     encode_png,
     load_image,
     load_image_with_digest,
+    render_overlay,
     render_region_overlay,
 )
 from plantcv_mcp.leaves import SeedSpecError
@@ -271,7 +272,8 @@ def test_refine_envelope_is_exact_and_names_what_it_dropped(tmp_path, calls):
     assert dropped, "premise: keep_largest dropped the second disc"
     before, after = analyze_mask(parent.mask), analyze_mask(mask)
     child = _store.get(out["session_id"])
-    _, scale = downscale(np.zeros((160, 240, 3), np.uint8))
+    small, scale = downscale(render_overlay(load_image(parent.image_path), mask))
+    png = encode_png(small)
 
     def summary(d):
         return {
@@ -288,10 +290,10 @@ def test_refine_envelope_is_exact_and_names_what_it_dropped(tmp_path, calls):
         "before": summary(before),
         "after": summary(after),
         "overlay_scale": scale,
-        "overlay_png_bytes": len(out["_png"]),
+        "overlay_png_bytes": len(png),
         "warnings": _dicts(refinement_warnings(mask, before, after, dropped, floods)),
         "engine": ENGINE,
-        "_png": out["_png"],
+        "_png": png,
     }
     assert any(w["code"] == "refine_dropped_object" for w in out["warnings"]), out[
         "warnings"
@@ -414,7 +416,7 @@ def test_seeded_count_envelope_is_exact(tmp_path, calls):
     _img, _mask, seeds, px_per_mm = call.args
     assert (seeds, px_per_mm) == ([[60, 80], [180, 80]], 2.0)
     res = call.result
-    _, scale = downscale(res.overlay)
+    small, scale = downscale(res.overlay)
     assert out == {
         "session_id": sid,
         "lineage": [],
@@ -428,7 +430,7 @@ def test_seeded_count_envelope_is_exact(tmp_path, calls):
         "warnings": _dicts([*res.warnings, *_carried(session.mask)]),
         "overlay_scale": scale,
         "engine": ENGINE,
-        "_png": out["_png"],
+        "_png": encode_png(small),
     }
     assert "multi_specimen" not in [w["code"] for w in out["warnings"]]
 
@@ -441,7 +443,7 @@ def test_automatic_count_envelope_is_exact(tmp_path, calls):
     (call,) = calls
     assert call.name == "leaves"
     res = call.result
-    _, scale = downscale(res.overlay)
+    small, scale = downscale(res.overlay)
     assert out == {
         "session_id": sid,
         "lineage": [],
@@ -455,7 +457,7 @@ def test_automatic_count_envelope_is_exact(tmp_path, calls):
         "warnings": _dicts([*res.warnings, *_carried(session.mask)]),
         "overlay_scale": scale,
         "engine": ENGINE,
-        "_png": out["_png"],
+        "_png": encode_png(small),
     }
     assert res.sensitivity is not None
 
@@ -644,6 +646,14 @@ def test_measure_regions_hsi_rereads_the_refs_and_reports_them(tmp_path, calls):
     assert kw["calibration"].get("white_reference") == white
     regions = call.result
     ms = regions["measurements"]
+    small, scale = downscale(
+        render_region_overlay(
+            np.ascontiguousarray(load.cube.pseudo_rgb),
+            session.mask,
+            regions["bboxes"],
+            [bool(m["measured"]) for m in ms],
+        )
+    )
     assert out == {
         "session_id": sid,
         "kind": "hsi",
@@ -657,9 +667,9 @@ def test_measure_regions_hsi_rereads_the_refs_and_reports_them(tmp_path, calls):
         "calibration": regions["calibration"],
         "regions": ms,
         "warnings": [{"code": c, "message": m} for c, m in regions["warnings"]],
-        "overlay_scale": out["overlay_scale"],
+        "overlay_scale": scale,
         "engine": ENGINE,
-        "_png": out["_png"],
+        "_png": encode_png(small),
     }
 
 
