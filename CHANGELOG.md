@@ -8,6 +8,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- `count_leaves`'s description no longer says a seeded split prefers the
+  narrowest neck. At its compactness each pixel goes to its nearest seed, so
+  the cut falls midway between neighboring seeds wherever the neck is
+  (measured on the tests' dumbbell, its neck at x 179-221: seeds at x 75 and
+  215 cut at x 146, through a disc). It now says to put each seed at the
+  center of its object. The split itself is unchanged.
 - `segment_hyperspectral` with `object_type="dark"` now says a threshold at
   the index's exact maximum selects every pixel, and no longer says a
   threshold at the exact minimum selects nothing. PlantCV's dark threshold
