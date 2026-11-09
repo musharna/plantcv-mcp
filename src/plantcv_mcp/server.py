@@ -2110,8 +2110,10 @@ def build_server() -> MCPServer:
 
         Touching objects the automatic split merges: pass seeds, one [x, y]
         (full-frame pixels, on the mask) per object. A compact watershed from
-        those seeds splits the mask between them, one region per seed,
-        preferring the narrowest neck; it does not follow colour edges. The
+        those seeds splits the mask between them, one region per seed: each
+        pixel goes to its nearest seed, so the cut falls midway between
+        neighboring seeds, not at the narrowest neck, and it does not follow
+        color edges. Put each seed at the center of its object. The
         count is then the number of seeds, by construction; the regions, their
         areas and the overlay show whether each seed sits on one object.
         """

@@ -314,9 +314,13 @@ def count_leaves(
 # count_leaves and counted by eye). A seeded watershed takes the markers from
 # the caller instead, one [x, y] per object, and floods the same landscape
 # PlantCV's watershed uses (the negated distance transform) with skimage's
-# compact watershed, so a mask is split between the seeds, preferring the
-# narrowest neck. The count is then the number of seeds by construction; what
-# the split adds is a region per seed, its area, and an overlay that shows
+# compact watershed. At SEED_COMPACTNESS the distance from each seed outweighs
+# the landscape, so each pixel goes to its nearest seed and the cut falls
+# midway between neighboring seeds, wherever the neck is (measured 2026-11-08
+# on the tests' dumbbell, its neck at x 179-221: seeds at x 75 and 215 cut at
+# x 146, through a disc; for four seed pairs, 99.5-100% of pixels matched a
+# nearest-seed split). The count is then the number of seeds by construction;
+# what the split adds is a region per seed, its area, and an overlay that shows
 # whether each region is one object.
 #
 # Why compact, and why not the image's colour gradient (both measured on a
