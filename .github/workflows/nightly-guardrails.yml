@@ -437,7 +437,12 @@ jobs:
             survivor-diffs.txt
       - name: Upsert tracking issue
         id: upsert
-        if: steps.optout.outputs.skip != '1' && steps.survivors.outputs.count != '0'
+        # Also on 0 survivors while rechecks are owed: those read "not checked"
+        # until a run rechecks them, so a night can count none while hundreds
+        # wait, and a skipped step left last night's count and run link standing
+        # as tonight's. The parentheses: GitHub documents no precedence between
+        # && and ||, so the grouping is written out.
+        if: steps.optout.outputs.skip != '1' && (steps.survivors.outputs.count != '0' || steps.tests.outputs.recheck != '0')
         env:
           GH_TOKEN: ${{ github.token }}
           N: ${{ steps.survivors.outputs.count }}
