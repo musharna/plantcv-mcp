@@ -185,9 +185,27 @@ jobs:
           inflight="$RUNNER_TEMP/inflight.txt"
           : > "$inflight"
           (
+            tick=0
             while sleep 20; do
               ps -eo etimes=,args= | sed -n 's/^ *\([0-9][0-9]*\) mutmut: \([^ ]*\)$/\2 \1/p' > "$inflight.tmp"
               mv "$inflight.tmp" "$inflight"
+              # Each minute, and every 20 s while memory is low, the same note goes
+              # to the log with each mutant's memory and the host's free memory,
+              # swap, OOM kills and disk. A runner that dies mid-run saves no file
+              # and runs no later step, but its log keeps every line written before
+              # ("The runner has received a shutdown signal", plantcv-mcp, two
+              # nights running): the last note says what was running, and how big.
+              tick=$((tick + 1))
+              avail=$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo 2>/dev/null || true)
+              if [ $((tick % 3)) -eq 0 ] || [ "${avail:-1024}" -lt 1024 ]; then
+                swap=$(awk '/^SwapTotal:/ {t = $2} /^SwapFree:/ {f = $2} END {if (t != "") print int((t - f) / 1024)}' /proc/meminfo 2>/dev/null || true)
+                ooms=$(awk '$1 == "oom_kill" {print $2}' /proc/vmstat 2>/dev/null || true)
+                disk=$(df -Pm . 2>/dev/null | awk 'NR == 2 {print $4}' || true)
+                top=$(ps -eo rss=,comm= 2>/dev/null | sort -rn | awk 'NR == 1 {print $2 ":" int($1 / 1024) "M"}' || true)
+                kids=$(ps -eo etimes=,rss=,args= 2>/dev/null | awk '$3 == "mutmut:" {printf " %s %ss %dM", $4, $1, $2 / 1024}' || true)
+                printf '\n[watch] %s mem_avail=%sM swap_used=%sM oom_kills=%s disk_free=%sM top=%s | running:%s\n' \
+                  "$(date -u +%H:%M:%SZ)" "${avail:-?}" "${swap:-?}" "${ooms:-?}" "${disk:-?}" "${top:-?}" "${kids:- none}"
+              fi
             done
           ) &
           watcher=$!
