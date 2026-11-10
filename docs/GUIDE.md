@@ -992,12 +992,18 @@ Practical consequences:
   holding sensitive imagery.
 
 The read-root allow-list is the whole of the sandboxing. A base install has no network
-access, executes nothing but PlantCV, and writes only `correct_lens_distortion`'s
-corrected image — next to its input (replacing an earlier run's output of the same name),
-or at an explicit `output_path` that must not already exist and must not be a symlink, under
-the read roots when they are set. (It also writes short-lived private copies of
-hyperspectral ENVI and FLIR thermal inputs to the system temporary directory, deleted once
-the file is decoded.) The optional `segment_leaves_sam()` adds one
+access and executes nothing but PlantCV. It writes two kinds of file:
+
+- `correct_lens_distortion`'s corrected image, `<image>_undistorted.png`, and
+  `crop_image`'s crop, `<image>_crop_x<x>_y<y>_w<w>_h<h>.png` (the box after clipping to
+  the frame). Each is written next to its input and replaces an earlier file of the same
+  name, so a repeat crop of the same box overwrites the first. With an explicit
+  `output_path` (for `crop_image`, ending in `.png`) the file goes there instead; that path
+  must not already exist and must not be a symlink. With read roots set, both lie under them.
+- Short-lived private copies of hyperspectral ENVI and FLIR thermal inputs, in the system
+  temporary directory, deleted once the file is decoded.
+
+The optional `segment_leaves_sam()` adds one
 exception to each: with `download_checkpoint=true` it fetches one fixed https URL and
 writes the file to its cache directory after checking its size and SHA-256, and it runs
 the Segment Anything model (loaded with `torch.load(weights_only=True)`, so the

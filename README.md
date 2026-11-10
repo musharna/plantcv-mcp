@@ -173,9 +173,16 @@ Why each guard exists, and every warning code:
 ## Security
 
 With no `--root`, the server reads any image file the host user can read and returns it to the
-model. It writes only the lens-corrected image, the Segment Anything checkpoint when asked to
-download it, and short-lived temporary copies of hyperspectral and thermal inputs. Run it as a
-non-root user with `--root` set. Analyses run in a worker subprocess, so a native crash is a
+model. It writes these files and no others:
+
+- `correct_lens_distortion`: `<image>_undistorted.png` next to the input.
+- `crop_image`: `<image>_crop_x<x>_y<y>_w<w>_h<h>.png` next to the input.
+- `segment_leaves_sam` with `download_checkpoint=true`: the checkpoint, in its cache directory.
+- Short-lived temporary copies of hyperspectral and thermal inputs, deleted once decoded.
+
+The first two replace an earlier file of the same name, so cropping the same box twice
+overwrites the first crop. With `output_path` they write there instead, and refuse a path that
+already exists. Run the server as a non-root user with `--root` set. Analyses run in a worker subprocess, so a native crash is a
 tool error, not a dead server. Details:
 [docs/GUIDE.md#security-and-trust-boundary](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#security-and-trust-boundary).
 

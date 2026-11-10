@@ -2162,8 +2162,8 @@ def build_server() -> MCPServer:
         checkpoint: pass checkpoint_path, or download_checkpoint=true to let
         the server fetch the official file into its cache (the only network
         access in this server, and the only write besides
-        correct_lens_distortion's image). Either way the file's SHA-256 must
-        equal the pinned one or it is not loaded.
+        correct_lens_distortion's image and crop_image's crop). Either way the
+        file's SHA-256 must equal the pinned one or it is not loaded.
 
         Measured on a held-out Arabidopsis tray against hand counts (see
         docs/EVAL.md for the figures and the watershed's on the same plants):
