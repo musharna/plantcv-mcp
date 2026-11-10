@@ -514,9 +514,22 @@ def test_measure_regions_rgb_envelope_is_exact(tmp_path, calls):
     ms = regions["measurements"]
     flags = [bool(m["measured"]) for m in ms]
     assert True in flags and False in flags, f"premise: some cell is empty ({flags})"
-    for m in ms:
-        if m.get("traits") is not None:
-            assert list(m["traits"]) == ["area"]
+    # `ms` is the list the server filtered IN PLACE, so comparing the reply to
+    # it cannot fail on the filtered values (a mutant that set every kept
+    # trait to None survived). The expectation is a second, unfiltered run of
+    # the same analysis, reduced to "area" here.
+    fresh = workers.dispatch("regions", *call.args, **call.kwargs)["measurements"]
+    expected = [
+        {**m, "traits": {"area": m["traits"]["area"]}}
+        if m.get("traits") is not None
+        else m
+        for m in fresh
+    ]
+    measured = [m for m in expected if m.get("traits") is not None]
+    assert measured, "premise: some cell carries traits"
+    for m in measured:
+        assert m["traits"]["area"]["value"] > 0
+        assert m["traits"]["area"]["unit"] == "mm2"
     overlay = render_region_overlay(
         load_image(path), session.mask, regions["bboxes"], flags
     )
@@ -533,7 +546,7 @@ def test_measure_regions_rgb_envelope_is_exact(tmp_path, calls):
         "analyses": ["size"],
         "px_per_mm": 2.0,
         "lineage": [{"op": "fill_holes"}],
-        "regions": ms,
+        "regions": expected,
         "warnings": [{"code": c, "message": m} for c, m in regions["warnings"]],
         "overlay_scale": scale,
         "engine": ENGINE,
