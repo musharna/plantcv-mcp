@@ -95,8 +95,9 @@ all three models.
   <img src="https://raw.githubusercontent.com/musharna/plantcv-mcp/master/benchmarks/agent_qa/rerun_2026-10-18/agent_qa.png" width="780" alt="Stacked bar chart of right and wrong answers in the 2026-10-18 re-run, 46 questions times 3 runs per setup. Claude + plantcv-mcp + Read: 132 right, 6 wrong. Claude + Bash/PlantCV/OpenCV + web: 134 right, 4 wrong. No-model controls, one answer per question: one color cut 28 right, 10 wrong, 8 declined; median answer of its kind 2 right, 44 wrong.">
 </p>
 
-The chart is the Opus 5.5 re-run on 2026-10-18, against an unreleased commit (051aff0) that adds
-several-channel segmentation rules and `zoom_image`: right on 97.1% of answers with its own code
+The chart is the Opus 5.5 re-run on 2026-10-18, against commit 051aff0 (unreleased then, first
+released in v1.17.0), which adds several-channel segmentation rules and `zoom_image`: right on
+97.1% of answers with its own code
 and 95.7% with the server. Its own code cost $0.038 against $0.066 per answer (medians; the
 intervals do not overlap). On release 1.16.1 the server was right on 86.2% against 95.7%
 (p = 0.18). The images have crisp edges, so a single color cut with no model answers 28 of the
