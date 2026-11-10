@@ -16,9 +16,70 @@ still alive, and if there is, make the run red and name it.
 from __future__ import annotations
 
 import os
+import resource
 from pathlib import Path
 
 import pytest
+
+# A mutant's tests may use this much data memory (RLIMIT_DATA, the kernel's
+# VmData: private writable mappings, the inherited heap included). mutmut's own
+# limit is CPU time only, and with timeout_constant = 60 it gives each mutant at
+# least 30 CPU minutes and 15 wall minutes. On 2026-11-09 the mutant
+# `x += 1` -> `x = 1` in lens._largest_valid_rectangle looped forever appending
+# to a list, grew ~28 MB/s to 12.8 GB in 541 s, and the 16 GB runner went down
+# with it at 7,848 of 12,216 mutants: no results saved, #97 not updated. The
+# 11-07 and 11-08 runs died in the same stretch. Under this cap the append
+# raises MemoryError within seconds and the mutant is reported as a timeout.
+# Sized from that night's [watch] notes: mutant processes peaked at 1.9 GB
+# resident (p99 1.0 GB), and one runaway at the cap beside three ordinary
+# mutants still fits the runner.
+MUTANT_DATA_CAP = 6 * 1024**3
+# mutmut's verdicts by exit code (mutmut/stats.py, status_by_exit_code).
+_MUTMUT_TIMEOUT = 36
+_MUTMUT_SUSPICIOUS = 35
+_CAPPED = pytest.StashKey[bool]()
+_HIT_CAP = pytest.StashKey[bool]()
+
+
+def _vm_data() -> int:
+    for line in Path("/proc/self/status").read_text().splitlines():
+        if line.startswith("VmData:"):
+            return int(line.split()[1]) * 1024
+    raise RuntimeError("no VmData line in /proc/self/status")
+
+
+def _cap_mutant_memory(config: pytest.Config) -> None:
+    """Cap a mutant run's data memory; PLANTCV_TEST_MUTANT_DATA_CAP=0 turns it off.
+
+    A cap the run already half fills would turn ordinary tests into
+    MemoryErrors, and mutmut would count every mutant as killed. Such a run
+    stops before any test and reports itself as suspicious instead.
+    """
+    raw = os.environ.get("PLANTCV_TEST_MUTANT_DATA_CAP")
+    cap = MUTANT_DATA_CAP if raw is None else int(raw)
+    if cap <= 0:
+        return
+    # Clamp first: the guard must judge the cap that will be enforced, and an
+    # inherited hard limit below the configured cap is what gets enforced.
+    _soft, hard = resource.getrlimit(resource.RLIMIT_DATA)
+    source = "configured"
+    if hard != resource.RLIM_INFINITY and hard < cap:
+        cap, source = hard, "inherited hard limit"
+    used = _vm_data()
+    if used > cap // 2:
+        pytest.exit(
+            f"mutant memory cap {cap} B ({source}) is too tight: this process "
+            f"already uses {used} B of data memory before any test "
+            "(tests/conftest.py)",
+            returncode=_MUTMUT_SUSPICIOUS,
+        )
+    resource.setrlimit(resource.RLIMIT_DATA, (cap, hard))
+    config.stash[_CAPPED] = True
+
+
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) -> None:
+    if call.excinfo is not None and call.excinfo.errisinstance(MemoryError):
+        item.config.stash[_HIT_CAP] = True
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -49,6 +110,15 @@ def pytest_configure(config: pytest.Config) -> None:
     if "MUTANT_UNDER_TEST" in os.environ:
         os.environ["PLANTCV_MCP_ISOLATE"] = "0"
         os.environ["OMP_NUM_THREADS"] = "1"
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    # Real mutants only: the stats pass ("stats") and mutmut's other runs
+    # ("fail", "list_all_tests", "") go through the whole suite uncapped. Its own
+    # hook, not pytest_configure: test_isolation calls that one directly, inside
+    # the suite's own process, which must never be capped.
+    if "__mutmut_" in os.environ.get("MUTANT_UNDER_TEST", ""):
+        _cap_mutant_memory(session.config)
 
 
 def _live_children() -> list[tuple[int, str]]:
@@ -111,3 +181,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
             red=True,
         )
         session.exitstatus = 1
+    # A mutant that ran into the cap is a runaway, what a time limit would have
+    # caught given the memory: report it as one, not as a test that killed it.
+    if session.config.stash.get(_CAPPED, False) and session.config.stash.get(
+        _HIT_CAP, False
+    ):
+        session.exitstatus = _MUTMUT_TIMEOUT

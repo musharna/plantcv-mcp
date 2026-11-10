@@ -134,8 +134,10 @@ explicit = true
 
 [tool.mutmut]
 source_paths = ["src"]
-# Wall/CPU limit per mutant = (estimated test time + timeout_constant) * timeout_multiplier.
-# The isolation worker is a fresh spawn per mutant child (the shared one from the stats
+# CPU limit per mutant = (estimated test time + timeout_constant) * timeout_multiplier * 2,
+# and the wall limit is half that (mutmut 3.8.1 __main__.py:1046, workers/isolation.py:571):
+# with the default multiplier of 15, at least 30 CPU and 15 wall minutes per mutant. Neither
+# bounds memory; tests/conftest.py caps that (MUTANT_DATA_CAP). The isolation worker is a fresh spawn per mutant child (the shared one from the stats
 # pass is shut down at session end on purpose; a shared pipe across 8 children crashed
 # mutmut). Its first analysis runs mutmut-instrumented code and cost 41 s measured, while
 # the mapped test's clean estimate was 0.19 s, so the default 1 s constant read as 375
