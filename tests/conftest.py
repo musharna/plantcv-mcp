@@ -59,16 +59,20 @@ def _cap_mutant_memory(config: pytest.Config) -> None:
     cap = MUTANT_DATA_CAP if raw is None else int(raw)
     if cap <= 0:
         return
+    # Clamp first: the guard must judge the cap that will be enforced, and an
+    # inherited hard limit below the configured cap is what gets enforced.
+    _soft, hard = resource.getrlimit(resource.RLIMIT_DATA)
+    source = "configured"
+    if hard != resource.RLIM_INFINITY and hard < cap:
+        cap, source = hard, "inherited hard limit"
     used = _vm_data()
     if used > cap // 2:
         pytest.exit(
-            f"mutant memory cap {cap} B is too tight: this process already uses "
-            f"{used} B of data memory before any test (tests/conftest.py)",
+            f"mutant memory cap {cap} B ({source}) is too tight: this process "
+            f"already uses {used} B of data memory before any test "
+            "(tests/conftest.py)",
             returncode=_MUTMUT_SUSPICIOUS,
         )
-    _soft, hard = resource.getrlimit(resource.RLIMIT_DATA)
-    if hard != resource.RLIM_INFINITY and hard < cap:
-        cap = hard
     resource.setrlimit(resource.RLIMIT_DATA, (cap, hard))
     config.stash[_CAPPED] = True
 

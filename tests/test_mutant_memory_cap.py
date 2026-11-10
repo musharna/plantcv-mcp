@@ -9,6 +9,7 @@ does not engage fails here as exit 0 instead of running away.
 from __future__ import annotations
 
 import os
+import resource
 import subprocess
 import sys
 from pathlib import Path
@@ -31,7 +32,11 @@ def test_idle():
 
 
 def _run(
-    tmp_path: Path, body: str, mutant: str, cap: int | None
+    tmp_path: Path,
+    body: str,
+    mutant: str,
+    cap: int | None,
+    hard_limit: int | None = None,
 ) -> subprocess.CompletedProcess[str]:
     (tmp_path / "test_case.py").write_text(body)
     env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")}
@@ -40,6 +45,11 @@ def _run(
     env.pop("PLANTCV_TEST_MUTANT_DATA_CAP", None)
     if cap is not None:
         env["PLANTCV_TEST_MUTANT_DATA_CAP"] = str(cap)
+
+    def inherit_hard_limit() -> None:  # as a runner or a parent shell might set it
+        if hard_limit is not None:
+            resource.setrlimit(resource.RLIMIT_DATA, (hard_limit, hard_limit))
+
     return subprocess.run(
         [
             sys.executable,
@@ -58,6 +68,7 @@ def _run(
         capture_output=True,
         text=True,
         timeout=120,
+        preexec_fn=inherit_hard_limit,
     )
 
 
@@ -91,8 +102,30 @@ def test_a_cap_the_run_already_half_fills_stops_as_suspicious_before_any_test(
 ) -> None:
     out = _run(tmp_path, IDLE, MUTANT, cap=16 * 2**20)
     assert out.returncode == 35, out.stdout + out.stderr
-    assert "mutant memory cap 16777216 B is too tight" in out.stdout + out.stderr
+    assert (
+        "mutant memory cap 16777216 B (configured) is too tight"
+        in out.stdout + out.stderr
+    )
     assert "1 passed" not in out.stdout
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"), reason="RLIMIT_DATA and /proc are Linux"
+)
+def test_the_guard_judges_the_inherited_hard_limit_not_the_configured_cap(
+    tmp_path: Path,
+) -> None:
+    # A raised cap (16 GiB) over a lower inherited hard limit: the hard limit is
+    # what gets enforced, so it is what the half-full guard must judge. The run
+    # uses ~25 MiB of data memory at session start, over half of 40 MiB.
+    big = 16 * 2**30
+    out = _run(tmp_path, IDLE, MUTANT, cap=big, hard_limit=40 * 2**20)
+    assert out.returncode == 35, out.stdout + out.stderr
+    assert "41943040 B (inherited hard limit) is too tight" in out.stdout + out.stderr
+    assert "1 passed" not in out.stdout
+    # Positive control: a hard limit the run fills less than half of still runs.
+    roomy = _run(tmp_path, IDLE, MUTANT, cap=big, hard_limit=128 * 2**20)
+    assert roomy.returncode == 0, roomy.stdout + roomy.stderr
 
 
 @pytest.mark.skipif(
