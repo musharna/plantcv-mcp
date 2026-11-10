@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve `plantcv-mcp`. It is an MCP server exposing PlantCV as a measurement instrument: it returns trait numbers together with the segmentation overlay they were computed from, and refuses to return numbers when the segmentation is degenerate.
+Thanks for helping improve `plantcv-mcp`. It is an MCP server exposing PlantCV as a measurement instrument: it returns trait numbers together with the segmentation overlay they were computed from, and refuses to return numbers from an empty mask. A mask that is probably the background is flagged by `measure` and refused by the batch, leaf-count and skeleton tools (README, "What it refuses").
 
 ## Dev setup
 

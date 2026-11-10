@@ -7,10 +7,11 @@ title: plantcv-mcp
 abstract: >-
   A Model Context Protocol (MCP) server exposing PlantCV as a measurement
   instrument: it returns plant trait numbers together with the segmentation
-  overlay they were computed from, and refuses to return numbers when the
-  segmentation is degenerate. Mask validity is two-sided, so an inverted
-  threshold — which otherwise reports the background as the plant with no error
-  at all — is an outcome the system can express as a failure. Traits convert to
+  overlay they were computed from, and refuses to return numbers from an empty
+  mask. Mask validity is two-sided, so an inverted threshold — which otherwise
+  reports the background as the plant with no error at all — is an outcome the
+  system can express: segment and measure flag it, and the batch, leaf-count and
+  skeleton tools refuse it. Traits convert to
   real-world units from an explicit table rather than from PlantCV's unit
   strings, and batch analysis withholds traits for any image that trips a
   blocking guard instead of reporting an unreviewed number.

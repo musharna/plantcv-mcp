@@ -1947,7 +1947,10 @@ def build_server() -> MCPServer:
         traits: list[str] | None = None,
     ) -> MeasureResult:
         """Return plant traits for a segmentation produced by segment().
-        Raises if the mask is degenerate rather than returning zeros.
+        Raises on an empty mask rather than returning zeros. A mask that is
+        probably the background (implausible_coverage) or specks
+        (noisy_segmentation) is measured, not refused: the traits come back
+        with that warning, so read `warnings` before using them.
 
         analyses defaults to ["size"]; add "color" for hue/saturation/value
         statistics. px_per_mm converts spatial traits to mm and mm2 — without it
