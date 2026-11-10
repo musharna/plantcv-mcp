@@ -2,7 +2,7 @@
 
 The README's Security section and the guide's trust-boundary section both said the
 server writes only the lens-corrected image (plus the SAM checkpoint and temporary
-copies). `crop_image`, released in 1.19.2, writes `<image>_crop_x.._y.._w.._h...png`
+copies). `crop_image`, added in 1.18.0, writes `<image>_crop_x.._y.._w.._h...png`
 beside its input and replaces it on a repeat crop, and neither list named it
 (audit of 2026-11-10, P-M3). A list kept by hand drifts the moment a writing tool is
 added, so it is checked here against the server's own declaration: a tool whose

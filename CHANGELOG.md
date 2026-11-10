@@ -19,7 +19,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   behavior is unchanged.
 - The README and the guide said the server writes only the lens-corrected
   image (plus the SAM checkpoint and temporary copies). `crop_image`, added in
-  1.19.2, also writes `<image>_crop_x<x>_y<y>_w<w>_h<h>.png` beside its input
+  1.18.0, also writes `<image>_crop_x<x>_y<y>_w<w>_h<h>.png` beside its input
   and replaces it when the same box is cropped again. Both lists now name
   every file the server writes and when it overwrites one, and
   `tests/test_documented_writes.py` fails if a tool the server marks as not
