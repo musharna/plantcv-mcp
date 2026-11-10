@@ -137,11 +137,13 @@ source_paths = ["src"]
 # CPU limit per mutant = (estimated test time + timeout_constant) * timeout_multiplier * 2,
 # and the wall limit is half that (mutmut 3.8.1 __main__.py:1046, workers/isolation.py:571):
 # with the default multiplier of 15, at least 30 CPU and 15 wall minutes per mutant. Neither
-# bounds memory; tests/conftest.py caps that (MUTANT_DATA_CAP). The isolation worker is a fresh spawn per mutant child (the shared one from the stats
-# pass is shut down at session end on purpose; a shared pipe across 8 children crashed
-# mutmut). Its first analysis runs mutmut-instrumented code and cost 41 s measured, while
-# the mapped test's clean estimate was 0.19 s, so the default 1 s constant read as 375
-# "timeouts" a night. 60 s covers a cold, instrumented worker.
+# bounds memory; tests/conftest.py caps that (MUTANT_DATA_CAP).
+# 60 s was set on 2026-09-17 for a cold isolation worker: each mutant child spawned one, its
+# first analysis ran instrumented code in 41 s against a 0.19 s clean estimate, and the default
+# 1 s read as 375 "timeouts" a night. Since 2026-11-03 conftest.py's pytest_configure sets
+# PLANTCV_MCP_ISOLATE=0 under mutmut, so analyses run in-process and that cost is gone, except
+# in tests/test_isolation.py, which starts its own worker. The value has not been re-measured
+# since; it is kept, not re-justified.
 timeout_constant = 60.0
 # benchmarks: the agent_qa and perf tests import from it (run, score, workcount). Without
 # it the suite failed to collect inside mutants/ and every night from 2026-10-18 checked 0
