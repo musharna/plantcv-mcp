@@ -10,8 +10,8 @@ abstract: >-
   overlay they were computed from, and refuses to return numbers from an empty
   mask. Mask validity is two-sided, so an inverted threshold — which otherwise
   reports the background as the plant with no error at all — is an outcome the
-  system can express: segment and measure flag it, and the batch, leaf-count and
-  skeleton tools refuse it. Traits convert to
+  system can express: segment flags it, and measure, the batch, the leaf-count
+  and the skeleton tools refuse it. Traits convert to
   real-world units from an explicit table rather than from PlantCV's unit
   strings, and batch analysis withholds traits for any image that trips a
   blocking guard instead of reporting an unreviewed number.

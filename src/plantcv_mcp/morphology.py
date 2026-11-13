@@ -170,8 +170,8 @@ def measure_morphology(
     if coverage:
         # A mask that is the background skeletonises the whole frame — 80 s on
         # a real photo — and then fails for "too many tips", which is true and
-        # useless. measure() only warns here (a macro shot of one leaf can fill
-        # the frame); a skeleton of the frame's background has no such case.
+        # useless. measure() has a way through for a subject that fills the
+        # frame; a skeleton of the frame's background has no such case.
         raise MorphologyRefusedError(
             f"implausible_coverage: {coverage.message} A skeleton of the "
             "background is not a plant; fix the segmentation first. If this "

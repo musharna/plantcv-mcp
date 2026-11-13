@@ -2,8 +2,8 @@
 
 plantcv-mcp is an MCP server that lets AI agents run [PlantCV](https://plantcv.org) plant
 phenotyping. It returns trait numbers and the segmentation overlay they were measured from. It
-refuses to measure an empty mask, and it flags a mask that is probably the background: `measure`
-returns its traits with that warning, while the batch, leaf-count and skeleton tools refuse it
+refuses to measure an empty mask or a mask that is probably the background: `segment` flags it,
+and `measure`, the batch, the leaf-count and the skeleton tools refuse it
 ([What it refuses](#what-it-refuses)).
 
 [![CI](https://img.shields.io/github/actions/workflow/status/musharna/plantcv-mcp/ci.yml?branch=master&label=CI)](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml)
@@ -143,10 +143,12 @@ Each guard was added after a specific failure and names the next action. Four ma
 are blocking: `implausible_coverage`, `empty_mask`, `fill_erased_mask` and
 `noisy_segmentation`. Which tools stop on them:
 
-- `measure()` raises on an empty mask (`empty_mask`, `fill_erased_mask`). On
-  `implausible_coverage` and `noisy_segmentation` it returns the traits with the warning
-  attached: you call it after seeing the overlay, and a close-up of one leaf can fill the
-  frame. Read `warnings` before you use its numbers.
+- `measure()` raises on an empty mask (`empty_mask`, `fill_erased_mask`). It refuses a mask
+  over half the frame (`implausible_coverage`) unless the mask is plant green
+  (`plant_fills_frame`). A close-up of one leaf can fill the frame: pass
+  `allow_implausible_coverage=true` and the traits come back with the warning attached. On
+  `noisy_segmentation` it returns the traits with the warning. Read `warnings` before you use
+  its numbers.
 - `measure_images()` has no overlay, so it withholds the traits of any image with a blocking
   warning. With a grid of two or more cells, `implausible_coverage` does not block (each cell
   is checked instead), and neither does `noisy_segmentation` when the grid explains the

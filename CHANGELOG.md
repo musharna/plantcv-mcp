@@ -6,6 +6,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- **`measure` refuses a mask that is probably the background.** A mask over
+  half the frame (`implausible_coverage`) used to come back as 17 traits with a
+  warning beside them; it is now refused with `MeasureRefusedError`, as
+  `count_leaves` and `measure_morphology` already did. Two cases are still
+  measured. A plant-green mask (a plant cropped to its pot) is measured as
+  before and the result now also carries `plant_fills_frame`. Any other subject
+  that really fills the frame, such as a close-up of one leaf, is measured when
+  the call passes the new `allow_implausible_coverage=true`; the traits come
+  back with the warning attached, as they did before. A caller that relied on
+  the old behavior adds that argument. Masks at or under half the frame,
+  `measure_images` and `measure_regions` are unchanged.
+
 ## [1.19.3] — 2026-11-13
 
 ### Fixed
