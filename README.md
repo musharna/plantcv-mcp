@@ -1,8 +1,10 @@
 # plantcv-mcp
 
 plantcv-mcp is an MCP server that lets AI agents run [PlantCV](https://plantcv.org) plant
-phenotyping. It returns trait numbers and the segmentation overlay they were measured from, and
-refuses to return numbers when the segmentation is degenerate.
+phenotyping. It returns trait numbers and the segmentation overlay they were measured from. It
+refuses to measure an empty mask, and it flags a mask that is probably the background: `measure`
+returns its traits with that warning, while the batch, leaf-count and skeleton tools refuse it
+([What it refuses](#what-it-refuses)).
 
 [![CI](https://img.shields.io/github/actions/workflow/status/musharna/plantcv-mcp/ci.yml?branch=master&label=CI)](https://github.com/musharna/plantcv-mcp/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/plantcv-mcp)](https://pypi.org/project/plantcv-mcp/)
@@ -93,8 +95,9 @@ all three models.
   <img src="https://raw.githubusercontent.com/musharna/plantcv-mcp/master/benchmarks/agent_qa/rerun_2026-10-18/agent_qa.png" width="780" alt="Stacked bar chart of right and wrong answers in the 2026-10-18 re-run, 46 questions times 3 runs per setup. Claude + plantcv-mcp + Read: 132 right, 6 wrong. Claude + Bash/PlantCV/OpenCV + web: 134 right, 4 wrong. No-model controls, one answer per question: one color cut 28 right, 10 wrong, 8 declined; median answer of its kind 2 right, 44 wrong.">
 </p>
 
-The chart is the Opus 5.5 re-run on 2026-10-18, against an unreleased commit (051aff0) that adds
-several-channel segmentation rules and `zoom_image`: right on 97.1% of answers with its own code
+The chart is the Opus 5.5 re-run on 2026-10-18, against commit 051aff0 (unreleased then, first
+released in v1.17.0), which adds several-channel segmentation rules and `zoom_image`: right on
+97.1% of answers with its own code
 and 95.7% with the server. Its own code cost $0.038 against $0.066 per answer (medians; the
 intervals do not overlap). On release 1.16.1 the server was right on 86.2% against 95.7%
 (p = 0.18). The images have crisp edges, so a single color cut with no model answers 28 of the
@@ -113,7 +116,7 @@ the Haiku and Sonnet runs:
 | `suggest_segmentation`                        | contact sheets, and what each `object_type` would yield          |
 | `segment`                                     | overlay + diagnostics + warnings, **no traits**                  |
 | `refine`                                      | a new session with a cleaned-up mask, plus its overlay           |
-| `measure`                                     | traits, or a raised error on a degenerate mask                   |
+| `measure`                                     | traits with the mask's warnings; an empty mask raises an error   |
 | `measure_images`                              | one recipe across many images; traits only where valid           |
 | `measure_regions`                             | one row per plant in a tray, plus the numbered overlay           |
 | `measure_morphology`                          | leaf/stem skeleton traits + the numbered-segment overlay         |
@@ -136,8 +139,23 @@ measured facts behind each tool:
 
 ## What it refuses
 
-Each guard was added after a specific failure and names the next action. Blocking guards
-withhold numbers; advisories travel with them.
+Each guard was added after a specific failure and names the next action. Four mask warnings
+are blocking: `implausible_coverage`, `empty_mask`, `fill_erased_mask` and
+`noisy_segmentation`. Which tools stop on them:
+
+- `measure()` raises on an empty mask (`empty_mask`, `fill_erased_mask`). On
+  `implausible_coverage` and `noisy_segmentation` it returns the traits with the warning
+  attached: you call it after seeing the overlay, and a close-up of one leaf can fill the
+  frame. Read `warnings` before you use its numbers.
+- `measure_images()` has no overlay, so it withholds the traits of any image with a blocking
+  warning. With a grid of two or more cells, `implausible_coverage` does not block (each cell
+  is checked instead), and neither does `noisy_segmentation` when the grid explains the
+  components.
+- `count_leaves()` and `segment_leaves_sam()` refuse a mask over half the frame unless it is
+  plant green (`plant_fills_frame`). `measure_morphology()` refuses it outright; crop the
+  photo instead.
+
+Other warnings are advisories and travel with the numbers.
 
 - **Inverted mask** (`implausible_coverage`): the right-hand image above, 17 believable
   traits describing the wall.
@@ -156,9 +174,16 @@ Why each guard exists, and every warning code:
 ## Security
 
 With no `--root`, the server reads any image file the host user can read and returns it to the
-model. It writes only the lens-corrected image, the Segment Anything checkpoint when asked to
-download it, and short-lived temporary copies of hyperspectral and thermal inputs. Run it as a
-non-root user with `--root` set. Analyses run in a worker subprocess, so a native crash is a
+model. It writes these files and no others:
+
+- `correct_lens_distortion`: `<image>_undistorted.png` next to the input.
+- `crop_image`: `<image>_crop_x<x>_y<y>_w<w>_h<h>.png` next to the input.
+- `segment_leaves_sam` with `download_checkpoint=true`: the checkpoint, in its cache directory.
+- Short-lived temporary copies of hyperspectral and thermal inputs, deleted once decoded.
+
+The first two replace an earlier file of the same name, so cropping the same box twice
+overwrites the first crop. With `output_path` they write there instead, and refuse a path that
+already exists. Run the server as a non-root user with `--root` set. Analyses run in a worker subprocess, so a native crash is a
 tool error, not a dead server. Details:
 [docs/GUIDE.md#security-and-trust-boundary](https://github.com/musharna/plantcv-mcp/blob/master/docs/GUIDE.md#security-and-trust-boundary).
 

@@ -8,6 +8,22 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **The README said the server refuses numbers from a degenerate segmentation,
+  and listed an inverted mask among the refusals. `measure` does not refuse
+  it.** On the README's own inverted example (96.1% of the frame) `measure`
+  returns all 17 traits with `implausible_coverage` attached, while
+  `measure_images` withholds them and `count_leaves` and `measure_morphology`
+  refuse. The README, the guide (a new per-tool table under "Warnings and
+  refusals"), `CONTRIBUTING.md`, `CITATION.cff`, `.zenodo.json` and
+  `measure`'s own description now say which tools refuse and which warn. The
+  behavior is unchanged.
+- The README and the guide said the server writes only the lens-corrected
+  image (plus the SAM checkpoint and temporary copies). `crop_image`, added in
+  1.18.0, also writes `<image>_crop_x<x>_y<y>_w<w>_h<h>.png` beside its input
+  and replaces it when the same box is cropped again. Both lists now name
+  every file the server writes and when it overwrites one, and
+  `tests/test_documented_writes.py` fails if a tool the server marks as not
+  read-only is missing from either list.
 - `count_leaves`'s description no longer says a seeded split prefers the
   narrowest neck. At its compactness each pixel goes to its nearest seed, so
   the cut falls midway between neighboring seeds wherever the neck is

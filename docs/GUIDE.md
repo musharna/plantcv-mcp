@@ -812,12 +812,26 @@ attached to the numbers it qualifies. A **refusal** is an error with a named cla
 same kind of guidance (`WrongSessionKindError: … Use measure_thermal() for it`), raised
 instead of a result.
 
+"Blocking" is the batch's rule, not every tool's. On the same mask the tools differ:
+
+| tool                                 | empty mask | `implausible_coverage`                            | `noisy_segmentation`                     |
+| ------------------------------------ | ---------- | ------------------------------------------------- | ---------------------------------------- |
+| `measure`                            | refused    | traits returned, warning attached                 | traits returned, warning attached        |
+| `measure_images`                     | withheld   | withheld (not with a grid of 2+ cells)            | withheld (not when the grid explains it) |
+| `count_leaves`, `segment_leaves_sam` | refused    | refused, unless plant green (`plant_fills_frame`) | count returned, warning attached         |
+| `measure_morphology`                 | refused    | refused                                           | not checked                              |
+
+`measure` is called on a session whose overlay you have seen, and a close-up of one leaf
+can fill the frame, so it warns where the others refuse. Read its `warnings` before you use
+the numbers.
+
 ### Why each guard exists
 
 Each guard below was added after a specific failure, and each names the next action.
 Several of those failures were first seen on photographs that are not distributed with this
 repository (the sorghum photo in the list is one); the tests reproduce them on synthetic images and
-the committed fixtures. Blocking guards withhold numbers; advisories travel with them.
+the committed fixtures. In the batch, blocking guards withhold numbers (the table above gives
+the other tools); advisories travel with them.
 
 - **Inverted mask** (`implausible_coverage`) — the README's right-hand image: 96% of the frame
   selected, seventeen believable traits, all describing the wall.
@@ -978,12 +992,18 @@ Practical consequences:
   holding sensitive imagery.
 
 The read-root allow-list is the whole of the sandboxing. A base install has no network
-access, executes nothing but PlantCV, and writes only `correct_lens_distortion`'s
-corrected image — next to its input (replacing an earlier run's output of the same name),
-or at an explicit `output_path` that must not already exist and must not be a symlink, under
-the read roots when they are set. (It also writes short-lived private copies of
-hyperspectral ENVI and FLIR thermal inputs to the system temporary directory, deleted once
-the file is decoded.) The optional `segment_leaves_sam()` adds one
+access and executes nothing but PlantCV. It writes two kinds of file:
+
+- `correct_lens_distortion`'s corrected image, `<image>_undistorted.png`, and
+  `crop_image`'s crop, `<image>_crop_x<x>_y<y>_w<w>_h<h>.png` (the box after clipping to
+  the frame). Each is written next to its input and replaces an earlier file of the same
+  name, so a repeat crop of the same box overwrites the first. With an explicit
+  `output_path` (for `crop_image`, ending in `.png`) the file goes there instead; that path
+  must not already exist and must not be a symlink. With read roots set, both lie under them.
+- Short-lived private copies of hyperspectral ENVI and FLIR thermal inputs, in the system
+  temporary directory, deleted once the file is decoded.
+
+The optional `segment_leaves_sam()` adds one
 exception to each: with `download_checkpoint=true` it fetches one fixed https URL and
 writes the file to its cache directory after checking its size and SHA-256, and it runs
 the Segment Anything model (loaded with `torch.load(weights_only=True)`, so the

@@ -1947,7 +1947,10 @@ def build_server() -> MCPServer:
         traits: list[str] | None = None,
     ) -> MeasureResult:
         """Return plant traits for a segmentation produced by segment().
-        Raises if the mask is degenerate rather than returning zeros.
+        Raises on an empty mask rather than returning zeros. A mask that is
+        probably the background (implausible_coverage) or specks
+        (noisy_segmentation) is measured, not refused: the traits come back
+        with that warning, so read `warnings` before using them.
 
         analyses defaults to ["size"]; add "color" for hue/saturation/value
         statistics. px_per_mm converts spatial traits to mm and mm2 — without it
@@ -2159,8 +2162,8 @@ def build_server() -> MCPServer:
         checkpoint: pass checkpoint_path, or download_checkpoint=true to let
         the server fetch the official file into its cache (the only network
         access in this server, and the only write besides
-        correct_lens_distortion's image). Either way the file's SHA-256 must
-        equal the pinned one or it is not loaded.
+        correct_lens_distortion's image and crop_image's crop). Either way the
+        file's SHA-256 must equal the pinned one or it is not loaded.
 
         Measured on a held-out Arabidopsis tray against hand counts (see
         docs/EVAL.md for the figures and the watershed's on the same plants):
