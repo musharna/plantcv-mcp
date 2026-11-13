@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.19.3] — 2026-11-13
+
 ### Fixed
 
 - **The README said the server refuses numbers from a degenerate segmentation,
