@@ -38,7 +38,7 @@ Verify with `list_methods()`.
 | `suggest_segmentation(image_path, channel, method)`                     | contact sheets, and what each `object_type` would yield                                                            |
 | `segment(image_path, channel, method, ...)`                             | overlay + diagnostics + warnings — **no traits**; `rules` + `combine` threshold several channels (or value ranges) at once |
 | `refine(session_id, ops)`                                               | a NEW session with a cleaned-up mask, plus its overlay                                                             |
-| `measure(session_id, analyses, px_per_mm, ...)`                         | traits, or a raised error on a degenerate mask                                                                     |
+| `measure(session_id, analyses, px_per_mm, ...)`                         | traits, or a raised error on an empty or probably inverted mask                                                    |
 | `calibrate_scale_from_marker(image_path, x, y, w, h, marker_length_mm)` | `px_per_mm` from a marker of known real size                                                                       |
 | `correct_lens_distortion(image_path, checkerboard_dir, ...)`            | a fisheye/wide-angle image undistorted via checkerboard calibration, written next to the input or to `output_path` |
 | `measure_regions(session_id, nrows, ncols, ...)`                        | one row per plant in a tray (RGB traits, thermal temperatures or HSI index stats), plus the numbered overlay       |
@@ -816,14 +816,16 @@ instead of a result.
 
 | tool                                 | empty mask | `implausible_coverage`                            | `noisy_segmentation`                     |
 | ------------------------------------ | ---------- | ------------------------------------------------- | ---------------------------------------- |
-| `measure`                            | refused    | traits returned, warning attached                 | traits returned, warning attached        |
+| `measure`                            | refused    | refused, unless plant green or allowed (below)    | traits returned, warning attached        |
 | `measure_images`                     | withheld   | withheld (not with a grid of 2+ cells)            | withheld (not when the grid explains it) |
 | `count_leaves`, `segment_leaves_sam` | refused    | refused, unless plant green (`plant_fills_frame`) | count returned, warning attached         |
 | `measure_morphology`                 | refused    | refused                                           | not checked                              |
 
-`measure` is called on a session whose overlay you have seen, and a close-up of one leaf
-can fill the frame, so it warns where the others refuse. Read its `warnings` before you use
-the numbers.
+`measure` follows the leaf counters: a mask over half the frame is refused
+(`MeasureRefusedError`) unless it is plant green, and then the result carries
+`plant_fills_frame`. A close-up of one leaf can fill the frame without being green enough, so
+`measure` alone has a way through: `allow_implausible_coverage=true` returns the traits with
+`implausible_coverage` attached. Through 1.19.3 it returned them without being asked.
 
 ### Why each guard exists
 
@@ -860,7 +862,7 @@ the other tools); advisories travel with them.
 | code                                                                | raised by                                              | meaning                                                                                                                                                                                  | batch    |
 | ------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
 | `implausible_coverage`                                              | any segmenter, `measure`                               | mask covers > 50% of the frame — probably the background                                                                                                                                 | blocking |
-| `plant_fills_frame`                                                 | `count_leaves`, `segment_leaves_sam`                   | the mask covers > 50% of the frame but is plant green, so it was counted rather than refused as inverted                                                                                 | advisory |
+| `plant_fills_frame`                                                 | `measure`, `count_leaves`, `segment_leaves_sam`        | the mask covers > 50% of the frame but is plant green, so it was counted rather than refused as inverted                                                                                 | advisory |
 | `empty_mask`                                                        | any segmenter                                          | nothing selected                                                                                                                                                                         | blocking |
 | `fill_erased_mask`                                                  | any segmenter                                          | thresholding found objects; `fill_size` deleted them all — names the size to use                                                                                                         | blocking |
 | `noisy_segmentation`                                                | any segmenter, `suggest`                               | ≥50 non-major components and no dominant object — background texture                                                                                                                     | blocking |
@@ -905,8 +907,8 @@ the other tools); advisories travel with them.
 Refusals you will meet: a degenerate mask at `measure` (`DegenerateMaskError`), a refinement
 that erases the plant (`RefinementErasedMaskError`) or an invalid op list (`RefineSpecError`,
 nothing applied), a skeleton PlantCV cannot analyse (`MorphologyRefusedError`, with counts),
-an inverted mask at `count_leaves` or `segment_leaves_sam` (`LeafCountRefusedError`), a
-missing `sam` extra, checkpoint or GPU, or a checkpoint whose SHA-256 is not the pinned one
+an inverted mask at `measure` (`MeasureRefusedError`) or at `count_leaves` or
+`segment_leaves_sam` (`LeafCountRefusedError`), a missing `sam` extra, checkpoint or GPU, or a checkpoint whose SHA-256 is not the pinned one
 (`SamNotInstalledError`, `CheckpointMissingError`, `SamDeviceError`,
 `CheckpointVerificationError`),
 the wrong session kind (`WrongSessionKindError`), a file that changed since segmentation

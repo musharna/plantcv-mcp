@@ -49,9 +49,12 @@ from .color import (
 from .contracts import WarningItem, closed
 from .diagnostics import (
     GLOBAL_THRESHOLDS,
+    RGB_COVERAGE_REMEDY,
     analyze_mask,
+    implausible_coverage_warning,
     implausible_longest_path_warning,
     mask_warnings,
+    plant_fills_frame_advisory,
     segmentation_warnings,
     threshold_inside_mode_warning,
 )
@@ -136,8 +139,10 @@ Work in this order: suggest_segmentation -> segment -> LOOK AT THE OVERLAY -> me
 segment() deliberately returns no traits. It returns an overlay image with the
 measured pixels tinted red and outlined in cyan, plus diagnostics. Look at that image before you trust
 any number that follows: a segmentation that selected the background instead of
-the plant still produces seventeen traits with correct units and believable
-magnitudes. The overlay is the only thing that distinguishes the two.
+the plant can still produce seventeen traits with correct units and believable
+magnitudes. measure() refuses a mask over half the frame unless it is plant
+green or you pass allow_implausible_coverage=true; under that line the overlay
+is the only thing that distinguishes the two.
 
 Read the `warnings` array on every segment() response. `implausible_coverage`
 means the mask is probably inverted — re-run with the opposite `object_type`.
@@ -527,6 +532,10 @@ class UnknownTraitError(ValueError):
     """A `traits` selection naming a trait the requested analyses do not produce."""
 
 
+class MeasureRefusedError(Exception):
+    """measure() will not return traits for a mask that is probably the background."""
+
+
 def _require_trait_names(traits: list[str] | None) -> None:
     """Shape check of a `traits` selection, before anything is measured."""
     if traits is None:
@@ -565,15 +574,39 @@ def _measure_impl(
     px_per_mm: float | None = None,
     include_histograms: bool = False,
     traits: list[str] | None = None,
+    allow_implausible_coverage: bool = False,
 ) -> MeasureResult:
     requested = tuple(analyses) if analyses is not None else ("size",)
     _require_trait_names(traits)
     session = _session_of(session_id, "rgb")
     img = _load_session_image(session)
+    diag = analyze_mask(session.mask)
+    # The leaf counters' rule, before any trait is computed: a mask over half
+    # the frame is the background unless it is plant green. Seventeen traits
+    # of a wall, units and all, with a warning beside them were still handed
+    # to whoever kept only the table (MCP-server audit, 2026-11-10). A subject
+    # that fills the frame and is not green has to be said to: the caller
+    # passes allow_implausible_coverage and gets the traits with the warning.
+    filled = None
+    coverage = implausible_coverage_warning(diag)
+    if coverage and not allow_implausible_coverage:
+        filled = plant_fills_frame_advisory(img, session.mask, diag)
+        if filled is None:
+            raise MeasureRefusedError(
+                f"implausible_coverage: The mask covers {diag.mask_fraction:.1%} "
+                "of the frame, so it is probably INVERTED: the background, not "
+                "the plant, and every trait would describe that. measure() "
+                f"returns no traits for it. {RGB_COVERAGE_REMEDY} If the subject "
+                "really fills the frame, such as a close-up of one leaf, call "
+                "measure() again with allow_implausible_coverage=true; the "
+                "traits then come back with this warning attached."
+            )
     table = dispatch(
         "measure", img, session.mask, requested, px_per_mm, include_histograms
     )
-    warnings = mask_warnings(session.mask, analyze_mask(session.mask))
+    warnings = mask_warnings(session.mask, diag)
+    if filled is not None:
+        warnings.append(filled)
     # Judged on the full table, before any selection drops longest_path.
     lp_warning = implausible_longest_path_warning(table)
     if lp_warning:
@@ -1945,12 +1978,16 @@ def build_server() -> MCPServer:
         px_per_mm: float | None = None,
         include_histograms: bool = False,
         traits: list[str] | None = None,
+        allow_implausible_coverage: bool = False,
     ) -> MeasureResult:
         """Return plant traits for a segmentation produced by segment().
-        Raises on an empty mask rather than returning zeros. A mask that is
-        probably the background (implausible_coverage) or specks
-        (noisy_segmentation) is measured, not refused: the traits come back
-        with that warning, so read `warnings` before using them.
+        Raises on an empty mask rather than returning zeros. A mask over half
+        the frame is probably the background (implausible_coverage) and is
+        refused too, unless it is plant green (plant_fills_frame). If the
+        subject really fills the frame, pass allow_implausible_coverage=true:
+        the traits come back with the warning attached. A mask of specks
+        (noisy_segmentation) is measured, not refused, so read `warnings`
+        before using the traits.
 
         analyses defaults to ["size"]; add "color" for hue/saturation/value
         statistics. px_per_mm converts spatial traits to mm and mm2 — without it
@@ -1966,6 +2003,7 @@ def build_server() -> MCPServer:
             px_per_mm=px_per_mm,
             include_histograms=include_histograms,
             traits=traits,
+            allow_implausible_coverage=allow_implausible_coverage,
         )
 
     @mcp.tool(
