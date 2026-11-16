@@ -22,6 +22,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   the old behavior adds that argument. Masks at or under half the frame,
   `measure_images` and `measure_regions` are unchanged.
 
+### Security
+
+- `uv.lock` pins opentelemetry-api 1.45.2 (was 1.45.1) for GHSA-mf5v-w3w3-f6cg
+  and tornado 6.6.1 (was 6.6) for GHSA-5cjw-f85j-cv6r, each fixed in the pinned
+  version. The lock is what checkouts and CI install; a `uvx` install resolves
+  its own.
+
 ## [1.19.3] — 2026-11-13
 
 ### Fixed
