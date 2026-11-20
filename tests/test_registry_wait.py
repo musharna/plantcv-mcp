@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import textwrap
@@ -27,7 +28,8 @@ import pytest
 REPO = Path(__file__).resolve().parent.parent
 WORKFLOW = REPO / ".github" / "workflows" / "publish-registry.yml"
 STEP_NAME = "Wait for the PyPI release, then verify it carries the mcp-name marker"
-MARKER = "mcp-name: io.github.musharna/plantcv-mcp"
+PROJECT = "plantcv-mcp"
+MARKER = f"mcp-name: io.github.musharna/{PROJECT}"
 
 pytestmark = pytest.mark.skipif(
     shutil.which("bash") is None,
@@ -36,16 +38,23 @@ pytestmark = pytest.mark.skipif(
 
 STAND_IN_CURL = """\
 #!/usr/bin/env bash
-# Answers request N with line N of $STUB/codes (the last line from then on).
+# Answers request N with line N of $STUB/codes (the last line from then on),
+# and notes the URL it was asked for in $STUB/urls.
 n=$(cat "$STUB/count")
 echo $((n + 1)) > "$STUB/count"
 code=$(sed -n "$((n + 1))p" "$STUB/codes")
 [ -n "$code" ] || code=$(tail -n 1 "$STUB/codes")
 out=""
+url=""
 while [ "$#" -gt 0 ]; do
-  case "$1" in -o) out=$2; shift ;; esac
+  case "$1" in
+    -o) out=$2; shift ;;
+    -*) ;;
+    *) url=$1 ;;
+  esac
   shift
 done
+echo "$url" >> "$STUB/urls"
 if [ "$code" = 200 ]; then
   if [ -n "$out" ]; then cp "$STUB/body" "$out"; else cat "$STUB/body"; fi
   exit 0
@@ -119,6 +128,14 @@ def test_an_answer_that_flips_back_to_404_does_not_fail_the_step(tmp_path):
     # The 404 restarts the count, so "live" is three answers in a row after it,
     # and the marker is read from the last of them, not from a further request.
     assert requests == 5, (requests, done.stdout)
+    # The stand-in answers whatever it is asked, so the address is checked here:
+    # the script builds it from its arguments, and a swapped pair would pass.
+    version = re.search(
+        r'^version = "([^"]+)"$', (REPO / "pyproject.toml").read_text(), re.MULTILINE
+    )
+    assert version, "no version line in pyproject.toml"
+    asked = set((tmp_path / "stub" / "urls").read_text().split())
+    assert asked == {f"https://pypi.org/pypi/{PROJECT}/{version.group(1)}/json"}, asked
 
 
 def test_a_steady_pypi_passes_and_a_missing_marker_or_version_fails(tmp_path):

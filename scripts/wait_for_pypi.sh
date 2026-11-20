@@ -43,7 +43,8 @@ import json
 import sys
 
 body, marker = sys.argv[1], sys.argv[2]
-description = json.load(open(body, encoding="utf-8"))["info"]["description"] or ""
+with open(body, encoding="utf-8") as fh:
+    description = json.load(fh)["info"]["description"] or ""
 if marker not in description:
     print(f"::error::the PyPI description does not carry {marker!r}; the registry will refuse the package")
     sys.exit(1)
